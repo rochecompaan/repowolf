@@ -46,7 +46,10 @@
 | `cmd/repowolf-client/main.go` | Multicall client mode dispatch only |
 | `proto/repowolf/v1/*.proto` | Versioned typed public protocol |
 | `gen/repowolf/v1/*.pb.go` | Checked-in generated Protobuf/gRPC code |
+| `scripts/` | Protobuf generation and generated-code reproducibility checks |
 | `internal/config/` | Strict YAML decoding, defaults, semantic validation |
+| `internal/app/` | Runtime assembly and service command lifecycle |
+| `internal/cli/` | Admin command parsing and user-facing output |
 | `internal/auth/` | Token generation, environment loading, constant-time digest matching, gRPC auth |
 | `internal/tlsconfig/` | Server TLS loading and local certificate bootstrap |
 | `internal/policy/` | Exact-repository authorization and push policy |
@@ -212,7 +215,7 @@ Run:
 
 ```bash
 chmod +x scripts/generate.sh scripts/check-generated.sh
-```},{
+```
 
 - [ ] **Step 3: Generate code and write the protocol round-trip test**
 
@@ -271,7 +274,7 @@ Update `README.md` with the product boundary, the three client names, and a link
 Run:
 
 ```bash
-go tool go tool buf lint
+go tool buf lint
 scripts/check-generated.sh
 gofmt -w cmd internal gen
 go test ./...
@@ -494,7 +497,7 @@ Use fixed 32-byte entropy to assert the `rw1_` prefix and URL-safe encoding. Tes
 func TestLoadDoesNotDiscloseMalformedToken(t *testing.T) {
     secret := "not-a-valid-token"
     principals := map[string]config.Principal{
-        "agent": {TokenEnvs: []string{"AGENT_TOKEN"}},
+        "agent": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT"}},
     }
     _, err := auth.Load(principals, func(name string) (string, bool) {
         return secret, true
@@ -1039,7 +1042,7 @@ Keep the exact supported command surface from Task 8. Add explicit rejection tes
 
 - [ ] **Step 2: Implement endpoint/TLS/token configuration**
 
-Require an `https://` endpoint, nonempty `REPOWOLF_TOKEN` in correct format, and a readable CA file. `internal/clientconfig/tls.go` reads only public CA material, builds a new `x509.CertPool`, sets the endpoint-derived or explicit server name, and never enables insecure verification. `Dial` uses that client-only TLS config, per-RPC bearer credentials that require transport security, blocking dial with a bounded timeout, and 1 MiB send/receive call options.
+Require an `https://` endpoint and nonempty `REPOWOLF_TOKEN` in correct format. When `REPOWOLF_CA_FILE` is set, require a readable file containing public CA material and build a new `x509.CertPool` from it; when it is unset, use `x509.SystemCertPool()` so platform-installed trust roots remain supported. Set the endpoint-derived or explicit server name and never enable insecure verification. `Dial` uses that client-only TLS config, per-RPC bearer credentials that require transport security, blocking dial with a bounded timeout, and 1 MiB send/receive call options.
 
 - [ ] **Step 3: Implement repository hint parsing**
 
