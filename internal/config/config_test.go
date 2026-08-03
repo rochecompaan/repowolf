@@ -70,6 +70,25 @@ func TestDecodeNormalizesDurationOverrides(t *testing.T) {
 	}
 }
 
+func TestDecodeRejectsMalformedAndNonPositiveDuration(t *testing.T) {
+	tests := []struct {
+		name   string
+		limits string
+	}{
+		{name: "malformed", limits: "initialStreamTimeout: eventually"},
+		{name: "zero", limits: "operationTimeout: 0s"},
+		{name: "negative", limits: "idleStreamTimeout: -1s"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			yaml := strings.Replace(validYAML(), "principals:", "limits:\n  "+test.limits+"\nprincipals:", 1)
+			if _, err := Decode(strings.NewReader(yaml)); err == nil {
+				t.Fatal("Decode accepted invalid duration")
+			}
+		})
+	}
+}
+
 func TestDecodeRejectsStrictYAML(t *testing.T) {
 	tests := []struct {
 		name string
@@ -119,6 +138,20 @@ func TestDecodeRejectsSecondDocumentAndNestedDuplicate(t *testing.T) {
 				t.Fatalf("Decode error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestDecodeRejectsCyclicAlias(t *testing.T) {
+	_, err := Decode(strings.NewReader("root: &cycle [*cycle]\n"))
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "cyclic") {
+		t.Fatalf("Decode error = %v, want cyclic-alias error", err)
+	}
+}
+
+func TestDecodeAllowsNonCyclicAlias(t *testing.T) {
+	yaml := strings.Replace(validYAML(), "certificate: /run/repowolf/tls.crt\n  privateKey: /run/repowolf/tls.key", "certificate: &certificate /run/repowolf/tls.crt\n  privateKey: *certificate", 1)
+	if _, err := Decode(strings.NewReader(yaml)); err != nil {
+		t.Fatalf("Decode error = %v, want non-cyclic alias accepted", err)
 	}
 }
 
@@ -193,11 +226,21 @@ func TestValidateRejectsInvalidConfiguration(t *testing.T) {
 			repo.Git.DenyRefs = []string{"main"}
 			cfg.Repositories["clubhouse"] = repo
 		}},
+		{"newline in denied ref", func(cfg *Config) {
+			repo := cfg.Repositories["clubhouse"]
+			repo.Git.DenyRefs = []string{"refs/heads/main\nother"}
+			cfg.Repositories["clubhouse"] = repo
+		}},
+		{"DEL in denied ref", func(cfg *Config) {
+			repo := cfg.Repositories["clubhouse"]
+			repo.Git.DenyRefs = []string{"refs/heads/main\x7f"}
+			cfg.Repositories["clubhouse"] = repo
+		}},
 		{"zero limit", func(cfg *Config) { cfg.Limits.MaxConcurrentRequests = 0 }},
 		{"message limit above hard cap", func(cfg *Config) { cfg.Limits.MaxMessageBytes = 1<<20 + 1 }},
 		{"per principal exceeds global", func(cfg *Config) { cfg.Limits.MaxConcurrentRequestsPerPrincipal = cfg.Limits.MaxConcurrentRequests + 1 }},
-		{"stream chunk exceeds message", func(cfg *Config) { cfg.Limits.MaxStreamChunkBytes = cfg.Limits.MaxMessageBytes + 1 }},
-		{"push prefix exceeds git limit", func(cfg *Config) { cfg.Limits.MaxPushPrefixBytes = int(cfg.Limits.MaxGitBytesPerDirection + 1) }},
+		{"stream chunk exceeds message", func(cfg *Config) { cfg.Limits.MaxMessageBytes = cfg.Limits.MaxStreamChunkBytes - 1 }},
+		{"push prefix exceeds git limit", func(cfg *Config) { cfg.Limits.MaxGitBytesPerDirection = int64(cfg.Limits.MaxPushPrefixBytes - 1) }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -205,6 +248,26 @@ func TestValidateRejectsInvalidConfiguration(t *testing.T) {
 			test.mutate(&cfg)
 			if err := cfg.Validate(); err == nil {
 				t.Fatal("Validate accepted invalid configuration")
+			}
+		})
+	}
+}
+
+func TestValidateRejectsControlCharactersInRef(t *testing.T) {
+	controls := make([]rune, 0, 0x21)
+	for control := rune(0); control <= 0x1f; control++ {
+		controls = append(controls, control)
+	}
+	controls = append(controls, 0x7f)
+
+	for _, control := range controls {
+		t.Run("control", func(t *testing.T) {
+			cfg := validConfig()
+			repo := cfg.Repositories["clubhouse"]
+			repo.Git.DenyRefs = []string{"refs/heads/main" + string(control)}
+			cfg.Repositories["clubhouse"] = repo
+			if err := cfg.Validate(); err == nil {
+				t.Fatalf("Validate accepted ref containing control byte 0x%02x", control)
 			}
 		})
 	}

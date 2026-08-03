@@ -250,6 +250,11 @@ func validHost(host string) bool {
 }
 
 func validRef(ref string) bool {
+	for _, character := range ref {
+		if character <= 0x1f || character == 0x7f {
+			return false
+		}
+	}
 	if !strings.HasPrefix(ref, "refs/") || len(ref) == len("refs/") || strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") || strings.HasSuffix(ref, ".lock") || strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "//") || strings.ContainsAny(ref, " ~^:?*[\\") {
 		return false
 	}

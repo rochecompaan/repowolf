@@ -118,6 +118,19 @@ func rejectDuplicateKeys(data []byte) error {
 }
 
 func duplicateKey(node *yaml.Node) error {
+	return duplicateKeyPath(node, make(map[*yaml.Node]struct{}))
+}
+
+func duplicateKeyPath(node *yaml.Node, active map[*yaml.Node]struct{}) error {
+	if node == nil {
+		return nil
+	}
+	if _, exists := active[node]; exists {
+		return fmt.Errorf("cyclic YAML alias")
+	}
+	active[node] = struct{}{}
+	defer delete(active, node)
+
 	if node.Kind == yaml.MappingNode {
 		seen := make(map[string]struct{}, len(node.Content)/2)
 		for index := 0; index < len(node.Content); index += 2 {
@@ -126,19 +139,19 @@ func duplicateKey(node *yaml.Node) error {
 				return fmt.Errorf("duplicate YAML key %q", key.Value)
 			}
 			seen[key.Value] = struct{}{}
-			if err := duplicateKey(value); err != nil {
+			if err := duplicateKeyPath(value, active); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 	for _, child := range node.Content {
-		if err := duplicateKey(child); err != nil {
+		if err := duplicateKeyPath(child, active); err != nil {
 			return err
 		}
 	}
 	if node.Alias != nil {
-		return duplicateKey(node.Alias)
+		return duplicateKeyPath(node.Alias, active)
 	}
 	return nil
 }
