@@ -44,7 +44,7 @@ func ParseReceivePack(input io.Reader, options ReceiveOptions) (ReceiveResult, e
 		return ReceiveResult{}, err
 	}
 	if err := policy.ValidatePush(options.Policy, parser.updates); err != nil {
-		return ReceiveResult{}, err
+		return ReceiveResult{}, newRejectedUpdatesError(parser.updates)
 	}
 	return ReceiveResult{
 		Prefix:       reader.bytes(),

@@ -3,6 +3,7 @@ package gitservice
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -60,8 +61,13 @@ func TestReceivePackDeniedRefForwardsZeroClientBytes(t *testing.T) {
 		t.Fatalf("provider received %d denied update bytes", len(got))
 	}
 	assertTerminalCategory(t, stream, repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST)
-	if strings.Contains(auditOutput.String(), "input_bytes") {
-		t.Fatalf("denied push audit reported provider input: %s", auditOutput.String())
+	events := decodeAuditEvents(t, auditOutput)
+	if len(events) != 2 || events[0].Outcome != audit.OutcomeAccepted || events[1].Outcome != audit.OutcomeDenied {
+		t.Fatalf("audit events = %#v", events)
+	}
+	terminal := events[1]
+	if terminal.Repository != "project" || terminal.InputBytes != 0 || terminal.UpdateCount != 1 || len(terminal.Refs) != 1 || terminal.Refs[0] != "refs/heads/main" {
+		t.Fatalf("terminal audit = %#v", terminal)
 	}
 }
 
@@ -140,6 +146,20 @@ func shellOctal(data []byte) string {
 		fmt.Fprintf(&result, "\\%03o", value)
 	}
 	return result.String()
+}
+
+func decodeAuditEvents(t *testing.T, output *bytes.Buffer) []audit.Event {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(output.Bytes()))
+	var events []audit.Event
+	for decoder.More() {
+		var event audit.Event
+		if err := decoder.Decode(&event); err != nil {
+			t.Fatalf("decode audit event: %v", err)
+		}
+		events = append(events, event)
+	}
+	return events
 }
 
 func assertTerminalCategory(t *testing.T, stream *memoryStream, want repowolfv1.GitTerminalCategory) {

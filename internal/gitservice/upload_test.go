@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/policy"
+	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 )
 
 func TestUploadCommandUsesOnlyPinnedRepositoryConfiguration(t *testing.T) {
@@ -98,9 +101,9 @@ func TestUploadPackStreamsDataAndOneTerminal(t *testing.T) {
 	}
 }
 
-func TestUploadPackDisconnectReapsProvider(t *testing.T) {
-	service, _ := executableTestService(t, config.GitRead)
-	disconnected := errors.New("client disconnected")
+func TestUploadPackDisconnectReapsProviderAndWritesTerminalAudit(t *testing.T) {
+	service, auditOutput := executableTestService(t, config.GitRead)
+	disconnected := errors.New("sensitive client disconnect")
 	stream := &memoryStream{
 		ctx: auth.WithPrincipal(context.Background(), "agent"),
 		received: []*repowolfv1.GitFrame{
@@ -109,11 +112,39 @@ func TestUploadPackDisconnectReapsProvider(t *testing.T) {
 		sendErr: disconnected,
 	}
 	started := time.Now()
-	if err := service.uploadPack(stream); !errors.Is(err, disconnected) {
-		t.Fatalf("uploadPack error = %v, want disconnect", err)
+	err := service.uploadPack(stream)
+	if !errors.Is(err, rpcstatus.ErrServiceUnavailable) || strings.Contains(err.Error(), "sensitive") {
+		t.Fatalf("uploadPack error = %v, want sanitized unavailable", err)
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("disconnect cleanup took %v", elapsed)
+	}
+	events := decodeAuditEvents(t, auditOutput)
+	if len(events) != 2 || events[0].Outcome != audit.OutcomeAccepted || events[1].Outcome != audit.OutcomeFailed {
+		t.Fatalf("audit events = %#v", events)
+	}
+	terminal := events[1]
+	if terminal.Operation != "git.upload-pack" || terminal.Repository != "project" || terminal.UpdateCount != 0 || len(terminal.Refs) != 0 {
+		t.Fatalf("terminal audit = %#v", terminal)
+	}
+}
+
+func TestTerminalDeliveryAndAuditFailuresJoinAsSafeUnavailable(t *testing.T) {
+	service, _ := executableTestService(t, config.GitRead)
+	sink := &failSecondAuditSink{}
+	service.options.Audit = sink
+	stream := &memoryStream{
+		ctx:      auth.WithPrincipal(context.Background(), "agent"),
+		received: []*repowolfv1.GitFrame{openFrame("git.example", "trusted-owner", "trusted-repo", 2222)},
+		sendErr:  errors.New("sensitive transport detail"),
+	}
+
+	err := service.uploadPack(stream)
+	if !errors.Is(err, rpcstatus.ErrServiceUnavailable) || !errors.Is(err, errTerminalDelivery) || !errors.Is(err, errTerminalAudit) || strings.Contains(err.Error(), "sensitive") {
+		t.Fatalf("uploadPack error = %v, want joined sanitized unavailable", err)
+	}
+	if sink.Count() != 2 {
+		t.Fatalf("audit attempts = %d, want accepted and terminal", sink.Count())
 	}
 }
 
@@ -154,6 +185,27 @@ func executableTestService(t *testing.T, capabilities ...config.Capability) (*Se
 	service.options.Runner = &runner.Runner{}
 	service.options.Audit = audit.NewWriter(auditOutput)
 	return service, auditOutput
+}
+
+type failSecondAuditSink struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (sink *failSecondAuditSink) Write(audit.Event) error {
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	sink.calls++
+	if sink.calls == 2 {
+		return errors.New("sensitive audit detail")
+	}
+	return nil
+}
+
+func (sink *failSecondAuditSink) Count() int {
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	return sink.calls
 }
 
 type memoryStream struct {

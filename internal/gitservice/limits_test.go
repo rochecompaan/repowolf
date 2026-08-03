@@ -91,6 +91,7 @@ func TestServerFrameStateRequiresDataThenOneTerminal(t *testing.T) {
 		"open":              openFrame("github.example", "owner", "repo", 22),
 		"empty":             {},
 		"unspecified":       terminalFrame(repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_UNSPECIFIED, 1),
+		"unknown category":  terminalFrame(repowolfv1.GitTerminalCategory(99), 1),
 		"completed nonzero": terminalFrame(repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED, 1),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -104,8 +105,10 @@ func TestServerFrameStateRequiresDataThenOneTerminal(t *testing.T) {
 
 func TestCopyOutputToFramesUsesConfigured64KiBChunks(t *testing.T) {
 	stream := &memoryStream{ctx: context.Background()}
+	sender := newSendPump(stream)
+	defer sender.Stop()
 	output := bytes.NewReader(make([]byte, 2*maxChunkBytes+1))
-	count, err := copyOutputToFrames(output, stream, maxChunkBytes, nil)
+	count, err := copyOutputToFrames(context.Background(), output, sender, maxChunkBytes, nil)
 	if err != nil {
 		t.Fatalf("copyOutputToFrames: %v", err)
 	}

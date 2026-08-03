@@ -53,6 +53,7 @@ func FuzzServerFrameSequence(f *testing.F) {
 	))
 	f.Add(encodeFrameSequence(openFrame("git.example", "owner", "repo", 22)))
 	f.Add(encodeFrameSequence(terminalFrame(repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED, 0)))
+	f.Add(encodeFrameSequence(terminalFrame(repowolfv1.GitTerminalCategory(99), 1)))
 	f.Fuzz(func(t *testing.T, raw []byte) {
 		if len(raw) > 1<<20 {
 			raw = raw[:1<<20]
