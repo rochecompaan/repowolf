@@ -1,0 +1,259 @@
+syntax = "proto3";
+
+package repowolf.v1;
+
+option go_package = "github.com/rochecompaan/repowolf/gen/repowolf/v1;repowolfv1";
+
+import "repowolf/v1/common.proto";
+import "repowolf/v1/meta.proto";
+
+service GitHubService {
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+  // The stable public contract uses GitHubRequest and GitHubResponse.
+  rpc Execute(GitHubRequest) returns (GitHubResponse);
+}
+
+enum GitHubIssueState {
+  GIT_HUB_ISSUE_STATE_UNSPECIFIED = 0;
+  GIT_HUB_ISSUE_STATE_OPEN = 1;
+  GIT_HUB_ISSUE_STATE_CLOSED = 2;
+  GIT_HUB_ISSUE_STATE_ALL = 3;
+}
+
+enum GitHubPullState {
+  GIT_HUB_PULL_STATE_UNSPECIFIED = 0;
+  GIT_HUB_PULL_STATE_OPEN = 1;
+  GIT_HUB_PULL_STATE_CLOSED = 2;
+  GIT_HUB_PULL_STATE_ALL = 3;
+}
+
+enum GitHubRunStatus {
+  GIT_HUB_RUN_STATUS_UNSPECIFIED = 0;
+  GIT_HUB_RUN_STATUS_QUEUED = 1;
+  GIT_HUB_RUN_STATUS_IN_PROGRESS = 2;
+  GIT_HUB_RUN_STATUS_COMPLETED = 3;
+  GIT_HUB_RUN_STATUS_SUCCESS = 4;
+  GIT_HUB_RUN_STATUS_FAILURE = 5;
+  GIT_HUB_RUN_STATUS_CANCELLED = 6;
+  GIT_HUB_RUN_STATUS_SKIPPED = 7;
+  GIT_HUB_RUN_STATUS_TIMED_OUT = 8;
+  GIT_HUB_RUN_STATUS_ACTION_REQUIRED = 9;
+  GIT_HUB_RUN_STATUS_NEUTRAL = 10;
+  GIT_HUB_RUN_STATUS_STALE = 11;
+  GIT_HUB_RUN_STATUS_STARTUP_FAILURE = 12;
+  GIT_HUB_RUN_STATUS_REQUESTED = 13;
+  GIT_HUB_RUN_STATUS_WAITING = 14;
+  GIT_HUB_RUN_STATUS_PENDING = 15;
+}
+
+message GitHubStringList {
+  repeated string values = 1;
+}
+
+message GitHubRepositoryViewRequest {}
+message GitHubIssueListRequest { GitHubIssueState state = 1; uint64 limit = 2; }
+message GitHubIssueViewRequest { uint64 number = 1; }
+message GitHubIssueCreateRequest {
+  string title = 1;
+  optional string body = 2;
+  repeated string labels = 3;
+  repeated string assignees = 4;
+}
+message GitHubIssueEditRequest {
+  uint64 number = 1;
+  optional string title = 2;
+  optional string body = 3;
+  optional GitHubStringList labels = 4;
+  optional GitHubStringList assignees = 5;
+}
+message GitHubIssueCommentRequest { uint64 number = 1; string body = 2; }
+message GitHubIssueCloseRequest { uint64 number = 1; }
+message GitHubIssueReopenRequest { uint64 number = 1; }
+message GitHubPullListRequest {
+  GitHubPullState state = 1;
+  optional string base = 2;
+  optional string head = 3;
+  uint64 limit = 4;
+}
+message GitHubPullViewRequest { uint64 number = 1; }
+message GitHubPullCreateRequest {
+  string title = 1;
+  string head = 2;
+  string base = 3;
+  optional string body = 4;
+  optional bool draft = 5;
+}
+message GitHubPullEditRequest {
+  uint64 number = 1;
+  optional string title = 2;
+  optional string body = 3;
+  optional string base = 4;
+}
+message GitHubPullCommentRequest { uint64 number = 1; string body = 2; }
+message GitHubPullCloseRequest { uint64 number = 1; }
+message GitHubPullReopenRequest { uint64 number = 1; }
+message GitHubPullReadyRequest { uint64 number = 1; }
+message GitHubPullChecksRequest { uint64 number = 1; }
+message GitHubRunListRequest {
+  optional string branch = 1;
+  optional GitHubRunStatus status = 2;
+  uint64 limit = 3;
+}
+message GitHubRunViewRequest { uint64 run_id = 1; }
+message GitHubStatusViewRequest { string object_id = 1; }
+
+message GitHubRequest {
+  RequestContext context = 1;
+  oneof operation {
+    GitHubRepositoryViewRequest repository_view = 10;
+    GitHubIssueListRequest issue_list = 11;
+    GitHubIssueViewRequest issue_view = 12;
+    GitHubIssueCreateRequest issue_create = 13;
+    GitHubIssueEditRequest issue_edit = 14;
+    GitHubIssueCommentRequest issue_comment = 15;
+    GitHubIssueCloseRequest issue_close = 16;
+    GitHubIssueReopenRequest issue_reopen = 17;
+    GitHubPullListRequest pull_list = 18;
+    GitHubPullViewRequest pull_view = 19;
+    GitHubPullCreateRequest pull_create = 20;
+    GitHubPullEditRequest pull_edit = 21;
+    GitHubPullCommentRequest pull_comment = 22;
+    GitHubPullCloseRequest pull_close = 23;
+    GitHubPullReopenRequest pull_reopen = 24;
+    GitHubPullReadyRequest pull_ready = 25;
+    GitHubPullChecksRequest pull_checks = 26;
+    GitHubRunListRequest run_list = 27;
+    GitHubRunViewRequest run_view = 28;
+    GitHubStatusViewRequest status_view = 29;
+  }
+}
+
+message GitHubRepositoryRecord {
+  string repository = 1;
+  string owner = 2;
+  string name_with_owner = 3;
+  optional string description = 4;
+  bool private = 5;
+  string url = 6;
+  string default_branch = 7;
+}
+message GitHubIssueRecord {
+  uint64 number = 1;
+  string title = 2;
+  optional string body = 3;
+  string state = 4;
+  string author = 5;
+  repeated string assignees = 6;
+  repeated string labels = 7;
+  string url = 8;
+  string created_at = 9;
+  string updated_at = 10;
+}
+message GitHubCommentRecord {
+  uint64 id = 1;
+  string author = 2;
+  string body = 3;
+  string url = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+message GitHubPullRecord {
+  uint64 number = 1;
+  string title = 2;
+  optional string body = 3;
+  string state = 4;
+  bool draft = 5;
+  string author = 6;
+  string head = 7;
+  string base = 8;
+  string head_object_id = 9;
+  string url = 10;
+  string created_at = 11;
+  string updated_at = 12;
+  optional string mergeable_state = 13;
+}
+message GitHubCheckRecord {
+  string name = 1;
+  string state = 2;
+  optional string conclusion = 3;
+  optional string details_url = 4;
+  optional string description = 5;
+  optional string started_at = 6;
+  optional string completed_at = 7;
+}
+message GitHubRunRecord {
+  uint64 id = 1;
+  string name = 2;
+  string workflow_name = 3;
+  string status = 4;
+  optional string conclusion = 5;
+  string event = 6;
+  string head_branch = 7;
+  string head_object_id = 8;
+  string url = 9;
+  string created_at = 10;
+  string updated_at = 11;
+  optional uint64 attempt = 12;
+  optional string jobs_url = 13;
+}
+message GitHubStatusRecord {
+  string name = 1;
+  string state = 2;
+  optional string description = 3;
+  optional string target_url = 4;
+  optional string created_at = 5;
+  optional string updated_at = 6;
+}
+message GitHubStatusSummary {
+  string state = 1;
+  string object_id = 2;
+  repeated GitHubStatusRecord statuses = 3;
+}
+
+message GitHubRepositoryViewResult { GitHubRepositoryRecord repository = 1; }
+message GitHubIssueListResult { repeated GitHubIssueRecord issues = 1; }
+message GitHubIssueViewResult { GitHubIssueRecord issue = 1; }
+message GitHubIssueCreateResult { GitHubIssueRecord issue = 1; }
+message GitHubIssueEditResult { GitHubIssueRecord issue = 1; }
+message GitHubIssueCommentResult { GitHubCommentRecord comment = 1; }
+message GitHubIssueCloseResult { GitHubIssueRecord issue = 1; }
+message GitHubIssueReopenResult { GitHubIssueRecord issue = 1; }
+message GitHubPullListResult { repeated GitHubPullRecord pulls = 1; }
+message GitHubPullViewResult { GitHubPullRecord pull = 1; }
+message GitHubPullCreateResult { GitHubPullRecord pull = 1; }
+message GitHubPullEditResult { GitHubPullRecord pull = 1; }
+message GitHubPullCommentResult { GitHubCommentRecord comment = 1; }
+message GitHubPullCloseResult { GitHubPullRecord pull = 1; }
+message GitHubPullReopenResult { GitHubPullRecord pull = 1; }
+message GitHubPullReadyResult { GitHubPullRecord pull = 1; }
+message GitHubPullChecksResult { repeated GitHubCheckRecord checks = 1; }
+message GitHubRunListResult { repeated GitHubRunRecord runs = 1; }
+message GitHubRunViewResult { GitHubRunRecord run = 1; }
+message GitHubStatusViewResult { GitHubStatusSummary status = 1; }
+
+message GitHubResponse {
+  ResponseMeta meta = 1;
+  oneof result {
+    GitHubRepositoryViewResult repository_view = 10;
+    GitHubIssueListResult issue_list = 11;
+    GitHubIssueViewResult issue_view = 12;
+    GitHubIssueCreateResult issue_create = 13;
+    GitHubIssueEditResult issue_edit = 14;
+    GitHubIssueCommentResult issue_comment = 15;
+    GitHubIssueCloseResult issue_close = 16;
+    GitHubIssueReopenResult issue_reopen = 17;
+    GitHubPullListResult pull_list = 18;
+    GitHubPullViewResult pull_view = 19;
+    GitHubPullCreateResult pull_create = 20;
+    GitHubPullEditResult pull_edit = 21;
+    GitHubPullCommentResult pull_comment = 22;
+    GitHubPullCloseResult pull_close = 23;
+    GitHubPullReopenResult pull_reopen = 24;
+    GitHubPullReadyResult pull_ready = 25;
+    GitHubPullChecksResult pull_checks = 26;
+    GitHubRunListResult run_list = 27;
+    GitHubRunViewResult run_view = 28;
+    GitHubStatusViewResult status_view = 29;
+  }
+}

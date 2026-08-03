@@ -7,6 +7,7 @@ import (
 
 	"github.com/rochecompaan/repowolf/internal/audit"
 	"github.com/rochecompaan/repowolf/internal/auth"
+	"github.com/rochecompaan/repowolf/internal/policy"
 	"google.golang.org/grpc"
 )
 
@@ -21,6 +22,8 @@ type Options struct {
 	MaxConcurrentRequestsPerPrincipal int
 	OperationTimeout                  time.Duration
 	GracePeriod                       time.Duration
+	Policy                            *policy.Snapshot
+	GitHub                            GitHubExecutor
 	Register                          func(grpc.ServiceRegistrar)
 	Cleanup                           func() error
 }

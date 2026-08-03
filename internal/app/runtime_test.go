@@ -25,7 +25,7 @@ func TestNewRuntimeBuildsImmutableDependenciesAndSafeProviderEnvironment(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runtime.Server == nil || runtime.Tokens == nil || runtime.TLSConfig == nil || runtime.Policy == nil || runtime.Tools.GH == "" || runtime.Tools.SSH == "" {
+	if runtime.Server == nil || runtime.GitHub == nil || runtime.Tokens == nil || runtime.TLSConfig == nil || runtime.Policy == nil || runtime.Tools.GH == "" || runtime.Tools.SSH == "" {
 		t.Fatalf("incomplete runtime: %#v", runtime)
 	}
 	environment := strings.Join(runtime.ProviderEnvironment, "\n")
