@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/rochecompaan/repowolf/internal/app"
 	"github.com/rochecompaan/repowolf/internal/buildinfo"
 	"github.com/rochecompaan/repowolf/internal/cli"
 )
@@ -24,6 +26,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 2 && args[0] == "token" && args[1] == "generate" {
 		if err := cli.RunTokenGenerate(stdout, rand.Reader); err != nil {
 			fmt.Fprintln(stderr, "token generation failed")
+			return 1
+		}
+		return 0
+	}
+	if len(args) >= 2 && args[0] == "config" && args[1] == "validate" {
+		if err := cli.RunConfigValidate(args[2:]); err != nil {
+			if errors.Is(err, cli.ErrInvalidConfigArguments) {
+				fmt.Fprintln(stderr, "invalid config validate arguments")
+				return 2
+			}
+			fmt.Fprintln(stderr, "configuration validation failed")
+			return 1
+		}
+		fmt.Fprintln(stdout, "configuration valid")
+		return 0
+	}
+	if len(args) >= 1 && args[0] == "serve" {
+		path, err := cli.ConfigPath(args[1:])
+		if err != nil {
+			fmt.Fprintln(stderr, "invalid serve arguments")
+			return 2
+		}
+		if err := app.Serve(context.Background(), path, stdout); err != nil {
+			fmt.Fprintln(stderr, "service failed")
 			return 1
 		}
 		return 0
