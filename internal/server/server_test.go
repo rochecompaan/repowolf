@@ -285,10 +285,14 @@ type echoService interface {
 type echoImplementation struct{}
 
 func (echoImplementation) Call(_ context.Context, request *wrapperspb.BytesValue) (*wrapperspb.BytesValue, error) {
-	if string(request.Value) == "large-response" {
+	switch string(request.Value) {
+	case "large-response":
 		return &wrapperspb.BytesValue{Value: bytes.Repeat([]byte{'x'}, messageLimitBytes+1)}, nil
+	case "next-encoded-response":
+		return &wrapperspb.BytesValue{Value: bytes.Repeat([]byte{'x'}, messageLimitBytes-bytesValueWireOverhead+1)}, nil
+	default:
+		return request, nil
 	}
-	return request, nil
 }
 
 type lifecycleEcho struct {

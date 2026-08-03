@@ -57,6 +57,26 @@ func (writer *Writer) Flush() error {
 	}
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
+	return writer.flushLocked()
+}
+
+// FlushIfIdle flushes only when no write is in progress. Forced shutdown uses
+// it to avoid waiting forever on a blocked output sink.
+func (writer *Writer) FlushIfIdle() error {
+	if writer == nil {
+		return ErrSink
+	}
+	if _, ok := writer.output.(interface{ Flush() error }); !ok {
+		return nil
+	}
+	if !writer.mu.TryLock() {
+		return ErrSink
+	}
+	defer writer.mu.Unlock()
+	return writer.flushLocked()
+}
+
+func (writer *Writer) flushLocked() error {
 	flusher, ok := writer.output.(interface{ Flush() error })
 	if !ok {
 		return nil

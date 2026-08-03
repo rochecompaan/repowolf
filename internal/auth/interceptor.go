@@ -8,11 +8,10 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
-
-const healthServicePrefix = "/grpc.health.v1.Health/"
 
 // UnaryServerInterceptor authenticates non-health unary RPCs and adds trusted
 // identity metadata to their context.
@@ -70,7 +69,7 @@ func newRequestID() (string, error) {
 }
 
 func isHealthMethod(method string) bool {
-	return strings.HasPrefix(method, healthServicePrefix)
+	return method == grpc_health_v1.Health_Check_FullMethodName || method == grpc_health_v1.Health_Watch_FullMethodName
 }
 
 type contextServerStream struct {

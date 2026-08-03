@@ -98,6 +98,44 @@ func TestWriterReportsSinkFailureWithoutIncludingEventData(t *testing.T) {
 	}
 }
 
+func TestFlushIfIdleDoesNotWaitForBlockedAuditOutput(t *testing.T) {
+	output := &blockingWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	writer := audit.NewWriter(output)
+	writeDone := make(chan error, 1)
+	go func() {
+		writeDone <- writer.Write(audit.Event{Operation: "test", Outcome: audit.OutcomeCompleted})
+	}()
+	<-output.entered
+	flushDone := make(chan error, 1)
+	go func() { flushDone <- writer.FlushIfIdle() }()
+	select {
+	case err := <-flushDone:
+		if !errors.Is(err, audit.ErrSink) {
+			t.Fatalf("FlushIfIdle() error = %v", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		close(output.release)
+		t.Fatal("FlushIfIdle waited for blocked output")
+	}
+	close(output.release)
+	if err := <-writeDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
+type blockingWriter struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (writer *blockingWriter) Write(payload []byte) (int, error) {
+	close(writer.entered)
+	<-writer.release
+	return len(payload), nil
+}
+
+func (*blockingWriter) Flush() error { return nil }
+
 type errorWriter struct{}
 
 func (errorWriter) Write([]byte) (int, error) { return 0, errors.New("unsafe sink detail") }

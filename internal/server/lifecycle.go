@@ -40,12 +40,12 @@ func (service *Server) shutdown() error {
 	defer timer.Stop()
 	select {
 	case <-drained:
+		return service.finish()
 	case <-timer.C:
 		service.cancelActive()
-		service.grpc.Stop()
-		<-drained
+		go service.grpc.Stop()
+		return service.finishForced()
 	}
-	return service.finish()
 }
 
 func (service *Server) markStopping() {
@@ -75,6 +75,18 @@ func (service *Server) finish() error {
 	var flushErr error
 	if flusher, ok := service.audit.(interface{ Flush() error }); ok {
 		flushErr = flusher.Flush()
+	}
+	return errors.Join(cleanupErr, flushErr)
+}
+
+func (service *Server) finishForced() error {
+	var cleanupErr error
+	if service.cleanup != nil {
+		cleanupErr = service.cleanup()
+	}
+	var flushErr error
+	if flusher, ok := service.audit.(interface{ FlushIfIdle() error }); ok {
+		flushErr = flusher.FlushIfIdle()
 	}
 	return errors.Join(cleanupErr, flushErr)
 }

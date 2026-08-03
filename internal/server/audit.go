@@ -14,9 +14,6 @@ import (
 
 func (service *Server) auditUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if isHealth(info.FullMethod) {
-			return handler(ctx, request)
-		}
 		started := time.Now()
 		response, err := handler(ctx, request)
 		if writeErr := service.writeTerminal(ctx, info.FullMethod, started, err); writeErr != nil {
@@ -28,9 +25,6 @@ func (service *Server) auditUnaryInterceptor() grpc.UnaryServerInterceptor {
 
 func (service *Server) auditStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(implementation any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if isHealth(info.FullMethod) {
-			return handler(implementation, stream)
-		}
 		started := time.Now()
 		err := handler(implementation, stream)
 		if writeErr := service.writeTerminal(stream.Context(), info.FullMethod, started, err); writeErr != nil {
