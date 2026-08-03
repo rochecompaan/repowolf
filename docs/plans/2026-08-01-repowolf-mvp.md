@@ -562,6 +562,7 @@ git commit -m "feat(auth): add environment token authentication"
 **Files:**
 - Create: `internal/tlsconfig/load.go`
 - Create: `internal/tlsconfig/init.go`
+- Create: `internal/tlsconfig/publish.go`
 - Create: `internal/tlsconfig/load_test.go`
 - Create: `internal/tlsconfig/init_test.go`
 - Create: `internal/cli/cert.go`
@@ -574,7 +575,7 @@ git commit -m "feat(auth): add environment token authentication"
 
 - [ ] **Step 1: Write failing TLS and certificate tests**
 
-Cover TLS 1.3 minimum, wrong key rejection, CA verification, DNS/IP SAN verification, restrictive private-key modes, atomic no-overwrite behavior, random serial numbers, CA `IsCA`, and server `ExtKeyUsageServerAuth`. Snapshot every generated file before the second `Init` call and assert all bytes remain unchanged; also pre-create each final path in turn with sentinel bytes and assert `fs.ErrExist`, sentinel preservation, and cleanup of only files created by that invocation.
+Cover TLS 1.3 minimum, wrong key rejection, CA verification, DNS/IP SAN verification, restrictive private-key modes, atomic no-overwrite behavior, random serial numbers, CA `IsCA`, and server `ExtKeyUsageServerAuth`. Use a nonexistent child output path beneath a private test parent and prove successful initialization publishes the complete four-file directory. Snapshot every generated file before a second `Init` call and assert all bytes remain unchanged. Pre-create the output path as each of a file, directory, and symlink; assert `fs.ErrExist`, byte-for-byte preservation, no residual staging directory, and no final path after pre-publication failure. Cover joined primary and staging-cleanup errors where practical.
 
 ```go
 func TestInitRefusesOverwrite(t *testing.T) {
@@ -596,7 +597,7 @@ Expected: FAIL because TLS package does not exist.
 
 - [ ] **Step 3: Implement PEM loading and certificate generation**
 
-Use Ed25519 keys, random 128-bit serial numbers, a 5-year CA certificate, and a 397-day server certificate. Stage each complete file in the destination directory with `os.OpenFile(..., O_WRONLY|O_CREATE|O_EXCL, mode)`, write and `Sync` it, then close it. Publish with `os.Link(tempPath, finalPath)`: on Linux this atomically creates the final name without replacing an existing destination, and an existing path returns an error matching `fs.ErrExist`. After a successful link, remove the temporary name and sync the directory. Track final names published by this invocation; on any error remove only those names whose current `Lstat` still matches the staged inode via `os.SameFile`, plus remaining temporary files, never pre-existing or concurrently replaced material. Return the publication error and join any cleanup error rather than suppressing either. Do not use `os.Rename`, because it replaces existing destinations on Linux.
+Use Ed25519 keys, random 128-bit serial numbers, a 5-year CA certificate, and a 397-day server certificate. `--output` must be a nonexistent path beneath an existing operator-controlled parent directory; untrusted principals must not be able to write that parent during initialization. Create the complete four-file PKI in a unique private (`0700`) sibling staging directory on the same filesystem. Stage each file with `os.OpenFile(..., O_WRONLY|O_CREATE|O_EXCL, mode)`, write and `Sync` it, then close it; sync the staging directory. Publish the complete staging directory with exactly one Linux descriptor-relative `renameat2(..., RENAME_NOREPLACE)` operation. Existing file, directory, and symlink destinations must remain untouched and return an error matching `fs.ErrExist`. Before publication, remove only the staging directory and join cleanup errors with the primary error. After publication, sync the trusted parent directory and never roll back the complete output directory, even if durability reporting fails. Do not use `os.Rename`, per-file `os.Link`, `Lstat`/`SameFile` rollback, or fallback publication paths.
 
 `LoadServer` uses `tls.LoadX509KeyPair` and returns:
 

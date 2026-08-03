@@ -16,7 +16,7 @@ import (
 )
 
 func TestRunCertInitParsesRepeatableSANsAndPrintsOnlyPaths(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "certificates")
 	var stdout bytes.Buffer
 	args := []string{"--output", dir, "--dns", "one.internal", "--dns", "two.internal", "--ip", "127.0.0.1", "--ip", "::1"}
 	if err := cli.RunCertInit(args, &stdout, fixedNow, certEntropy()); err != nil {
@@ -95,7 +95,7 @@ func TestRunCertInitRejectsInvalidArgumentsWithoutEchoingThem(t *testing.T) {
 }
 
 func TestRunCertInitReturnsFixedWriterError(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "certificates")
 	writer := &payloadErrorWriter{}
 	err := cli.RunCertInit([]string{"--output", dir, "--dns", "repo.internal"}, writer, fixedNow, certEntropy())
 	if err == nil || err.Error() != "failed to write certificate paths" {
