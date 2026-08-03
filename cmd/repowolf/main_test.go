@@ -50,3 +50,51 @@ func TestRunCertInitUsageError(t *testing.T) {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
+
+func TestRunConfigValidateDoesNotRequireRuntimeSecrets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "repowolf.yaml")
+	if err := os.WriteFile(path, []byte(validConfigYAML()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"config", "validate", "--config", path}, &stdout, &stderr)
+	if code != 0 || stdout.String() != "configuration valid\n" || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestRunConfigValidateRejectsInvalidArguments(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"config", "validate"}, &stdout, &stderr)
+	if code != 2 || stdout.Len() != 0 || stderr.String() != "invalid config validate arguments\n" {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func validConfigYAML() string {
+	return `apiVersion: repowolf.dev/v1alpha1
+listen: 127.0.0.1:8443
+tls:
+  certificate: /missing/server.crt
+  privateKey: /missing/server.key
+providers:
+  github:
+    kind: github
+    apiHost: github.com
+    gitHost: github.com
+    sshUser: git
+repositories:
+  project:
+    provider: github
+    owner: alpha
+    name: project
+    git:
+      maxRefUpdates: 16
+principals:
+  agent:
+    tokenEnvs: [REPOWOLF_TOKEN_AGENT]
+    grants:
+      - repository: project
+        capabilities: [repository:read]
+`
+}

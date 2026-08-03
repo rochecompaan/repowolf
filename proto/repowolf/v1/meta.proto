@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package repowolf.v1;
+
+option go_package = "github.com/rochecompaan/repowolf/gen/repowolf/v1;repowolfv1";
+
+message ResponseMeta {
+  string request_id = 1;
+}
