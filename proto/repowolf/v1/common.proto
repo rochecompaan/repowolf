@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package repowolf.v1;
+
+option go_package = "github.com/rochecompaan/repowolf/gen/repowolf/v1;repowolfv1";
+
+message RepositorySelector {
+  string host = 1;
+  string owner = 2;
+  string name = 3;
+  uint32 ssh_port = 4;
+}
+
+message RequestContext {
+  RepositorySelector repository = 1;
+}
+
+message Repository {
+  string id = 1;
+  string provider_id = 2;
+  string owner = 3;
+  string name = 4;
+}
