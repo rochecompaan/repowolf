@@ -10,6 +10,8 @@ import (
 	"github.com/rochecompaan/repowolf/internal/policy"
 	providergithub "github.com/rochecompaan/repowolf/internal/provider/github"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
+	"github.com/rochecompaan/repowolf/internal/runner"
+	"google.golang.org/protobuf/proto"
 )
 
 // GitHubExecutor is the narrow provider adapter surface used by the service.
@@ -70,6 +72,9 @@ func (service *githubService) Execute(ctx context.Context, request *repowolfv1.G
 		return nil, rpcstatus.ErrRepositoryUnavailable
 	}
 	response.Meta = &repowolfv1.ResponseMeta{RequestId: requestID}
+	if proto.Size(response) > messageLimitBytes {
+		return nil, runner.ErrOutputLimit
+	}
 	return response, nil
 }
 

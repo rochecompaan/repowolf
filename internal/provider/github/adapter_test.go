@@ -25,6 +25,9 @@ func (fake *fakeCaller) Call(_ context.Context, command runner.Command) (runner.
 	if fake.err != nil {
 		return runner.Result{}, fake.err
 	}
+	if len(fake.results) == 0 {
+		return runner.Result{}, errors.New("unexpected provider call")
+	}
 	result := fake.results[0]
 	fake.results = fake.results[1:]
 	return result, nil

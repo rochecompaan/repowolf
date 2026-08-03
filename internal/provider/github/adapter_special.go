@@ -10,6 +10,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const maximumMutationBytes = 4 * miB
+
 func requiresPreflight(request *repowolfv1.GitHubRequest) bool {
 	switch request.Operation.(type) {
 	case *repowolfv1.GitHubRequest_IssueEdit, *repowolfv1.GitHubRequest_IssueComment,
@@ -21,7 +23,7 @@ func requiresPreflight(request *repowolfv1.GitHubRequest) bool {
 	}
 }
 
-func (adapter *Adapter) preflight(ctx context.Context, repository policy.ResolvedRepository, request *repowolfv1.GitHubRequest) error {
+func (adapter *Adapter) preflight(ctx context.Context, repository policy.ResolvedRepository, request *repowolfv1.GitHubRequest) (int, error) {
 	base := "/repos/" + repository.Repository.Owner + "/" + repository.Repository.Name
 	var number uint64
 	pull := false
@@ -37,30 +39,37 @@ func (adapter *Adapter) preflight(ctx context.Context, repository policy.Resolve
 	case *repowolfv1.GitHubRequest_PullComment:
 		number, pull = operation.PullComment.Number, true
 	default:
-		return ErrInvalidRequest
+		return 0, ErrInvalidRequest
 	}
 	resource := "/issues/"
 	if pull {
 		resource = "/pulls/"
 	}
-	command := adapter.apiCommand(repository.Provider.APIHost, "GET", base+resource+decimal(number), nil, 4*miB)
+	command := adapter.apiCommand(repository.Provider.APIHost, "GET", base+resource+decimal(number), nil, maximumMutationBytes)
 	result, err := adapter.call(ctx, command)
 	if err != nil {
-		return err
+		return 0, err
+	}
+	remaining := maximumMutationBytes - len(result.Stdout)
+	if remaining <= 0 {
+		return 0, runner.ErrOutputLimit
 	}
 	if pull {
 		var value struct {
 			Head *apiRef `json:"head"`
 		}
 		if err := decode(result.Stdout, &value); err != nil {
-			return err
+			return 0, err
 		}
 		if value.Head == nil {
-			return providerResponse(nil, "pull request")
+			return 0, providerResponse(nil, "pull request")
 		}
-		return nil
+		return remaining, nil
 	}
-	return rejectPullIssue(result.Stdout)
+	if err := rejectPullIssue(result.Stdout); err != nil {
+		return 0, err
+	}
+	return remaining, nil
 }
 
 func rejectPullIssue(raw []byte) error {

@@ -59,14 +59,20 @@ func (adapter *Adapter) Execute(ctx context.Context, repository policy.ResolvedR
 	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_PullReady); ok {
 		return adapter.executeReady(ctx, repository, request)
 	}
+	mutationBudget := 0
+	var err error
 	if requiresPreflight(request) {
-		if err := adapter.preflight(ctx, repository, request); err != nil {
+		mutationBudget, err = adapter.preflight(ctx, repository, request)
+		if err != nil {
 			return nil, err
 		}
 	}
 	plan, err := adapter.plan(repository, request)
 	if err != nil {
 		return nil, err
+	}
+	if mutationBudget > 0 {
+		plan.command.StdoutLimit = mutationBudget
 	}
 	result, err := adapter.call(ctx, plan.command)
 	if err != nil {
