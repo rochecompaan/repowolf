@@ -33,7 +33,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	connection, err := clientconfig.Dial(ctx, config)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return interrupted(stderr)
+			return interrupted(ctx, stderr)
 		}
 		writeDiagnostic(stderr, "gh: connection failed\n")
 		return 1
@@ -44,7 +44,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	if err := executeCommand(operationContext, repowolfv1.NewGitHubServiceClient(connection), parsed, stdout); err != nil {
 		if errors.Is(operationContext.Err(), context.Canceled) {
-			return interrupted(stderr)
+			return interrupted(operationContext, stderr)
 		}
 		writeDiagnostic(stderr, "gh: GitHub operation failed\n")
 		return 1
@@ -87,7 +87,10 @@ func writeDiagnostic(writer io.Writer, message string) {
 	}
 }
 
-func interrupted(stderr io.Writer) int {
+func interrupted(ctx context.Context, stderr io.Writer) int {
 	writeDiagnostic(stderr, "gh: interrupted\n")
+	if cause, ok := context.Cause(ctx).(interface{ ExitCode() int }); ok {
+		return cause.ExitCode()
+	}
 	return 130
 }

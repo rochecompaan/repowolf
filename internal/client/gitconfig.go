@@ -3,65 +3,143 @@ package client
 import (
 	"bufio"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 const (
-	gitPointerLimit = 4096
-	gitConfigLimit  = 64 << 10
+	gitPointerLimit   = 4096
+	gitConfigLimit    = 64 << 10
+	gitDiscoveryDepth = 64
 )
 
 // originRemote reads bounded local Git metadata only to produce an untrusted
 // request hint. It never interprets the remote as policy or authority.
 func originRemote(cwd string) (string, error) {
-	gitDirectory, err := resolveGitDirectory(cwd)
-	if err != nil {
-		return "", err
-	}
-	configPath := filepath.Join(gitDirectory, "config")
-	if _, err := os.Stat(configPath); err != nil {
-		common, commonErr := readBounded(filepath.Join(gitDirectory, "commondir"), gitPointerLimit)
-		if commonErr != nil {
-			return "", commonErr
-		}
-		configPath = filepath.Join(resolvePath(gitDirectory, strings.TrimSpace(string(common))), "config")
-	}
-	contents, err := readBounded(configPath, gitConfigLimit)
+	contents, err := discoverGitConfig(cwd)
 	if err != nil {
 		return "", err
 	}
 	return originURL(contents)
 }
 
-func resolveGitDirectory(cwd string) (string, error) {
-	path := filepath.Join(cwd, ".git")
-	info, err := os.Stat(path)
+func discoverGitConfig(cwd string) ([]byte, error) {
+	current, err := openDirectoryPath(cwd)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if info.IsDir() {
-		return path, nil
+	defer func() { _ = unix.Close(current) }()
+
+	for depth := 0; depth < gitDiscoveryDepth; depth++ {
+		var marker unix.Stat_t
+		err := unix.Fstatat(current, ".git", &marker, unix.AT_SYMLINK_NOFOLLOW)
+		switch {
+		case err == nil && marker.Mode&unix.S_IFMT == unix.S_IFDIR:
+			gitDirectory, openErr := openDirectoryAt(current, ".git")
+			if openErr != nil {
+				return nil, openErr
+			}
+			defer unix.Close(gitDirectory)
+			return readRegularAt(gitDirectory, "config", gitConfigLimit)
+		case err == nil && marker.Mode&unix.S_IFMT == unix.S_IFREG:
+			pointer, readErr := readRegularAt(current, ".git", gitPointerLimit)
+			if readErr != nil {
+				return nil, readErr
+			}
+			return linkedWorktreeConfig(marker, pointer)
+		case err == nil:
+			return nil, fmt.Errorf("invalid .git metadata type")
+		case err != unix.ENOENT:
+			return nil, err
+		}
+
+		parent, openErr := openParentDirectory(current)
+		if openErr != nil {
+			return nil, openErr
+		}
+		var hereInfo, parentInfo unix.Stat_t
+		if unix.Fstat(current, &hereInfo) != nil || unix.Fstat(parent, &parentInfo) != nil {
+			unix.Close(parent)
+			return nil, fmt.Errorf("inspect repository ancestors")
+		}
+		if sameFile(hereInfo, parentInfo) {
+			unix.Close(parent)
+			return nil, fmt.Errorf("Git repository unavailable")
+		}
+		unix.Close(current)
+		current = parent
 	}
-	contents, err := readBounded(path, gitPointerLimit)
+	return nil, fmt.Errorf("Git repository discovery depth exceeded")
+}
+
+func linkedWorktreeConfig(marker unix.Stat_t, pointer []byte) ([]byte, error) {
+	target, err := gitdirPointer(pointer)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	if filepath.Base(filepath.Dir(target)) != "worktrees" || filepath.Base(target) == "worktrees" {
+		return nil, fmt.Errorf("invalid linked-worktree layout")
+	}
+	metadata, err := openDirectoryPath(target)
+	if err != nil {
+		return nil, err
+	}
+	defer unix.Close(metadata)
+
+	commonPointer, err := readRegularAt(metadata, "commondir", gitPointerLimit)
+	if err != nil || strings.TrimSpace(string(commonPointer)) != "../.." {
+		return nil, fmt.Errorf("invalid linked-worktree common directory")
+	}
+	backPointer, err := readRegularAt(metadata, "gitdir", gitPointerLimit)
+	if err != nil {
+		return nil, fmt.Errorf("invalid linked-worktree back pointer")
+	}
+	if err := validateBackPointer(marker, strings.TrimSpace(string(backPointer))); err != nil {
+		return nil, err
+	}
+
+	worktrees, err := openParentDirectory(metadata)
+	if err != nil {
+		return nil, err
+	}
+	defer unix.Close(worktrees)
+	common, err := openParentDirectory(worktrees)
+	if err != nil {
+		return nil, err
+	}
+	defer unix.Close(common)
+	return readRegularAt(common, "config", gitConfigLimit)
+}
+
+func gitdirPointer(contents []byte) (string, error) {
 	line := strings.TrimSpace(string(contents))
 	if !strings.HasPrefix(strings.ToLower(line), "gitdir:") {
 		return "", fmt.Errorf("invalid git directory pointer")
 	}
-	return resolvePath(cwd, strings.TrimSpace(line[len("gitdir:"):])), nil
+	value := strings.TrimSpace(line[len("gitdir:"):])
+	if !filepath.IsAbs(value) || filepath.Clean(value) != value || strings.ContainsRune(value, '\x00') {
+		return "", fmt.Errorf("invalid git directory pointer")
+	}
+	return value, nil
 }
 
-func resolvePath(base, value string) string {
-	if filepath.IsAbs(value) {
-		return filepath.Clean(value)
+func validateBackPointer(marker unix.Stat_t, path string) error {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return fmt.Errorf("invalid linked-worktree back pointer")
 	}
-	return filepath.Clean(filepath.Join(base, value))
+	parent, err := openDirectoryPath(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("invalid linked-worktree back pointer")
+	}
+	defer unix.Close(parent)
+	backMarker, err := regularFileStatAt(parent, filepath.Base(path))
+	if err != nil || !sameFile(marker, backMarker) {
+		return fmt.Errorf("invalid linked-worktree back pointer")
+	}
+	return nil
 }
 
 func originURL(contents []byte) (string, error) {
@@ -101,20 +179,4 @@ func originURL(contents []byte) (string, error) {
 		return "", err
 	}
 	return "", fmt.Errorf("origin URL unavailable")
-}
-
-func readBounded(path string, limit int64) ([]byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	contents, err := io.ReadAll(io.LimitReader(file, limit+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(contents)) > limit {
-		return nil, fmt.Errorf("git metadata exceeds client limit")
-	}
-	return contents, nil
 }
