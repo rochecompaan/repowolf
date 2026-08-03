@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/rochecompaan/repowolf/internal/app"
@@ -14,11 +16,20 @@ import (
 	"github.com/rochecompaan/repowolf/internal/cli"
 )
 
+var serveCommand = app.Serve
+
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	ctx, stop := shutdownContext()
+	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func shutdownContext() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+}
+
+func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 1 && args[0] == "--version" {
 		fmt.Fprintln(stdout, buildinfo.Version)
 		return 0
@@ -48,7 +59,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "invalid serve arguments")
 			return 2
 		}
-		if err := app.Serve(context.Background(), path, stdout); err != nil {
+		if err := serveCommand(ctx, path, stdout); err != nil {
 			fmt.Fprintln(stderr, "service failed")
 			return 1
 		}

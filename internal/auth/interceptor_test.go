@@ -77,15 +77,31 @@ func TestStreamServerInterceptorAddsPrincipalAndRequestID(t *testing.T) {
 	}
 }
 
-func TestHealthMethodsBypassBearerAuthenticationOnly(t *testing.T) {
+func TestOnlyExactHealthMethodsBypassBearerAuthentication(t *testing.T) {
 	_, index := testIndex(t)
+	for _, method := range []string{
+		grpc_health_v1.Health_Check_FullMethodName,
+		grpc_health_v1.Health_Watch_FullMethodName,
+	} {
+		t.Run(method, func(t *testing.T) {
+			called := false
+			_, err := auth.UnaryServerInterceptor(index)(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) {
+				called = true
+				return nil, nil
+			})
+			if err != nil || !called {
+				t.Fatalf("health call error=%v called=%v", err, called)
+			}
+		})
+	}
+
 	called := false
-	_, err := auth.UnaryServerInterceptor(index)(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: grpc_health_v1.Health_Check_FullMethodName}, func(context.Context, any) (any, error) {
+	_, err := auth.UnaryServerInterceptor(index)(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "/grpc.health.v1.Health/FutureMethod"}, func(context.Context, any) (any, error) {
 		called = true
 		return nil, nil
 	})
-	if err != nil || !called {
-		t.Fatalf("health call error=%v called=%v", err, called)
+	if status.Code(err) != codes.Unauthenticated || called {
+		t.Fatalf("future health method error=%v called=%v", err, called)
 	}
 }
 
