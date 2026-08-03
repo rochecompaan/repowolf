@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -84,8 +85,8 @@ func TestTLSHealthWatchUsesGlobalConcurrencyAndShutsDown(t *testing.T) {
 	}
 	select {
 	case err := <-serveDone:
-		if err != nil {
-			t.Fatalf("Serve() error = %v", err)
+		if !errors.Is(err, audit.ErrIncomplete) {
+			t.Fatalf("Serve() error = %v, want audit incomplete", err)
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("health Watch prevented bounded shutdown")

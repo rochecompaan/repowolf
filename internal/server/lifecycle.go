@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+
+	"github.com/rochecompaan/repowolf/internal/audit"
 )
 
 // Serve accepts TLS gRPC traffic until ctx is cancelled. It stops admission,
@@ -42,9 +44,9 @@ func (service *Server) shutdown() error {
 	case <-drained:
 		return service.finish()
 	case <-timer.C:
-		service.cancelActive()
+		incompleteAudit := service.cancelActive()
 		go service.grpc.Stop()
-		return service.finishForced()
+		return service.finishForced(incompleteAudit)
 	}
 }
 
@@ -55,7 +57,7 @@ func (service *Server) markStopping() {
 	service.health.Shutdown()
 }
 
-func (service *Server) cancelActive() {
+func (service *Server) cancelActive() bool {
 	service.activeMu.Lock()
 	cancellations := make([]context.CancelFunc, 0, len(service.active))
 	for _, cancel := range service.active {
@@ -65,6 +67,7 @@ func (service *Server) cancelActive() {
 	for _, cancel := range cancellations {
 		cancel()
 	}
+	return len(cancellations) != 0
 }
 
 func (service *Server) finish() error {
@@ -79,7 +82,7 @@ func (service *Server) finish() error {
 	return errors.Join(cleanupErr, flushErr)
 }
 
-func (service *Server) finishForced() error {
+func (service *Server) finishForced(incompleteAudit bool) error {
 	var cleanupErr error
 	if service.cleanup != nil {
 		cleanupErr = service.cleanup()
@@ -87,6 +90,9 @@ func (service *Server) finishForced() error {
 	var flushErr error
 	if flusher, ok := service.audit.(interface{ FlushIfIdle() error }); ok {
 		flushErr = flusher.FlushIfIdle()
+	}
+	if incompleteAudit {
+		return errors.Join(cleanupErr, flushErr, audit.ErrIncomplete)
 	}
 	return errors.Join(cleanupErr, flushErr)
 }

@@ -134,8 +134,6 @@ func (writer *blockingWriter) Write(payload []byte) (int, error) {
 	return len(payload), nil
 }
 
-func (*blockingWriter) Flush() error { return nil }
-
 type errorWriter struct{}
 
 func (errorWriter) Write([]byte) (int, error) { return 0, errors.New("unsafe sink detail") }
