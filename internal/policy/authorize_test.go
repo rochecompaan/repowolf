@@ -92,18 +92,20 @@ func TestResolveDeniesMissingCapabilitiesAndUnknownPrincipal(t *testing.T) {
 	}
 }
 
-func TestUnauthorizedAndUnknownRepositoryAreIndistinguishable(t *testing.T) {
+func TestUnauthorizedUnknownAndWrongPortAreIndistinguishable(t *testing.T) {
 	snapshot := testSnapshot(t)
 	unknownSelector := Selector{Kind: config.ProviderGitHub, Host: "github.com", Owner: "none", Name: "missing"}
 	unauthorizedSelector := Selector{Kind: config.ProviderGitHub, Host: "github.com", Owner: "other", Name: "private"}
+	wrongPortSelector := Selector{Kind: config.ProviderGitHub, Host: "ssh.example.test", SSHPort: 22, Owner: "ops", Name: "tools"}
 
 	_, unknown := snapshot.Resolve("infra-agent", unknownSelector, config.RepositoryRead)
 	_, unauthorized := snapshot.Resolve("infra-agent", unauthorizedSelector, config.RepositoryRead)
-	if !errors.Is(unknown, ErrDenied) || !errors.Is(unauthorized, ErrDenied) {
-		t.Fatalf("unknown=%v unauthorized=%v", unknown, unauthorized)
+	_, wrongPort := snapshot.Resolve("infra-agent", wrongPortSelector, config.RepositoryRead)
+	if !errors.Is(unknown, ErrDenied) || !errors.Is(unauthorized, ErrDenied) || !errors.Is(wrongPort, ErrDenied) {
+		t.Fatalf("unknown=%v unauthorized=%v wrongPort=%v", unknown, unauthorized, wrongPort)
 	}
-	if unknown.Error() != unauthorized.Error() {
-		t.Fatalf("errors enumerate policy: %q != %q", unknown, unauthorized)
+	if unknown.Error() != unauthorized.Error() || unknown.Error() != wrongPort.Error() {
+		t.Fatalf("errors enumerate policy: unknown=%q unauthorized=%q wrongPort=%q", unknown.Error(), unauthorized.Error(), wrongPort.Error())
 	}
 }
 

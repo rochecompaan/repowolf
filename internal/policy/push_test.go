@@ -2,6 +2,7 @@ package policy
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/rochecompaan/repowolf/internal/config"
@@ -19,10 +20,14 @@ func TestValidatePushAllowsSyntacticallyValidUpdates(t *testing.T) {
 	}
 }
 
-func TestValidatePushRejectsDefaultMain(t *testing.T) {
-	policy := config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 1}
+func TestValidatePushRejectsDefaultMainFromDecodedRepositoryPolicy(t *testing.T) {
+	cfg, err := config.LoadFile(filepath.Join("..", "config", "testdata", "valid.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := cfg.Repositories["clubhouse"].Git
 
-	err := ValidatePush(policy, []Update{{OldOID: oid('1', 40), NewOID: oid('2', 40), Ref: "refs/heads/main"}})
+	err = ValidatePush(policy, []Update{{OldOID: oid('1', 40), NewOID: oid('2', 40), Ref: "refs/heads/main"}})
 	if !errors.Is(err, ErrRefPolicy) {
 		t.Fatalf("ValidatePush() error = %v, want ErrRefPolicy", err)
 	}
@@ -66,6 +71,18 @@ func TestValidatePushRejectsDeletesForSHA1AndSHA256(t *testing.T) {
 	}
 }
 
+func TestValidatePushAllowsDeletesForSHA1AndSHA256(t *testing.T) {
+	policy := config.PushPolicy{DenyDeletes: false, MaxRefUpdates: 2}
+	for _, length := range []int{40, 64} {
+		err := ValidatePush(policy, []Update{{
+			OldOID: oid('1', length), NewOID: zeros(length), Ref: "refs/heads/obsolete",
+		}})
+		if err != nil {
+			t.Fatalf("SHA-%d delete error = %v", length*4, err)
+		}
+	}
+}
+
 func TestValidatePushRejectsMalformedRefsAndObjectIDs(t *testing.T) {
 	policy := config.PushPolicy{MaxRefUpdates: 8}
 	tests := []struct {
@@ -74,6 +91,7 @@ func TestValidatePushRejectsMalformedRefsAndObjectIDs(t *testing.T) {
 	}{
 		{"missing refs prefix", Update{OldOID: oid('1', 40), NewOID: oid('2', 40), Ref: "main"}},
 		{"invalid ref component", Update{OldOID: oid('1', 40), NewOID: oid('2', 40), Ref: "refs/heads/bad..name"}},
+		{"lock ref component", Update{OldOID: oid('1', 40), NewOID: oid('2', 40), Ref: "refs/heads/foo.lock/bar"}},
 		{"empty old object ID", Update{OldOID: "", NewOID: oid('2', 40), Ref: "refs/heads/topic"}},
 		{"invalid object ID character", Update{OldOID: oid('g', 40), NewOID: oid('2', 40), Ref: "refs/heads/topic"}},
 		{"short object ID", Update{OldOID: oid('1', 39), NewOID: oid('2', 40), Ref: "refs/heads/topic"}},
