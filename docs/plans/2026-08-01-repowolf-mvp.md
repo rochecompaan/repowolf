@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a standalone, sandbox-agnostic RepoWolf service and credential-free client shims that broker exact-repository GitHub, Gitea, and Git SSH operations over authenticated TLS gRPC.
+**Goal:** Build a standalone, sandbox-agnostic RepoWolf service and credential-free client shims that broker exact-repository GitHub and Git SSH operations over authenticated TLS gRPC.
 
-**Architecture:** `repowolf serve` loads strict YAML, environment-sourced bearer tokens, TLS material, policy, and pinned provider tools into an immutable runtime snapshot. A separate multicall `repowolf-client` binary runs as restricted `gh`, `tea`, and `repowolf-git-ssh` shims; unary typed RPCs handle forge operations and bounded bidirectional streams handle Git upload-pack and receive-pack.
+**Architecture:** `repowolf serve` loads strict YAML, environment-sourced bearer tokens, TLS material, policy, and pinned provider tools into an immutable runtime snapshot. A separate multicall `repowolf-client` binary runs as restricted `gh` and `repowolf-git-ssh` shims; unary typed RPCs handle GitHub operations and bounded bidirectional streams handle Git upload-pack and receive-pack.
 
 **Tech Stack:** Go 1.25.10+, gRPC-Go v1.83.0, Protobuf-Go v1.36.11, protoc-gen-go-grpc v1.6.2, Buf v1.72.0, YAML v3.0.1, go-cmp v0.7.0, OpenSSH, Git, Nix flakes, OCI images, GitHub Actions.
 
@@ -13,28 +13,38 @@
 ## Global Constraints
 
 - The Go module is `github.com/rochecompaan/repowolf`; the minimum Go language version is `1.25.10`.
-- Keep service/admin and client artifacts separate. A sandbox receives only `repowolf-client` and its `gh`, `tea`, and `repowolf-git-ssh` links.
+- Keep service/admin and client artifacts separate. A sandbox receives only `repowolf-client` and its `gh` and `repowolf-git-ssh` links.
 - RepoWolf does not create, register, inspect, or attest sandboxes. Do not add `repowolf run`, sandbox drivers, or Unix-socket transport.
 - All client traffic uses gRPC over HTTP/2 with mandatory server-side TLS. MVP client authentication is an opaque bearer token from `REPOWOLF_TOKEN`.
 - Service token values come only from environment variables named in strict YAML. Never place token values or digests in YAML, logs, audit records, errors, argv, URLs, or provider input.
 - Policy authority is principal × exact repository × capability. Never infer authority from working directories, Git remotes, request hosts, or repository-local files.
-- The shared capability vocabulary is exactly `repository:read`, `issues:read`, `issues:write`, `pull_requests:read`, `pull_requests:write`, `actions:read`, `statuses:read`, `git:read`, and `git:write`.
+- The canonical capability vocabulary is defined once in the design spec's `Capabilities` section; implementations must use those exact values and add no aliases.
 - Pull-request merge, arbitrary API/GraphQL, workflow writes, release/repository administration, aliases, extensions, browser/editor launch, raw argv forwarding, and shell execution remain unsupported.
 - Provider operations are provider-specific typed Protobuf messages. Clients cannot supply executable paths, hosts, SSH users/options, CLI profiles, URLs, headers, or argument boundaries.
-- Resolve `gh`, `tea`, and `ssh` once at service startup, canonicalize them, and pin them for the process lifetime. Absolute YAML overrides are allowed.
+- Resolve `gh` and `ssh` once at service startup, canonicalize them, and pin them for the process lifetime. Absolute YAML overrides are allowed.
 - Preserve provider-authentication environment values byte-for-byte. Remove all configured RepoWolf token variables and internal `REPOWOLF_*` control variables before spawning provider tools.
 - Provider tools run with generated argv, private temporary cwd, bounded I/O, private process groups, deadlines, cancellation, and complete reaping. They never open the agent checkout.
 - Effective gRPC send/receive message limits are capped at 1 MiB in both directions. Git data chunks are 64 KiB; push-prefix buffering is capped at 1 MiB.
 - Receive-pack validates syntax, capabilities, update count, delete policy, and denied refs before forwarding client update bytes. `refs/heads/main` is denied by default.
 - An exact-main denial test uses only generated policy and an offline fake host; never test denial against a real forge main branch.
-- GitHub/Gitea branch protections remain authoritative for ancestry-sensitive rules.
+- GitHub branch protections remain authoritative for ancestry-sensitive rules.
 - Audit output is safe JSON Lines on stdout. Never audit bodies, comments, pack data, raw stdout/stderr, provider argv/environment, token material, or TLS private data.
 - Configuration, tokens, certificates, and executable resolution are startup-only in MVP; changes require restart.
-- Linux amd64/arm64 and macOS amd64/arm64 are MVP targets. Windows is deferred.
+- Linux amd64/arm64 are the only MVP targets. macOS and Windows are deferred.
 - Prefer focused modules under roughly 200 meaningful lines. Split parser, validator, transport, runner, provider, and rendering responsibilities; do not create `utils`, `helpers`, or other junk-drawer packages.
 - Production behavior follows TDD. Static workflow, lockfile, packaging metadata, and documentation use direct syntax/build verification instead of tests that restate configuration.
 - Each task ends with `gofmt`, focused tests, `go test -race` for affected packages where supported, and a Conventional Commits-style commit.
 - Do not modify `roche-pi` or clubhouse in this plan. Their cutover receives a separate plan after standalone feature parity and review.
+
+## External Source Anchors
+
+Port references use this immutable review baseline:
+
+- `roche-pi`: `ssh://git@git.compaan/roche/pi-config.git` at `5b8425c8663a4c7bc7c79a7188743ec464eaba02`; expected sibling checkout `../roche-pi` relative to the primary RepoWolf checkout.
+
+A reference such as `roche-pi:packages/jailed-github-broker/internal/policy/push.go` is relative to that repository root, never to the RepoWolf worktree. Verify each path with `git -C "$ROCHE_PI_SOURCE" cat-file -e "5b8425c8663a4c7bc7c79a7188743ec464eaba02:$SOURCE_PATH"`; enumerate directory references with `git -C "$ROCHE_PI_SOURCE" ls-tree -r --name-only 5b8425c8663a4c7bc7c79a7188743ec464eaba02 -- "$SOURCE_PATH"`, then set `SOURCE_PATH` to each listed file and read it with `git -C "$ROCHE_PI_SOURCE" show "5b8425c8663a4c7bc7c79a7188743ec464eaba02:$SOURCE_PATH"`. Do not copy mutable worktree bytes. The source repository remains read-only.
+
+The local clubhouse `devenv.nix` reviewed during design is ignored and untracked, so it is an operator-supplied migration input rather than an immutable source anchor. Task 15 records that limitation instead of attributing the file to a commit.
 
 ---
 
@@ -58,18 +68,16 @@
 | `internal/rpcstatus/` | Stable domain-to-gRPC/client error mapping |
 | `internal/server/` | gRPC assembly, health, lifecycle, concurrency limits |
 | `internal/provider/github/` | GitHub typed validation, command generation, output normalization |
-| `internal/provider/gitea/` | Gitea typed validation, command generation, output normalization |
 | `internal/gitproto/` | Git pkt-line, advertisement, capability, receive-pack parsing |
 | `internal/gitservice/` | Upload-pack/receive-pack gRPC stream orchestration |
 | `internal/clientconfig/` | Endpoint, CA, token, TLS gRPC dialing |
 | `internal/client/github/` | Restricted `gh` parser and renderer |
-| `internal/client/gitea/` | Restricted `tea` parser and renderer |
 | `internal/client/gitssh/` | SSH argv parser and Git stream relay |
 | `internal/testutil/` | Fake executable, certificate, and in-process server fixtures |
-| `integration/` | TLS, fake provider, Git, Gitea, leak, and Bubblewrap tests |
+| `integration/` | TLS, fake provider, Git, leak, and Bubblewrap tests |
 | `nix/` and `flake.nix` | Split Nix service/client packages and checks |
 | `nix/oci.nix` | OCI service image with host provider tools |
-| `.goreleaser.yaml` | Cross-platform binary archives and checksums |
+| `.goreleaser.yaml` | Linux binary archives and checksums |
 | `.github/workflows/` | Behavior verification and release automation |
 
 Generated Protobuf files and test fixtures may exceed normal module-size guidance. Handwritten source files remain focused by responsibility.
@@ -90,8 +98,9 @@ Generated Protobuf files and test fixtures may exceed normal module-size guidanc
 - Create: `gen/repowolf/v1/common.pb.go`
 - Create: `internal/buildinfo/version.go`
 - Create: `cmd/repowolf/main.go`
+- Create: `cmd/repowolf/main_test.go`
 - Create: `cmd/repowolf-client/main.go`
-- Create: `internal/protogen/contract_test.go`
+- Create: `cmd/repowolf-client/main_test.go`
 - Modify: `README.md`
 
 **Interfaces:**
@@ -217,43 +226,44 @@ Run:
 chmod +x scripts/generate.sh scripts/check-generated.sh
 ```
 
-- [ ] **Step 3: Generate code and write the protocol round-trip test**
+- [ ] **Step 3: Generate code and write failing command-dispatch tests**
 
-Run:
+Run `go generate ./internal/protogen && scripts/check-generated.sh`; expected: checked-in generated code is unchanged by a clean second generation. Do not add a marshal/unmarshal round-trip test because that restates the Protobuf runtime contract.
 
-```bash
-go generate ./internal/protogen
-```
-
-Create `internal/protogen/contract_test.go`:
+Create `cmd/repowolf/main_test.go`:
 
 ```go
-package protogen_test
+package main
 
 import (
+    "bytes"
     "testing"
-
-    repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
-    "google.golang.org/protobuf/proto"
 )
 
-func TestRequestContextRoundTrip(t *testing.T) {
-    input := &repowolfv1.RequestContext{Repository: &repowolfv1.RepositorySelector{
-        Host: "github.com", Owner: "alphaexplorationco", Name: "clubhouse_infra",
-    }}
-    raw, err := proto.Marshal(input)
-    if err != nil {
-        t.Fatal(err)
-    }
-    output := new(repowolfv1.RequestContext)
-    if err := proto.Unmarshal(raw, output); err != nil {
-        t.Fatal(err)
-    }
-    if !proto.Equal(input, output) {
-        t.Fatalf("round trip = %#v, want %#v", output, input)
+func TestRunVersion(t *testing.T) {
+    var stdout, stderr bytes.Buffer
+    if code := run([]string{"--version"}, &stdout, &stderr); code != 0 || stdout.String() != "dev\n" || stderr.Len() != 0 {
+        t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
     }
 }
 ```
+
+Create `cmd/repowolf-client/main_test.go`:
+
+```go
+package main
+
+import "testing"
+
+func TestModeForBase(t *testing.T) {
+    for _, name := range []string{"gh", "repowolf-git-ssh"} {
+        if mode, ok := modeForBase(name); !ok || mode != name { t.Fatalf("modeForBase(%q) = %q, %v", name, mode, ok) }
+    }
+    if _, ok := modeForBase("unknown"); ok { t.Fatal("unexpected client mode") }
+}
+```
+
+Run `go test ./cmd/...`; expected: FAIL because `run` and `modeForBase` do not exist.
 
 - [ ] **Step 4: Add minimal command dispatch and README usage**
 
@@ -265,9 +275,9 @@ package buildinfo
 var Version = "dev"
 ```
 
-Implement `cmd/repowolf/main.go` so `repowolf --version` prints `buildinfo.Version`, unknown commands print `usage: repowolf <serve|config|token|cert>`, and exit status is 2. Implement `cmd/repowolf-client/main.go` so it detects `filepath.Base(os.Args[0])` and reports supported modes `gh`, `tea`, and `repowolf-git-ssh`; no network behavior is added yet.
+Implement `run(args []string, stdout, stderr io.Writer) int` in `cmd/repowolf/main.go` so `repowolf --version` prints `buildinfo.Version`, unknown commands print `usage: repowolf <serve|config|token|cert>`, and exit status is 2. Implement `modeForBase(string) (string, bool)` in `cmd/repowolf-client/main.go` using `filepath.Base`; only `gh` and `repowolf-git-ssh` are recognized, direct or unknown client names return status 2, and no network behavior is added yet.
 
-Update `README.md` with the product boundary, the three client names, and a link to the approved spec.
+Update `README.md` with the product boundary, both client names, and a link to the approved spec.
 
 - [ ] **Step 5: Verify the foundation**
 
@@ -352,7 +362,7 @@ Expected: FAIL because `config.Decode`, types, and validation do not exist.
 
 - [ ] **Step 3: Define focused configuration types and defaults**
 
-Use these public shapes in `internal/config/types.go`:
+Mirror the design spec's `Capabilities` vocabulary exactly and use these public shapes in `internal/config/types.go`:
 
 ```go
 package config
@@ -391,24 +401,19 @@ type TLS struct {
 
 type Tools struct {
     GH  *string `yaml:"gh"`
-    Tea *string `yaml:"tea"`
     SSH *string `yaml:"ssh"`
 }
 
 type ProviderKind string
 
-const (
-    ProviderGitHub ProviderKind = "github"
-    ProviderGitea  ProviderKind = "gitea"
-)
+const ProviderGitHub ProviderKind = "github"
 
 type Provider struct {
-    Kind     ProviderKind `yaml:"kind"`
-    APIHost  string       `yaml:"apiHost"`
-    GitHost  string       `yaml:"gitHost"`
-    SSHUser  string       `yaml:"sshUser"`
-    SSHPort  uint16       `yaml:"sshPort"`
-    TeaLogin string       `yaml:"teaLogin"`
+    Kind    ProviderKind `yaml:"kind"`
+    APIHost string       `yaml:"apiHost"`
+    GitHost string       `yaml:"gitHost"`
+    SSHUser string       `yaml:"sshUser"`
+    SSHPort uint16       `yaml:"sshPort"`
 }
 
 type Repository struct {
@@ -491,7 +496,7 @@ git commit -m "feat(config): add strict policy loading"
 
 - [ ] **Step 1: Write failing generation, loading, duplicate, and disclosure tests**
 
-Use fixed 32-byte entropy to assert the `rw1_` prefix and URL-safe encoding. Test missing, empty, malformed, and duplicate environment token values. Test that returned errors contain environment variable names but never raw token values.
+Use fixed 32-byte entropy to assert the `rw1_` prefix and URL-safe encoding. Test missing, empty, malformed, and duplicate environment token values. Cover duplicate values under two env names for the same principal and across different principals; both configurations must fail, while two distinct values for one principal must succeed. Test that returned errors contain environment variable names but never raw token values.
 
 ```go
 func TestLoadDoesNotDiscloseMalformedToken(t *testing.T) {
@@ -518,7 +523,7 @@ Expected: FAIL because auth package does not exist.
 
 - [ ] **Step 3: Implement token generation and constant-time digest matching**
 
-`Generate` reads exactly 32 random bytes and returns `rw1_` plus unpadded base64url. `Load` accepts only that format, computes SHA-256 digests, rejects duplicate token values across principals, and stores only `(digest, principal)` entries. `Authenticate` parses before hashing, compares the candidate against every stored digest with `subtle.ConstantTimeCompare` without early return, and returns a principal only when exactly one entry matches.
+`Generate` reads exactly 32 random bytes and returns `rw1_` plus unpadded base64url. `Load` accepts only that format, computes SHA-256 digests, rejects duplicate values across all configured token environment variables (including duplicates within one principal), and stores only `(digest, principal)` entries. `Authenticate` parses before hashing, compares the candidate against every stored digest with `subtle.ConstantTimeCompare` without early return, and returns a principal only when exactly one entry matches.
 
 Implement the CLI handler:
 
@@ -691,7 +696,7 @@ Define `ResolvedRepository` with the exact fields in Interfaces. Deep-copy repos
 Port the existing syntactic push-policy behavior from:
 
 ```text
-/home/roche/projects/pi/roche-pi/packages/jailed-github-broker/internal/policy/push.go
+roche-pi:packages/jailed-github-broker/internal/policy/push.go
 ```
 
 Adapt it to the new config types and preserve its tests before adding SHA-256 and anti-enumeration cases.
@@ -723,7 +728,7 @@ git commit -m "feat(policy): enforce exact repository grants"
 - Create: `internal/runner/command.go`
 - Create: `internal/runner/call.go`
 - Create: `internal/runner/stream.go`
-- Create: `internal/runner/process_unix.go`
+- Create: `internal/runner/process_linux.go`
 - Create: `internal/runner/tools_test.go`
 - Create: `internal/runner/environment_test.go`
 - Create: `internal/runner/call_test.go`
@@ -741,9 +746,9 @@ git commit -m "feat(policy): enforce exact repository grants"
 Copy and adapt behavior tests from:
 
 ```text
-/home/roche/projects/pi/roche-pi/packages/jailed-github-broker/internal/runner/runner_test.go
-/home/roche/projects/pi/roche-pi/packages/jailed-github-broker/internal/runner/stream_test.go
-/home/roche/projects/pi/roche-pi/packages/jailed-github-broker/internal/runner/stream_lifecycle_test.go
+roche-pi:packages/jailed-github-broker/internal/runner/runner_test.go
+roche-pi:packages/jailed-github-broker/internal/runner/stream_test.go
+roche-pi:packages/jailed-github-broker/internal/runner/stream_lifecycle_test.go
 ```
 
 Add tests proving canonical one-time tool resolution, no per-request `PATH` lookup, private cwd, output bounds, timeout, cancellation, process-group cleanup, and token/internal environment removal while provider auth remains byte-identical.
@@ -764,7 +769,7 @@ Expected: FAIL because runner implementation is absent.
 
 - [ ] **Step 4: Implement bounded calls and streams**
 
-Port the reusable process authority and bounded I/O logic from the current broker runner. Replace GitHub-specific call types with `runner.Command`/`runner.Result`. On Linux and macOS use a private process group, and permit negative-PGID signaling only from the direct parent runner authority. Create one private temporary cwd per call and remove it after reaping.
+Port the reusable process authority and bounded I/O logic from the current broker runner. Replace GitHub-specific call types with `runner.Command`/`runner.Result`. On Linux use a private process group, and permit negative-PGID signaling only from the direct parent runner authority. Create one private temporary cwd per call and remove it after reaping.
 
 `Result` contains `Stdout []byte`, `ExitCode int`, `TimedOut bool`, and safe byte counts. Raw stderr is bounded for internal classification and discarded before returning to callers.
 
@@ -912,6 +917,7 @@ git commit -m "feat(server): add authenticated gRPC lifecycle"
 - Create: `internal/provider/github/adapter.go`
 - Create: `internal/provider/github/adapter_test.go`
 - Create: `internal/provider/github/inert_test.go`
+- Create: `internal/provider/github/fuzz_test.go`
 - Create: `internal/server/github.go`
 - Create: `internal/server/github_test.go`
 
@@ -951,10 +957,10 @@ run_list, run_view                                   → actions:read
 Port relevant tests from:
 
 ```text
-/home/roche/projects/pi/roche-pi/packages/jailed-github-broker/internal/github/
+roche-pi:packages/jailed-github-broker/internal/github
 ```
 
-Preserve boundary, inert-data, pagination, checks/status, output normalization, body-size, and operation tests. Replace custom JSON protocol fixtures with typed Protobuf fixtures and fake-runner expectations.
+Preserve boundary, inert-data, pagination, checks/status, output normalization, body-size, and operation tests. Replace custom JSON protocol fixtures with typed Protobuf fixtures and fake-runner expectations. Add `FuzzValidateGitHubRequest`, seeded with every supported oneof, an empty request, and unknown-field-only serialized bytes; unmarshal at most 1 MiB and call validation without invoking the runner.
 
 Run:
 
@@ -967,7 +973,7 @@ Expected: FAIL because adapter/service implementations are absent.
 
 - [ ] **Step 3: Port validators and normalization into focused modules**
 
-Port pure validation/normalization behavior from current `internal/github` files, changing imports to RepoWolf config/Protobuf types. Keep request validation separate from command generation and output parsing. Reject empty/oversized titles/bodies, invalid states, zero numbers, unsupported combinations, and unknown oneof variants.
+Port pure validation/normalization behavior from `roche-pi:packages/jailed-github-broker/internal/github/`, changing imports to RepoWolf config/Protobuf types. Keep request validation separate from command generation and output parsing. Reject empty/oversized titles/bodies, invalid states, zero numbers, unsupported combinations, and unknown oneof variants.
 
 - [ ] **Step 4: Implement generated `gh` command plans**
 
@@ -977,7 +983,7 @@ No adapter method accepts client argv, environment names, URLs, headers, API pat
 
 - [ ] **Step 5: Implement adapter and gRPC service authorization**
 
-`server.githubService.Execute` determines the capability from the oneof before provider execution, authorizes the authenticated principal and repository ID, confirms the provider kind is GitHub, and delegates to the adapter. Accepted, denied, completed, cancelled, and failed outcomes write audit events.
+`server.githubService.Execute` determines the capability from the oneof before provider execution, authorizes the authenticated principal and exact repository selector, confirms the resolved provider kind is GitHub, and delegates to the adapter. Accepted, denied, completed, cancelled, and failed outcomes write audit events.
 
 - [ ] **Step 6: Verify GitHub behavior and inertness**
 
@@ -1015,6 +1021,7 @@ git commit -m "feat(github): add typed provider operations"
 - Create: `internal/client/github/render.go`
 - Create: `internal/client/github/client.go`
 - Create: `internal/client/github/parse_test.go`
+- Create: `internal/client/github/fuzz_test.go`
 - Create: `internal/client/github/client_test.go`
 - Modify: `cmd/repowolf-client/main.go`
 
@@ -1029,16 +1036,16 @@ git commit -m "feat(github): add typed provider operations"
 Port parser/format behavior from current files:
 
 ```text
-internal/client/flags.go
-internal/client/format.go
-internal/client/gh_issue.go
-internal/client/gh_parse.go
-internal/client/gh_pull.go
-internal/client/gh_run.go
-internal/client/repository.go
+roche-pi:packages/jailed-github-broker/internal/client/flags.go
+roche-pi:packages/jailed-github-broker/internal/client/format.go
+roche-pi:packages/jailed-github-broker/internal/client/gh_issue.go
+roche-pi:packages/jailed-github-broker/internal/client/gh_parse.go
+roche-pi:packages/jailed-github-broker/internal/client/gh_pull.go
+roche-pi:packages/jailed-github-broker/internal/client/gh_run.go
+roche-pi:packages/jailed-github-broker/internal/client/repository.go
 ```
 
-Keep the exact supported command surface from Task 8. Add explicit rejection tests for `gh api`, `repo list`, aliases, extensions, merge, workflow writes, unknown flags, multiple repository selectors, and prompts.
+Keep the exact supported command surface from Task 8. Add explicit rejection tests for `gh api`, `repo list`, aliases, extensions, merge, workflow writes, unknown flags, multiple repository selectors, and prompts. Add `FuzzParseArgs`, seeded with valid and rejected native argv encoded as at most 64 NUL-separated arguments from 64 KiB of input, and call `Parse` with a fixed fixture cwd; malformed input must never panic or escape the typed command allowlist.
 
 - [ ] **Step 2: Implement endpoint/TLS/token configuration**
 
@@ -1070,123 +1077,7 @@ git commit -m "feat(client): add restricted gh compatibility"
 
 ---
 
-### Task 10: Implement Gitea typed operations with installed `tea`
-
-**Files:**
-- Create: `proto/repowolf/v1/gitea.proto`
-- Create: `gen/repowolf/v1/gitea.pb.go`
-- Create: `gen/repowolf/v1/gitea_grpc.pb.go`
-- Create: `internal/provider/gitea/operation.go`
-- Create: `internal/provider/gitea/validate.go`
-- Create: `internal/provider/gitea/command.go`
-- Create: `internal/provider/gitea/normalize.go`
-- Create: `internal/provider/gitea/adapter.go`
-- Create: `internal/provider/gitea/adapter_test.go`
-- Create: `internal/provider/gitea/inert_test.go`
-- Create: `internal/server/gitea.go`
-- Create: `internal/server/gitea_test.go`
-
-**Interfaces:**
-- Produces: gRPC `GiteaService.Execute(GiteaRequest) returns (GiteaResponse)`.
-- Produces: `gitea.Adapter.Execute(context.Context, policy.ResolvedRepository, *repowolfv1.GiteaRequest) (*repowolfv1.GiteaResponse, error)`.
-- Uses installed `tea` with the provider's fixed `TeaLogin`, exact `owner/name`, and JSON output.
-
-- [ ] **Step 1: Define the complete Gitea oneof contract**
-
-Use provider-specific messages for:
-
-```text
-repository_view
-issue_list, issue_view, issue_create, issue_edit, issue_comment, issue_close, issue_reopen
-pull_list, pull_view, pull_create, pull_edit, pull_comment, pull_close, pull_reopen, pull_checks
-run_list, run_view
-```
-
-Do not define merge, approve/reject, checkout, clean, review mutation, action cancel/delete/log mutation, arbitrary API, admin, login, repository list/search/create/edit/delete, or browser operations.
-
-Use this exact capability map:
-
-```text
-repository_view                          → repository:read
-issue_list, issue_view                   → issues:read
-issue_create/edit/comment/close/reopen   → issues:write
-pull_list, pull_view                     → pull_requests:read
-pull_create/edit/comment/close/reopen    → pull_requests:write
-pull_checks                              → statuses:read
-run_list, run_view                       → actions:read
-```
-
-- [ ] **Step 2: Write fake-`tea` tests and verify RED**
-
-Use a fake executable that records NUL-separated argv and emits fixed JSON. Assert exact generated commands for `tea` 0.14.0 semantics, including fixed `--login`, `--repo owner/name`, `--output json`, issue/pull fields, and action run list/view. Assert unsupported provider operations return `Unimplemented` without starting `tea`.
-
-- [ ] **Step 3: Implement validation, commands, and normalization**
-
-Keep Gitea validation independent from GitHub even when fields resemble each other. Every command uses an explicit subcommand and output field allowlist. Comments use the fixed `tea comment` form. Close/reopen use only those exact subcommands. Pull checks are derived from typed `ci` fields in pull output; no arbitrary action endpoint is available.
-
-- [ ] **Step 4: Implement authorization and audit service**
-
-Map operations to shared capabilities, authorize principal/repository, require provider kind `gitea`, and emit the same safe audit lifecycle as GitHub.
-
-- [ ] **Step 5: Verify and commit**
-
-```bash
-scripts/check-generated.sh
-gofmt -w internal/provider/gitea internal/server gen
-go test -race ./internal/provider/gitea ./internal/server
-go test ./...
-git add proto/repowolf/v1/gitea.proto gen/repowolf/v1 internal/provider/gitea internal/server
-git commit -m "feat(gitea): add typed provider operations"
-```
-
----
-
-### Task 11: Build the restricted `tea` compatibility client
-
-**Files:**
-- Create: `internal/client/gitea/flags.go`
-- Create: `internal/client/gitea/parse.go`
-- Create: `internal/client/gitea/issue.go`
-- Create: `internal/client/gitea/pull.go`
-- Create: `internal/client/gitea/action.go`
-- Create: `internal/client/gitea/render.go`
-- Create: `internal/client/gitea/client.go`
-- Create: `internal/client/gitea/parse_test.go`
-- Create: `internal/client/gitea/client_test.go`
-- Modify: `cmd/repowolf-client/main.go`
-
-**Interfaces:**
-- Consumes: shared `clientconfig.Config`/`Dial` and Gitea generated client.
-- Produces: `gitea.Parse(args []string, cwd string) (*repowolfv1.GiteaRequest, error)`.
-- Produces: `gitea.Run(context.Context, []string, io.Writer, io.Writer) int`.
-
-- [ ] **Step 1: Write native-syntax parser tests and verify RED**
-
-Cover `tea repos owner/name`, issue list/view/create/edit/comment/close/reopen, pull list/view/create/edit/comment/close/reopen, and action run list/view. Cover native aliases only where they map unambiguously to an approved operation.
-
-Reject login/logout, API, admin, merge, approve/reject, review mutation, checkout, clean, repo list/search/create/edit/delete, action cancel/delete, workflow/secret/variable changes, debug, prompts, unknown output formats, and arbitrary fields.
-
-- [ ] **Step 2: Implement parser and typed field allowlists**
-
-Require explicit `owner/name` or derive an untrusted `RepositorySelector` from local Git metadata. Never pass a `tea` login/profile from the client. A remote-derived host is only a selector field checked against the authenticated principal's exact grants; it cannot override the configured provider host.
-
-- [ ] **Step 3: Implement rendering and gRPC execution**
-
-Use the shared TLS/token dialer, add bearer credentials only through per-RPC metadata, and render typed Gitea results. Support table/text and a typed JSON field allowlist; no templates or arbitrary jq.
-
-- [ ] **Step 4: Verify and commit**
-
-```bash
-gofmt -w internal/client/gitea cmd/repowolf-client
-go test -race ./internal/client/gitea
-go test ./...
-git add internal/client/gitea cmd/repowolf-client/main.go
-git commit -m "feat(client): add restricted tea compatibility"
-```
-
----
-
-### Task 12: Extract and preserve the hardened Git protocol parser
+### Task 10: Extract and preserve the hardened Git protocol parser
 
 **Files:**
 - Create: `internal/gitproto/advertised.go`
@@ -1210,7 +1101,7 @@ git commit -m "feat(client): add restricted tea compatibility"
 Copy all handwritten Go files and tests from:
 
 ```text
-/home/roche/projects/pi/roche-pi/packages/jailed-github-broker/internal/gitproto/
+roche-pi:packages/jailed-github-broker/internal/gitproto
 ```
 
 Change only module imports and package dependencies required to compile. Preserve certificate, SHA-1/SHA-256, shallow, capability, pkt-line limit, delete, grammar, and v2.50 regression tests.
@@ -1257,26 +1148,30 @@ git commit -m "feat(git): extract hardened protocol parser"
 
 ---
 
-### Task 13: Implement bounded Git upload-pack and receive-pack gRPC services
+### Task 11: Implement bounded Git upload-pack and receive-pack gRPC services
 
 **Files:**
 - Create: `proto/repowolf/v1/git.proto`
 - Create: `gen/repowolf/v1/git.pb.go`
 - Create: `gen/repowolf/v1/git_grpc.pb.go`
 - Create: `internal/gitservice/chunk.go`
+- Create: `internal/gitservice/frame.go`
 - Create: `internal/gitservice/upload.go`
 - Create: `internal/gitservice/receive.go`
 - Create: `internal/gitservice/copy.go`
 - Create: `internal/gitservice/upload_test.go`
 - Create: `internal/gitservice/receive_test.go`
 - Create: `internal/gitservice/limits_test.go`
+- Create: `internal/gitservice/frame_fuzz_test.go`
 - Modify: `internal/server/server.go`
 
 **Interfaces:**
 - Produces: gRPC `GitService.UploadPack(stream GitFrame) returns (stream GitFrame)`.
 - Produces: gRPC `GitService.ReceivePack(stream GitFrame) returns (stream GitFrame)`.
-- First client frame is `GitOpen{repository}` with an exact host/owner/name selector; later frames are data; client sends an explicit half-close.
-- Server frames contain data or a sanitized terminal status. Each data payload is at most 64 KiB.
+- First client frame is `GitOpen{repository}` with an exact host/owner/name selector; later client frames are data; the client sends an explicit half-close.
+- Client-to-server frames may contain only `open` then `data`; a client-sent `terminal` is invalid. Server-to-client frames may contain only `data` then one `terminal`; a server-sent `open` is invalid.
+- Internal `clientFrameState.Accept(*repowolfv1.GitFrame) error` and `clientFrameState.Close() error` enforce client frame order for both Git services and their fuzz target.
+- Each data payload is at most 64 KiB.
 
 - [ ] **Step 1: Define Git stream Protobuf and failing tests**
 
@@ -1312,7 +1207,7 @@ service GitService {
 }
 ```
 
-Test missing/duplicate open, data-before-open, unauthorized repositories, provider mismatch, chunk/message/total/idle limits, cancellation, disconnect, process cleanup, and audit terminal events.
+Test missing/duplicate open, data-before-open, client-sent terminal rejection, unauthorized repositories, provider mismatch, chunk/message/total/idle limits, cancellation, disconnect, process cleanup, and audit terminal events. Add `FuzzClientFrameSequence`, seeded with valid open/data sequences followed by `Close()` plus data-before-open, duplicate-open, and client-terminal sequences; feed at most 64 decoded frames from 1 MiB of input through the same state validator used by both services.
 
 - [ ] **Step 2: Run tests to verify RED**
 
@@ -1335,7 +1230,7 @@ On denial, write zero client update bytes, cancel/reap SSH, send a sanitized ter
 
 - [ ] **Step 5: Port current stream lifecycle regressions**
 
-Adapt reusable tests from current `internal/server/git_test.go`, `input_pump_test.go`, `stream_limit_integration_test.go`, and `write_timeout_test.go` to gRPC streams. Preserve disconnect, blocked child, stderr, timeout, and zero-byte denial regressions.
+Adapt reusable tests from `roche-pi:packages/jailed-github-broker/internal/server/git_test.go`, `roche-pi:packages/jailed-github-broker/internal/server/input_pump_test.go`, `roche-pi:packages/jailed-github-broker/internal/server/stream_limit_integration_test.go`, and `roche-pi:packages/jailed-github-broker/internal/server/write_timeout_test.go` to gRPC streams. Preserve disconnect, blocked child, stderr, timeout, and zero-byte denial regressions.
 
 - [ ] **Step 6: Verify and commit**
 
@@ -1350,11 +1245,12 @@ git commit -m "feat(git): add bounded gRPC transport"
 
 ---
 
-### Task 14: Implement the `repowolf-git-ssh` client shim
+### Task 12: Implement the `repowolf-git-ssh` client shim
 
 **Files:**
 - Create: `internal/client/gitssh/parse.go`
 - Create: `internal/client/gitssh/parse_test.go`
+- Create: `internal/client/gitssh/fuzz_test.go`
 - Create: `internal/client/gitssh/relay.go`
 - Create: `internal/client/gitssh/relay_test.go`
 - Create: `internal/client/gitssh/client.go`
@@ -1364,10 +1260,11 @@ git commit -m "feat(git): add bounded gRPC transport"
 - Produces: `gitssh.Parse(args []string) (gitssh.Request, error)`.
 - `gitssh.Request` contains only `*repowolfv1.RepositorySelector{Host, SshPort, Owner, Name}` and `Operation` (`upload-pack` or `receive-pack`); the credential-free client never imports server policy/config packages.
 - Produces: `gitssh.Run(context.Context, []string, io.Reader, io.Writer, io.Writer) int`.
+- Internal `serverFrameState.Accept(*repowolfv1.GitFrame) (terminal bool, err error)` enforces server frame direction/order for the relay and its fuzz target.
 
 - [ ] **Step 1: Port current SSH parser tests and add network cases**
 
-Port behavior from current `internal/client/ssh.go` and `ssh_test.go`. Accept only the Git-generated SSH forms needed for `git-upload-pack` and `git-receive-pack`. Parse optional `-p` as an untrusted numeric selector (default 22); the service must match it to the configured provider `SSHPort` before execution. Reject arbitrary SSH flags, proxy commands, remote commands other than Git upload/receive-pack, non-`git` users, malformed hosts, shells, environment options, and malformed repository slugs. The parsed host/owner/name remains untrusted until service policy resolution.
+Port behavior from `roche-pi:packages/jailed-github-broker/internal/client/ssh.go` and `roche-pi:packages/jailed-github-broker/internal/client/ssh_test.go`. Add `FuzzParseSSHArgs`, seeded with valid upload/receive forms and rejected flags/users/commands encoded as at most 64 NUL-separated arguments from 64 KiB of input. Accept only the Git-generated SSH forms needed for `git-upload-pack` and `git-receive-pack`. Parse optional `-p` as an untrusted numeric selector (default 22); the service must match it to the configured provider `SSHPort` before execution. Reject arbitrary SSH flags, proxy commands, remote commands other than Git upload/receive-pack, non-`git` users, malformed hosts, shells, environment options, and malformed repository slugs. The parsed host/owner/name remains untrusted until service policy resolution.
 
 - [ ] **Step 2: Run tests to verify RED**
 
@@ -1385,7 +1282,7 @@ The client never prints gRPC details, endpoint internals, repository policy, or 
 
 - [ ] **Step 4: Test against an in-process fake Git service**
 
-Cover successful upload/receive echo, server denial before stdin forwarding, client disconnect, server disconnect, oversized frame, invalid terminal category, and exit-code mapping. Assert no goroutine remains blocked with `goleak`-style deterministic channel/timeouts without adding a new dependency.
+Cover successful upload/receive echo, server denial before stdin forwarding, client disconnect, server disconnect, oversized frame, server-sent open rejection, invalid terminal category, and exit-code mapping. Add `FuzzServerFrameSequence`, seeded with valid data/terminal order plus open, duplicate-terminal, and data-after-terminal sequences, and feed at most 64 decoded frames from 1 MiB of input through the same relay validator used in production. Assert no goroutine remains blocked with `goleak`-style deterministic channel/timeouts without adding a new dependency.
 
 - [ ] **Step 5: Verify and commit**
 
@@ -1399,7 +1296,7 @@ git commit -m "feat(client): add Git SSH transport shim"
 
 ---
 
-### Task 15: Add end-to-end TLS, fake-provider, Git, Gitea, and leak verification
+### Task 13: Add end-to-end TLS, fake-provider, Git, and leak verification
 
 **Files:**
 - Create: `internal/testutil/cert.go`
@@ -1407,7 +1304,6 @@ git commit -m "feat(client): add Git SSH transport shim"
 - Create: `internal/testutil/server.go`
 - Create: `integration/forge_test.go`
 - Create: `integration/git_test.go`
-- Create: `integration/gitea_test.go`
 - Create: `integration/leak_test.go`
 - Create: `integration/testdata/policy.yaml`
 - Create: `integration/testdata/fake-provider.sh`
@@ -1415,17 +1311,15 @@ git commit -m "feat(client): add Git SSH transport shim"
 
 **Interfaces:**
 - Produces reusable test harness that starts a real loopback TLS gRPC service with environment token auth and fake pinned tools.
-- Proves all three client modes work only through the public command binaries and network protocol.
+- Proves both client modes work only through the public command binaries and network protocol.
 
 - [ ] **Step 1: Write a failing black-box forge smoke test**
 
-Build `repowolf` and `repowolf-client` into a temp directory, symlink client modes, start the server with generated TLS, and invoke:
+Build `repowolf` and `repowolf-client` into a temp directory, symlink both client modes (`gh` and `repowolf-git-ssh`), start the server with generated TLS, and invoke:
 
 ```text
 gh issue list --repo alpha/repo
-tea issues list --repo alpha/repo
 gh pr checks 7 --repo alpha/repo
-tea actions runs list --repo alpha/repo
 ```
 
 The fake provider records generated argv and returns typed fixture JSON. Assert successful native output and safe audit metadata.
@@ -1434,34 +1328,23 @@ The fake provider records generated argv and returns typed fixture JSON. Assert 
 
 Use real local Git plus `GIT_SSH_COMMAND=<temp>/repowolf-git-ssh` against the fake SSH executable. Prove upload-pack streams, allowed feature-branch receive-pack streams after prefix validation, and `refs/heads/main` denial sends zero client update bytes to fake SSH.
 
-Never contact GitHub or Gitea in this test.
+Never contact GitHub in this test.
 
-- [ ] **Step 3: Add disposable Gitea integration**
-
-Start a pinned disposable Gitea container, configure a service-side `tea` login and SSH credentials through test Secrets, create one test repository through setup code outside RepoWolf, and execute the supported `tea` read/write surface through `repowolf-client`. Exclude merge/admin/API operations and tear down the container/repository.
-
-Gate with an explicit integration build tag and run it in Linux CI where container support is present:
-
-```bash
-go test -tags=integration ./integration -run TestGitea
-```
-
-- [ ] **Step 4: Add leak and anti-enumeration scans**
+- [ ] **Step 3: Add leak and anti-enumeration scans**
 
 Seed unique marker strings for token, provider credential, issue body, comment, pack payload, provider stderr, argv, and environment. Collect client stdout/stderr and audit JSONL. Assert each marker appears only in its intended fake provider input/output path and never in forbidden channels.
 
 Compare unknown and unauthorized repository gRPC status/code/message byte-for-byte.
 
-- [ ] **Step 5: Implement fixtures until tests pass**
+- [ ] **Step 4: Implement fixtures until tests pass**
 
-Use only generated test certificates, fake binaries, local Git, and disposable Gitea. Tests must not depend on host `gh`/`tea` authentication or external network access except pulling the pinned Gitea image in the tagged job.
+Use only generated test certificates, fake binaries, and local Git. Tests must not depend on host `gh` authentication or external network access.
 
-- [ ] **Step 6: Verify and commit**
+- [ ] **Step 5: Verify and commit**
 
 ```bash
 gofmt -w internal/testutil integration
 go test -race ./...
-go test -tags=integration ./integration -run TestGitea
 go vet ./...
 git add internal/testutil integration
 git commit -m "test: add RepoWolf end-to-end security coverage"
@@ -1469,7 +1352,7 @@ git commit -m "test: add RepoWolf end-to-end security coverage"
 
 ---
 
-### Task 16: Package split binaries for Nix, OCI, and releases
+### Task 14: Package split binaries for Nix, OCI, and releases
 
 **Files:**
 - Create: `flake.nix`
@@ -1478,15 +1361,17 @@ git commit -m "test: add RepoWolf end-to-end security coverage"
 - Create: `nix/checks.nix`
 - Create: `nix/oci.nix`
 - Create: `.goreleaser.yaml`
+- Create: `scripts/check-release.sh`
 - Create: `.github/workflows/ci.yml`
 - Create: `.github/workflows/release.yml`
 - Modify: `README.md`
 
 **Interfaces:**
 - Produces: `.#repowolf` service/admin package.
-- Produces: `.#repowolf-client` with `gh`, `tea`, and `repowolf-git-ssh` links and no host provider tools in its closure.
-- Produces: OCI service image containing `repowolf`, `gh`, `tea`, OpenSSH, and CA roots.
-- Produces: Linux/macOS amd64/arm64 release archives and checksums.
+- Produces: `.#repowolf-client` with `gh` and `repowolf-git-ssh` links and no host provider tools in its closure.
+- Produces: OCI service image containing `repowolf`, `gh`, OpenSSH, and CA roots.
+- Produces: Linux amd64/arm64 release archives and checksums.
+- Produces: `scripts/check-release.sh`, which builds and inspects both archives and executes both binaries for the host's native release architecture.
 
 - [ ] **Step 1: Add split Nix packages**
 
@@ -1500,22 +1385,51 @@ subPackages = [ "cmd/repowolf" ];
 subPackages = [ "cmd/repowolf-client" ];
 postInstall = ''
   ln -s repowolf-client $out/bin/gh
-  ln -s repowolf-client $out/bin/tea
   ln -s repowolf-client $out/bin/repowolf-git-ssh
 '';
 ```
 
 Use the Nix fake-hash cycle once, replace `lib.fakeHash` with the reported `vendorHash`, and stage all referenced Nix files before normal flake checks.
 
-Add a closure check that allows the client output's own `bin/gh` and `bin/tea` symlink names but fails if the closure includes the `pkgs.gh` or `pkgs.tea` provider packages, OpenSSH, service TLS keys, service config, or the server output.
+Add a closure check that allows the client output's own `bin/gh` symlink name but fails if the closure includes the `pkgs.gh` provider package, OpenSSH, service TLS keys, service config, or the server output.
 
 - [ ] **Step 2: Add the OCI image**
 
-Use `pkgs.dockerTools.buildLayeredImage` in `nix/oci.nix` with `name = "repowolf"`, `tag = "mvp"`, the RepoWolf service package, `pkgs.gh`, `pkgs.tea`, `pkgs.openssh`, `pkgs.cacert`, and minimal NSS files. Set `User = "65532:65532"`, `Entrypoint = [ "${repowolf}/bin/repowolf" ]`, `Cmd = [ "serve" ]`, `ExposedPorts."8443/tcp" = {}`, and `WorkingDir = "/tmp"`. Do not bake policy, tokens, provider credentials, or TLS keys into image layers. Export the OCI archive as flake package `ociImage`; consuming the published image does not require Nix.
+Use `pkgs.dockerTools.buildLayeredImage` in `nix/oci.nix` with `name = "repowolf"`, `tag = "mvp"`, the RepoWolf service package, `pkgs.gh`, `pkgs.openssh`, `pkgs.cacert`, and minimal NSS files. Set `User = "65532:65532"`, `Entrypoint = [ "${repowolf}/bin/repowolf" ]`, `Cmd = [ "serve" ]`, `ExposedPorts."8443/tcp" = {}`, and `WorkingDir = "/tmp"`. Do not bake policy, tokens, provider credentials, or TLS keys into image layers. Export the OCI archive as flake package `ociImage`; consuming the published image does not require Nix.
 
 - [ ] **Step 3: Add GoReleaser and CI**
 
-Build `repowolf` and `repowolf-client` for Linux/macOS amd64/arm64 with version ldflags. CI runs:
+Configure GoReleaser build IDs `repowolf` and `repowolf-client` for `linux` × `amd64,arm64`, with version ldflags and one `tar.gz` archive per target containing both binaries. Pin archive names with `name_template: "repowolf_{{ .Os }}_{{ .Arch }}"`, and expose `pkgs.goreleaser` through the flake dev shell.
+
+Create `scripts/check-release.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd -P)"
+cd "$root"
+rm -rf dist
+nix develop -c goreleaser release --snapshot --clean
+for arch in amd64 arm64; do
+  archive="dist/repowolf_linux_${arch}.tar.gz"
+  test -s "$archive"
+  tar -tzf "$archive" | grep -E '(^|/)repowolf$' >/dev/null
+  tar -tzf "$archive" | grep -E '(^|/)repowolf-client$' >/dev/null
+done
+native="$(go env GOARCH)"
+case "$native" in amd64|arm64) ;; *) echo "unsupported smoke architecture: $native" >&2; exit 1 ;; esac
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+tar -xzf "dist/repowolf_linux_${native}.tar.gz" -C "$tmp"
+"$tmp/repowolf" --version
+set +e
+"$tmp/repowolf-client" >/dev/null 2>&1
+status=$?
+set -e
+test "$status" -eq 2
+```
+
+Run `chmod +x scripts/check-release.sh`. CI runs the standard suite below, then a native release-smoke matrix with `ubuntu-24.04`/`amd64` and `ubuntu-24.04-arm`/`arm64`; each matrix job asserts `go env GOARCH` equals its expected architecture and runs `scripts/check-release.sh`.
 
 ```bash
 go tool buf lint
@@ -1526,7 +1440,7 @@ go test -race ./...
 nix flake check --accept-flake-config --print-build-logs
 ```
 
-Linux CI additionally runs tagged Gitea and Bubblewrap tests plus the OCI smoke. macOS CI runs unit/integration tests that do not require containers. Release workflow runs only on version tags, emits binary archive checksums, builds `.#ociImage`, and publishes it with `skopeo copy docker-archive:"$image" docker://ghcr.io/rochecompaan/repowolf:"$tag"` using the workflow's package token.
+Linux CI additionally runs the OCI smoke; Task 15 adds the Bubblewrap check after its harness exists. The release workflow runs only on version tags after both native smoke jobs pass, emits Linux binary archive checksums, builds `.#ociImage`, and publishes it with `skopeo copy docker-archive:"$image" docker://ghcr.io/rochecompaan/repowolf:"$tag"` using the workflow's package token.
 
 No tests assert workflow YAML, lockfile contents, dependency versions, or static Nix values; those receive direct syntax/build verification.
 
@@ -1542,6 +1456,7 @@ go tool buf lint
 go test -race ./...
 go vet ./...
 nix flake check --accept-flake-config --print-build-logs
+scripts/check-release.sh
 image="$(nix build .#ociImage --no-link --print-out-paths)"
 docker load -i "$image"
 docker run --rm repowolf:mvp --version
@@ -1550,13 +1465,13 @@ docker run --rm repowolf:mvp --version
 Expected: both Nix packages build, the client closure leak check passes, and the OCI image contains no configured secrets.
 
 ```bash
-git add flake.nix nix .goreleaser.yaml .github README.md go.mod go.sum
+git add flake.nix nix .goreleaser.yaml scripts/check-release.sh .github README.md go.mod go.sum
 git commit -m "build: package RepoWolf service and clients"
 ```
 
 ---
 
-### Task 17: Prove Bubblewrap compatibility and prepare the separate migration handoff
+### Task 15: Prove Bubblewrap compatibility and prepare the separate migration handoff
 
 **Files:**
 - Create: `integration/bubblewrap_test.go`
@@ -1581,7 +1496,7 @@ REPOWOLF_CA_FILE
 GIT_SSH_COMMAND
 ```
 
-Run restricted `gh`, restricted `tea`, `git fetch`, and an offline denied-main push. Assert real host `gh`, `tea`, `ssh`, provider config, SSH keys, `SSH_AUTH_SOCK`, server binary, and service token environment names are unavailable inside.
+Run restricted `gh`, `git fetch`, and an offline denied-main push. Assert real host `gh`, `ssh`, provider config, SSH keys, `SSH_AUTH_SOCK`, server binary, and service token environment names are unavailable inside.
 
 - [ ] **Step 2: Run the test to verify RED**
 
@@ -1600,14 +1515,13 @@ Add the client package and its runtime closure only. Keep service/provider packa
 `docs/migration/roche-pi.md` must name the later source files to change:
 
 ```text
-/home/roche/projects/pi/roche-pi/nix/lib/mk-jailed-pi.nix
-/home/roche/projects/pi/roche-pi/nix/lib/jailed-github-broker-lifecycle.nix
-/home/roche/projects/pi/roche-pi/nix/packages/jailed-github-broker.nix
-/home/roche/projects/pi/roche-pi/modules/checks/jailed-github-broker-real-jail.nix
-/home/roche/projects/clubhouse/clubhouse_infra/devenv.nix
+roche-pi:nix/lib/mk-jailed-pi.nix
+roche-pi:nix/lib/jailed-github-broker-lifecycle.nix
+roche-pi:nix/packages/jailed-github-broker.nix
+roche-pi:modules/checks/jailed-github-broker-real-jail.nix
 ```
 
-Document: deploy Home Manager service; generate/mount CA and role token; add RepoWolf client closure/env; run parity and leak suites; smoke authenticated read/fetch and approved non-main writes; keep current broker rollback; remove embedded broker only in a separate later change.
+Repeat the `roche-pi` URL and baseline commit from External Source Anchors. Record the clubhouse local `devenv.nix` as an untracked operator input whose location and content must be supplied explicitly to the later migration plan; do not claim it is recoverable from the `clubhouse-infra` Git history. Then document: deploy Home Manager service; generate/mount CA and role token; add RepoWolf client closure/env; run parity and leak suites; smoke authenticated read/fetch and approved non-main writes; keep current broker rollback; remove embedded broker only in a separate later change.
 
 - [ ] **Step 5: Record final evidence**
 
@@ -1621,10 +1535,13 @@ go vet ./...
 go test -race ./...
 go test -tags=integration ./integration
 nix flake check --accept-flake-config --print-build-logs
-nix build .#ociImage --no-link
+scripts/check-release.sh
+image="$(nix build .#ociImage --no-link --print-out-paths)"
+docker load -i "$image"
+docker run --rm repowolf:mvp --version
 ```
 
-Request a fresh adversarial review against `docs/specs/2026-08-01-repowolf-mvp-design.md`. Fix findings with focused tests and rerun the affected plus full suites before recording readiness.
+Record archive names/checksums and the successful native amd64 and arm64 release-smoke CI job URLs. Request a fresh adversarial review against `docs/specs/2026-08-01-repowolf-mvp-design.md`. Fix findings with focused tests and rerun the affected plus full suites before recording readiness.
 
 - [ ] **Step 6: Commit**
 
@@ -1646,6 +1563,6 @@ Before presenting branch-completion options:
 - [ ] Exact-main denial is proven offline with zero client update bytes forwarded.
 - [ ] Client closure/image inspection proves no server tools, credentials, service configuration, or usable host paths are present.
 - [ ] Audit/error leak scans pass with unique marker values.
-- [ ] Linux and macOS release targets build.
+- [ ] Linux amd64/arm64 archives contain both binaries, and native CI jobs execute both binaries for each architecture.
 - [ ] The current embedded broker remains untouched and available for rollback.
 - [ ] Offer squash merge into `main` locally as the default integration option; do not offer a regular merge unless explicitly requested.
