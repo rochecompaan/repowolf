@@ -574,7 +574,7 @@ git commit -m "feat(auth): add environment token authentication"
 
 - [ ] **Step 1: Write failing TLS and certificate tests**
 
-Cover TLS 1.3 minimum, wrong key rejection, CA verification, DNS/IP SAN verification, restrictive private-key modes, atomic no-overwrite behavior, random serial numbers, CA `IsCA`, and server `ExtKeyUsageServerAuth`.
+Cover TLS 1.3 minimum, wrong key rejection, CA verification, DNS/IP SAN verification, restrictive private-key modes, atomic no-overwrite behavior, random serial numbers, CA `IsCA`, and server `ExtKeyUsageServerAuth`. Snapshot every generated file before the second `Init` call and assert all bytes remain unchanged; also pre-create each final path in turn with sentinel bytes and assert `fs.ErrExist`, sentinel preservation, and cleanup of only files created by that invocation.
 
 ```go
 func TestInitRefusesOverwrite(t *testing.T) {
@@ -596,7 +596,7 @@ Expected: FAIL because TLS package does not exist.
 
 - [ ] **Step 3: Implement PEM loading and certificate generation**
 
-Use Ed25519 keys, random 128-bit serial numbers, a 5-year CA certificate, and a 397-day server certificate. Write private keys with mode `0600` and certificates with `0644` through create-exclusive temporary files followed by atomic rename. Remove partial files on failure.
+Use Ed25519 keys, random 128-bit serial numbers, a 5-year CA certificate, and a 397-day server certificate. Stage each complete file in the destination directory with `os.OpenFile(..., O_WRONLY|O_CREATE|O_EXCL, mode)`, write and `Sync` it, then close it. Publish with `os.Link(tempPath, finalPath)`: on Linux this atomically creates the final name without replacing an existing destination, and an existing path returns an error matching `fs.ErrExist`. After a successful link, remove the temporary name and sync the directory. Track final names published by this invocation; on any error remove only those names whose current `Lstat` still matches the staged inode via `os.SameFile`, plus remaining temporary files, never pre-existing or concurrently replaced material. Return the publication error and join any cleanup error rather than suppressing either. Do not use `os.Rename`, because it replaces existing destinations on Linux.
 
 `LoadServer` uses `tls.LoadX509KeyPair` and returns:
 
@@ -653,7 +653,7 @@ git commit -m "feat(tls): add server certificate bootstrap"
 - Consumes: validated `config.Config`.
 - Produces: `policy.New(config.Config) (*policy.Snapshot, error)`.
 - Produces: `(*policy.Snapshot).Resolve(principal string, selector policy.Selector, capability config.Capability) (policy.ResolvedRepository, error)`.
-- `policy.Selector` contains optional `Kind config.ProviderKind` plus exact `Host`, `SSHPort`, `Owner`, and `Name`; every nonzero/nonempty selector field must match configured policy.
+- `policy.Selector` contains optional `Kind config.ProviderKind` plus exact `Host`, `SSHPort`, `Owner`, and `Name`; every nonzero/nonempty selector field must match configured policy. A zero `SSHPort` means the client supplied no port selector, so the resolved provider's configured port remains authoritative.
 - `policy.ResolvedRepository` contains `ID string`, `Repository config.Repository`, and its referenced `Provider config.Provider` so downstream adapters never perform a second untrusted lookup.
 - Produces: `policy.ValidatePush(config.PushPolicy, []policy.Update) error`.
 - `policy.Update` contains `OldOID`, `NewOID`, and `Ref` strings.
@@ -661,7 +661,7 @@ git commit -m "feat(tls): add server certificate bootstrap"
 
 - [ ] **Step 1: Write failing authorization matrix tests**
 
-Cover exact grants, multi-repository principals, missing capabilities, unknown principal, unknown/unauthorized repository anti-enumeration, `git:write` policy, deletes, max update count, malformed refs, SHA-1/SHA-256 zero OIDs, and default main denial.
+Cover exact grants, multi-repository principals, missing capabilities, unknown principal, unknown/unauthorized repository anti-enumeration, `git:write` policy, deletes, max update count, malformed refs, SHA-1/SHA-256 zero OIDs, and default main denial. For a repository configured with a non-default SSH port, prove selector port `0` resolves, the exact explicit port resolves, and a different explicit port returns the same generic denial.
 
 ```go
 func TestUnauthorizedAndUnknownRepositoryAreIndistinguishable(t *testing.T) {
@@ -1258,13 +1258,13 @@ git commit -m "feat(git): add bounded gRPC transport"
 
 **Interfaces:**
 - Produces: `gitssh.Parse(args []string) (gitssh.Request, error)`.
-- `gitssh.Request` contains only `*repowolfv1.RepositorySelector{Host, SshPort, Owner, Name}` and `Operation` (`upload-pack` or `receive-pack`); the credential-free client never imports server policy/config packages.
+- `gitssh.Request` contains only `*repowolfv1.RepositorySelector{Host, SshPort, Owner, Name}` and `Operation` (`upload-pack` or `receive-pack`). `SshPort` is `0` when `-p` is absent and the validated explicit value when present; the credential-free client never imports server policy/config packages.
 - Produces: `gitssh.Run(context.Context, []string, io.Reader, io.Writer, io.Writer) int`.
 - Internal `serverFrameState.Accept(*repowolfv1.GitFrame) (terminal bool, err error)` enforces server frame direction/order for the relay and its fuzz target.
 
 - [ ] **Step 1: Port current SSH parser tests and add network cases**
 
-Port behavior from `roche-pi:packages/jailed-github-broker/internal/client/ssh.go` and `roche-pi:packages/jailed-github-broker/internal/client/ssh_test.go`. Add `FuzzParseSSHArgs`, seeded with valid upload/receive forms and rejected flags/users/commands encoded as at most 64 NUL-separated arguments from 64 KiB of input. Accept only the Git-generated SSH forms needed for `git-upload-pack` and `git-receive-pack`. Parse optional `-p` as an untrusted numeric selector (default 22); the service must match it to the configured provider `SSHPort` before execution. Reject arbitrary SSH flags, proxy commands, remote commands other than Git upload/receive-pack, non-`git` users, malformed hosts, shells, environment options, and malformed repository slugs. The parsed host/owner/name remains untrusted until service policy resolution.
+Port behavior from `roche-pi:packages/jailed-github-broker/internal/client/ssh.go` and `roche-pi:packages/jailed-github-broker/internal/client/ssh_test.go`. Add `FuzzParseSSHArgs`, seeded with valid upload/receive forms with absent and explicit ports plus rejected zero/out-of-range ports, flags, users, and commands encoded as at most 64 NUL-separated arguments from 64 KiB of input. Accept only the Git-generated SSH forms needed for `git-upload-pack` and `git-receive-pack`. When `-p` is absent, leave `RepositorySelector.ssh_port` unset (`0`); when present, require an integer in `1..65535` and send it only as an untrusted selector. Policy matches a nonzero selector against the configured provider `SSHPort`, while service-side SSH execution always uses the configured port. Reject arbitrary SSH flags, proxy commands, remote commands other than Git upload/receive-pack, non-`git` users, malformed hosts, shells, environment options, and malformed repository slugs. The parsed host/owner/name remains untrusted until service policy resolution.
 
 - [ ] **Step 2: Run tests to verify RED**
 
