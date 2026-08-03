@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"time"
 
+	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/audit"
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/policy"
@@ -24,6 +25,7 @@ type Options struct {
 	GracePeriod                       time.Duration
 	Policy                            *policy.Snapshot
 	GitHub                            GitHubExecutor
+	Git                               repowolfv1.GitServiceServer
 	Register                          func(grpc.ServiceRegistrar)
 	Cleanup                           func() error
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/audit"
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/config"
+	"github.com/rochecompaan/repowolf/internal/gitservice"
 	"github.com/rochecompaan/repowolf/internal/policy"
 	providergithub "github.com/rochecompaan/repowolf/internal/provider/github"
 	"github.com/rochecompaan/repowolf/internal/runner"
@@ -30,6 +31,7 @@ type Runtime struct {
 	Policy              *policy.Snapshot
 	ProviderEnvironment []string
 	GitHub              *providergithub.Adapter
+	Git                 *gitservice.Service
 	Server              *server.Server
 }
 
@@ -64,19 +66,26 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 		return nil, fmt.Errorf("create GitHub adapter: %w", err)
 	}
 	auditWriter := audit.NewWriter(auditOutput)
+	git, err := gitservice.New(gitservice.Options{
+		Policy: policySnapshot, SSHPath: tools.SSH, Environment: providerEnvironment,
+		Limits: cfg.Limits, Runner: &runner.Runner{}, Audit: auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create Git service: %w", err)
+	}
 	grpcServer, err := server.New(server.Options{
 		TLSConfig: tlsConfig, Tokens: tokens, AuditWriter: auditWriter,
 		MaxConcurrentRequests:             cfg.Limits.MaxConcurrentRequests,
 		MaxConcurrentRequestsPerPrincipal: cfg.Limits.MaxConcurrentRequestsPerPrincipal,
 		OperationTimeout:                  cfg.Limits.OperationTimeout, GracePeriod: shutdownGracePeriod,
-		Policy: policySnapshot, GitHub: githubAdapter,
+		Policy: policySnapshot, GitHub: githubAdapter, Git: git,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create server: %w", err)
 	}
 	runtime := &Runtime{
 		Config: cfg, Tokens: tokens, TLSConfig: tlsConfig, Tools: tools,
-		Policy: policySnapshot, ProviderEnvironment: providerEnvironment, GitHub: githubAdapter, Server: grpcServer,
+		Policy: policySnapshot, ProviderEnvironment: providerEnvironment, GitHub: githubAdapter, Git: git, Server: grpcServer,
 	}
 	runtime.Server.MarkReady()
 	return runtime, nil

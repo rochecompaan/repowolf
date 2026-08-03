@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/audit"
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/config"
@@ -46,6 +47,17 @@ func TestNewRequiresTLSAndValidLimits(t *testing.T) {
 	if err == nil {
 		t.Fatal("New() accepted TLS below 1.3")
 	}
+}
+
+func TestNewRegistersInjectedGitService(t *testing.T) {
+	service := testServer(t, Options{Git: testGitService{}})
+	if _, ok := service.grpc.GetServiceInfo()["repowolf.v1.GitService"]; !ok {
+		t.Fatal("GitService was not registered")
+	}
+}
+
+type testGitService struct {
+	repowolfv1.UnimplementedGitServiceServer
 }
 
 func TestHealthReadinessTransitions(t *testing.T) {
