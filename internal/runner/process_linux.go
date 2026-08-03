@@ -49,6 +49,12 @@ func (authority *processAuthority) terminate(reason error) bool {
 	authority.mu.Lock()
 	defer authority.mu.Unlock()
 	if authority.retired || authority.terminated {
+		// Output can be drained after the leader has already exited. Preserve
+		// that independently observed bound violation without replacing a
+		// context or input reason that won while the process was live.
+		if authority.reason == nil && errors.Is(reason, ErrOutputLimit) {
+			authority.reason = ErrOutputLimit
+		}
 		return false
 	}
 	authority.terminated = true

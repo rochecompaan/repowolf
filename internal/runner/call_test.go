@@ -16,6 +16,28 @@ import (
 	"time"
 )
 
+type expiringTestContext struct {
+	context.Context
+	done chan struct{}
+}
+
+func newExpiringTestContext() *expiringTestContext {
+	return &expiringTestContext{Context: context.Background(), done: make(chan struct{})}
+}
+
+func (ctx *expiringTestContext) Done() <-chan struct{} { return ctx.done }
+
+func (ctx *expiringTestContext) Err() error {
+	select {
+	case <-ctx.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func (ctx *expiringTestContext) expire() { close(ctx.done) }
+
 func TestCallUsesPinnedPathLiteralArgumentsExactEnvironmentAndPrivateCWD(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "must-not-exist")
 	argument := "; touch " + marker
@@ -125,6 +147,20 @@ func TestCallBoundsStdoutAndStderr(t *testing.T) {
 	}
 }
 
+func TestCallPreservesFastSuccessfulOutputOverflow(t *testing.T) {
+	for _, mode := range []string{"fast-stdout-overflow", "fast-stderr-overflow"} {
+		t.Run(mode, func(t *testing.T) {
+			command := testCommand(mode)
+			command.StdoutLimit = 16
+			command.StderrLimit = 16
+			result, err := (&Runner{}).Call(context.Background(), command)
+			if !errors.Is(err, ErrOutputLimit) {
+				t.Fatalf("result=%#v error=%v, want output limit", result, err)
+			}
+		})
+	}
+}
+
 func TestCallReturnsSafeFailureContextWithoutStderr(t *testing.T) {
 	const secret = "provider-stderr-secret"
 	command := testCommand("failure", secret)
@@ -210,7 +246,7 @@ func TestCallCompletionCleansDescendants(t *testing.T) {
 }
 
 func TestCallReapsAdoptedGroupDescendantsBeforeReturn(t *testing.T) {
-	for _, scenario := range []string{"natural", "cancellation", "timeout", "stdout-overflow", "stderr-overflow", "concurrent"} {
+	for _, scenario := range []string{"natural", "natural-failure", "cancellation", "timeout", "input-overflow", "stdout-overflow", "stderr-overflow", "concurrent"} {
 		t.Run(scenario, func(t *testing.T) {
 			command := exec.Command(os.Args[0], "-test.run=^TestSubreaperLifecycleHelper$", "--", scenario)
 			command.Env = append(os.Environ(), "GO_WANT_SUBREAPER_HELPER=1")
@@ -246,6 +282,8 @@ func runSubreaperCall(t *testing.T, scenario string) {
 	cancel := func() {}
 
 	switch scenario {
+	case "natural-failure":
+		mode = "spawn-failure"
 	case "cancellation":
 		mode = "spawn"
 		ctx, cancel = context.WithCancel(context.Background())
@@ -258,6 +296,9 @@ func runSubreaperCall(t *testing.T, scenario string) {
 	case "stderr-overflow":
 		mode = "spawn-stderr-overflow"
 		command.StderrLimit = 16
+	case "input-overflow":
+		runSubreaperInputOverflow(t, pidFile)
+		return
 	}
 	command.Args[2] = mode
 	defer cancel()
@@ -277,6 +318,10 @@ func runSubreaperCall(t *testing.T, scenario string) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	case "natural-failure":
+		if !errors.Is(err, ErrCommandFailed) {
+			t.Fatalf("error = %v, want command failure", err)
+		}
 	case "cancellation":
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("error = %v, want cancellation", err)
@@ -289,6 +334,24 @@ func runSubreaperCall(t *testing.T, scenario string) {
 		if !errors.Is(err, ErrOutputLimit) {
 			t.Fatalf("error = %v, want output limit", err)
 		}
+	}
+	assertProcessGone(t, readPID(t, pidFile))
+}
+
+func runSubreaperInputOverflow(t *testing.T, pidFile string) {
+	t.Helper()
+	command := testCommand("spawn-no-read", pidFile)
+	command.StdinLimit = 1
+	process, err := (&Runner{}).Start(context.Background(), command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, pidFile)
+	if _, err := process.Stdin.Write([]byte("too much")); !errors.Is(err, ErrInputLimit) {
+		t.Fatalf("write error = %v, want input limit", err)
+	}
+	if _, err := process.Wait(); !errors.Is(err, ErrInputLimit) {
+		t.Fatalf("wait error = %v, want input limit", err)
 	}
 	assertProcessGone(t, readPID(t, pidFile))
 }
@@ -386,6 +449,53 @@ func TestProcessAuthorityPublishesReasonBeforeTerminationSignal(t *testing.T) {
 	}
 }
 
+func TestProcessAuthorityPreservesOutputLimitAfterExitObservation(t *testing.T) {
+	for _, retired := range []bool{false, true} {
+		t.Run(fmt.Sprintf("retired=%t", retired), func(t *testing.T) {
+			authority := processAuthority{
+				pgid:      42,
+				kill:      func(int, syscall.Signal) error { return nil },
+				reap:      func() error { return nil },
+				reapGroup: func(int) error { return nil },
+			}
+			if !authority.terminate(nil) {
+				t.Fatal("exit observation did not win termination")
+			}
+			authority.retired = retired
+			if authority.terminate(ErrOutputLimit) {
+				t.Fatal("output observer unexpectedly won termination")
+			}
+			if !errors.Is(authority.terminationReason(), ErrOutputLimit) {
+				t.Fatalf("termination reason = %v, want output limit", authority.terminationReason())
+			}
+		})
+	}
+}
+
+func TestWaitErrorJoinsCleanupFailureWithPrimaryReason(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		primary    error
+		groupErr   error
+		cleanupErr error
+	}{
+		{name: "context and group reap", primary: context.Canceled, groupErr: errors.New("unsafe group detail")},
+		{name: "input and cwd cleanup", primary: ErrInputLimit, cleanupErr: errors.New("unsafe cwd detail")},
+		{name: "output and group reap", primary: ErrOutputLimit, groupErr: errors.New("unsafe group detail")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			process := &Process{authority: &processAuthority{reason: test.primary}}
+			err := process.classifyWaitError(nil, nil, test.groupErr, nil, test.cleanupErr)
+			if !errors.Is(err, test.primary) || !errors.Is(err, ErrCleanupFailed) {
+				t.Fatalf("error = %v, want primary %v and cleanup failure", err, test.primary)
+			}
+			if strings.Contains(err.Error(), "unsafe") {
+				t.Fatalf("cleanup detail leaked: %v", err)
+			}
+		})
+	}
+}
+
 func testCommand(mode string, arguments ...string) Command {
 	args := append([]string{"-test.run=TestRunnerHelperProcess", "--", mode}, arguments...)
 	return Command{
@@ -424,6 +534,8 @@ func TestRunnerHelperProcess(t *testing.T) {
 		_, _ = os.Stdout.Write(encoded)
 	case "stdin", "stream-echo":
 		_, _ = io.Copy(os.Stdout, os.Stdin)
+	case "mark-launch":
+		_ = os.WriteFile(arguments[0], []byte("launched"), 0o600)
 	case "failure":
 		_, _ = os.Stdout.WriteString("partial-output")
 		_, _ = os.Stderr.WriteString(arguments[0])
@@ -434,6 +546,10 @@ func TestRunnerHelperProcess(t *testing.T) {
 	case "stderr-overflow":
 		_, _ = os.Stderr.WriteString(strings.Repeat("x", 4096))
 		time.Sleep(time.Second)
+	case "fast-stdout-overflow":
+		_, _ = os.Stdout.WriteString(strings.Repeat("x", 4096))
+	case "fast-stderr-overflow":
+		_, _ = os.Stderr.WriteString(strings.Repeat("x", 4096))
 	case "spawn", "spawn-success", "spawn-failure", "spawn-stdout-overflow", "spawn-stderr-overflow", "spawn-no-read":
 		child := exec.Command(os.Args[0], "-test.run=TestRunnerHelperProcess", "--", "sleep")
 		child.Env = []string{"GO_WANT_RUNNER_HELPER=1"}
