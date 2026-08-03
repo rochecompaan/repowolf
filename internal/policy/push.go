@@ -63,11 +63,11 @@ func validRef(ref string) bool {
 			return false
 		}
 	}
-	if !strings.HasPrefix(ref, "refs/") || len(ref) == len("refs/") || strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") || strings.HasSuffix(ref, ".lock") || strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "//") || strings.ContainsAny(ref, " ~^:?*[\\") {
+	if !strings.HasPrefix(ref, "refs/") || len(ref) == len("refs/") || strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") || strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "//") || strings.ContainsAny(ref, " ~^:?*[\\") {
 		return false
 	}
 	for _, component := range strings.Split(ref, "/") {
-		if component == "" || strings.HasPrefix(component, ".") {
+		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
 			return false
 		}
 	}
