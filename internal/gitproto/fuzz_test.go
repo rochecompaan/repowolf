@@ -3,6 +3,8 @@ package gitproto
 import (
 	"bytes"
 	"testing"
+
+	"github.com/rochecompaan/repowolf/internal/config"
 )
 
 const fuzzInputLimit = 1 << 20
@@ -18,6 +20,7 @@ func FuzzParseReceivePack(f *testing.F) {
 		_, _ = ParseReceivePack(bytes.NewReader(raw), ReceiveOptions{
 			MaxBytes:    fuzzInputLimit,
 			MaxCommands: 16,
+			Policy:      config.PushPolicy{MaxRefUpdates: 16},
 			AdvertisedCaps: Capabilities{
 				"delete-refs":   "",
 				"object-format": "sha256",

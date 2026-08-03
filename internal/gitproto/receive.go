@@ -43,7 +43,7 @@ func ParseReceivePack(input io.Reader, options ReceiveOptions) (ReceiveResult, e
 	if err := parser.parse(); err != nil {
 		return ReceiveResult{}, err
 	}
-	if err := validatePushPolicy(options.Policy, parser.updates); err != nil {
+	if err := policy.ValidatePush(options.Policy, parser.updates); err != nil {
 		return ReceiveResult{}, err
 	}
 	return ReceiveResult{
