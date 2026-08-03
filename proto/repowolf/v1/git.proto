@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package repowolf.v1;
+
+option go_package = "github.com/rochecompaan/repowolf/gen/repowolf/v1;repowolfv1";
+
+import "repowolf/v1/common.proto";
+
+message GitOpen {
+  RepositorySelector repository = 1;
+}
+
+message GitData {
+  bytes data = 1;
+}
+
+enum GitTerminalCategory {
+  GIT_TERMINAL_CATEGORY_UNSPECIFIED = 0;
+  GIT_TERMINAL_CATEGORY_COMPLETED = 1;
+  GIT_TERMINAL_CATEGORY_PERMISSION_DENIED = 2;
+  GIT_TERMINAL_CATEGORY_INVALID_REQUEST = 3;
+  GIT_TERMINAL_CATEGORY_PROVIDER_FAILURE = 4;
+  GIT_TERMINAL_CATEGORY_DEADLINE_EXCEEDED = 5;
+  GIT_TERMINAL_CATEGORY_LIMIT_EXCEEDED = 6;
+  GIT_TERMINAL_CATEGORY_UNAVAILABLE = 7;
+}
+
+message GitTerminal {
+  int32 exit_code = 1;
+  GitTerminalCategory category = 2;
+}
+
+message GitFrame {
+  oneof payload {
+    GitOpen open = 1;
+    GitData data = 2;
+    GitTerminal terminal = 3;
+  }
+}
+
+service GitService {
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc UploadPack(stream GitFrame) returns (stream GitFrame);
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc ReceivePack(stream GitFrame) returns (stream GitFrame);
+}

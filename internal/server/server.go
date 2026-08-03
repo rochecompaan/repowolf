@@ -63,6 +63,9 @@ func New(options Options) (*Server, error) {
 	if options.Policy != nil {
 		repowolfv1.RegisterGitHubServiceServer(service.grpc, newGitHubService(options.Policy, options.GitHub, options.AuditWriter))
 	}
+	if options.Git != nil {
+		repowolfv1.RegisterGitServiceServer(service.grpc, options.Git)
+	}
 	if options.Register != nil {
 		options.Register(service.grpc)
 	}
