@@ -30,9 +30,17 @@ func TestModeForBaseUsesExecutableBase(t *testing.T) {
 
 func TestRunClientDispatchesGhCompatibilityMode(t *testing.T) {
 	var stderr bytes.Buffer
-	status := runClient(context.Background(), "/sandbox/bin/gh", []string{"api", "/user"}, &bytes.Buffer{}, &stderr)
+	status := runClient(context.Background(), "/sandbox/bin/gh", []string{"api", "/user"}, bytes.NewReader(nil), &bytes.Buffer{}, &stderr)
 	if status != 2 || stderr.String() != "gh: unsupported or invalid command\n" {
 		t.Fatalf("runClient() = %d, stderr=%q", status, stderr.String())
+	}
+}
+
+func TestRunClientDispatchesGitSSHCompatibilityMode(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	status := runClient(context.Background(), "/sandbox/bin/repowolf-git-ssh", []string{"sh"}, bytes.NewReader(nil), &stdout, &stderr)
+	if status != 2 || stdout.Len() != 0 || stderr.String() != "repowolf git transport failed\n" {
+		t.Fatalf("runClient() = %d, stdout=%q stderr=%q", status, stdout.String(), stderr.String())
 	}
 }
 
@@ -111,5 +119,5 @@ func TestClientSignalHelperProcess(t *testing.T) {
 	if os.Getenv("REPOWOLF_SIGNAL_HELPER") != "1" {
 		return
 	}
-	os.Exit(runMain([]string{"gh", "repo", "view", "--repo", "owner/repo"}, os.Stdout, os.Stderr))
+	os.Exit(runMain([]string{"gh", "repo", "view", "--repo", "owner/repo"}, os.Stdin, os.Stdout, os.Stderr))
 }
