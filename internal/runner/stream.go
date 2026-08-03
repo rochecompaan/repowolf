@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"sync/atomic"
 	"syscall"
 )
 
@@ -33,12 +32,9 @@ type Process struct {
 	lifecycleDone    chan struct{}
 	cancel           context.CancelFunc
 
-	outputExceeded atomic.Bool
-	reasonMu       sync.Mutex
-	interruption   error
-	waitOnce       sync.Once
-	result         Result
-	waitErr        error
+	waitOnce sync.Once
+	result   Result
+	waitErr  error
 }
 
 // Start launches a generated command in a private working directory and
@@ -83,7 +79,10 @@ func (runner *Runner) Start(parent context.Context, requested Command) (*Process
 		cleanup()
 		return nil, ErrStartFailed
 	}
-	if err := cmd.Start(); err != nil {
+	processTableMu.Lock()
+	err = cmd.Start()
+	processTableMu.Unlock()
+	if err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
 		_ = stderr.Close()
@@ -107,7 +106,7 @@ func newProcess(command Command, workingDirectory string, cmd *exec.Cmd, stdin i
 		lifecycleDone:    make(chan struct{}),
 		cancel:           cancel,
 	}
-	process.input = newInputPipe(stdin, command.Stdin)
+	process.input = newInputPipe(stdin, command.Stdin, int64(command.StdinLimit), process.inputLimitExceeded)
 	process.stdout = &limitedReader{raw: stdout, limit: int64(command.StdoutLimit), overflow: process.limitExceeded}
 	process.stderr = &stderrCapture{raw: stderr, limit: int64(command.StderrLimit), overflow: process.limitExceeded}
 	process.Stdin = process.input
@@ -118,7 +117,7 @@ func newProcess(command Command, workingDirectory string, cmd *exec.Cmd, stdin i
 func (process *Process) monitor(operation context.Context) {
 	go func() {
 		err := waitWithoutReap(process.authority.pgid)
-		process.authority.terminate()
+		process.authority.terminate(nil)
 		close(process.exited)
 		process.exitObserved <- err
 	}()
@@ -127,8 +126,7 @@ func (process *Process) monitor(operation context.Context) {
 	go func() {
 		select {
 		case <-operation.Done():
-			if process.authority.terminate() {
-				process.setInterruption(operation.Err())
+			if process.authority.terminate(operation.Err()) {
 				_ = process.input.raw.Close()
 			}
 		case <-process.exited:
@@ -138,16 +136,15 @@ func (process *Process) monitor(operation context.Context) {
 }
 
 func (process *Process) limitExceeded() {
-	process.outputExceeded.Store(true)
-	if process.authority.terminate() {
+	if process.authority.terminate(ErrOutputLimit) {
 		_ = process.input.raw.Close()
 	}
 }
 
-func (process *Process) setInterruption(err error) {
-	process.reasonMu.Lock()
-	process.interruption = err
-	process.reasonMu.Unlock()
+func (process *Process) inputLimitExceeded() {
+	if process.authority.terminate(ErrInputLimit) {
+		_ = process.input.raw.Close()
+	}
 }
 
 // Wait fully reaps the process group and removes its private directory.
@@ -160,7 +157,7 @@ func (process *Process) Wait() (Result, error) {
 
 func (process *Process) wait() {
 	observationErr := <-process.exitObserved
-	waitErr := process.authority.retireAndReap()
+	waitErr, groupErr := process.authority.retireAndReap()
 	_ = process.input.raw.Close()
 	<-process.input.prefixDone
 	stderrErr := <-process.stderrDone
@@ -171,38 +168,33 @@ func (process *Process) wait() {
 
 	process.result = Result{
 		ExitCode:    exitCode(waitErr),
-		TimedOut:    process.wasTimedOut(),
+		TimedOut:    errors.Is(process.authority.terminationReason(), context.DeadlineExceeded),
 		StdinBytes:  process.input.count.Load(),
 		StdoutBytes: process.stdout.count.Load(),
 		StderrBytes: process.stderr.count.Load(),
 	}
-	process.waitErr = process.classifyWaitError(observationErr, waitErr, stderrErr, cleanupErr)
+	process.waitErr = process.classifyWaitError(observationErr, waitErr, groupErr, stderrErr, cleanupErr)
 }
 
-func (process *Process) wasTimedOut() bool {
-	process.reasonMu.Lock()
-	defer process.reasonMu.Unlock()
-	return errors.Is(process.interruption, context.DeadlineExceeded)
-}
-
-func (process *Process) classifyWaitError(observationErr, waitErr, stderrErr, cleanupErr error) error {
-	if process.outputExceeded.Load() {
+func (process *Process) classifyWaitError(observationErr, waitErr, groupErr, stderrErr, cleanupErr error) error {
+	interruption := process.authority.terminationReason()
+	if errors.Is(interruption, ErrInputLimit) {
+		return ErrInputLimit
+	}
+	if errors.Is(interruption, ErrOutputLimit) {
 		return ErrOutputLimit
 	}
-	process.reasonMu.Lock()
-	interruption := process.interruption
-	process.reasonMu.Unlock()
 	if errors.Is(interruption, context.DeadlineExceeded) {
 		return context.DeadlineExceeded
 	}
 	if errors.Is(interruption, context.Canceled) {
 		return context.Canceled
 	}
+	if groupErr != nil || cleanupErr != nil {
+		return ErrCleanupFailed
+	}
 	if observationErr != nil || (stderrErr != nil && !errors.Is(stderrErr, os.ErrClosed)) {
 		return ErrCommandFailed
-	}
-	if cleanupErr != nil {
-		return ErrCleanupFailed
 	}
 	if waitErr != nil {
 		return ErrCommandFailed
@@ -219,113 +211,4 @@ func exitCode(err error) int {
 		return exitError.ExitCode()
 	}
 	return 1
-}
-
-// inputPipe serializes the configured prefix before stream writes.
-type inputPipe struct {
-	raw        io.WriteCloser
-	prefix     []byte
-	prefixOnce sync.Once
-	prefixDone chan struct{}
-	prefixErr  error
-	count      atomic.Int64
-}
-
-func newInputPipe(raw io.WriteCloser, prefix []byte) *inputPipe {
-	return &inputPipe{raw: raw, prefix: prefix, prefixDone: make(chan struct{})}
-}
-
-func (input *inputPipe) sendPrefix() {
-	input.prefixOnce.Do(func() {
-		n, err := input.raw.Write(input.prefix)
-		input.count.Add(int64(n))
-		input.prefixErr = err
-		close(input.prefixDone)
-	})
-}
-
-func (input *inputPipe) Write(value []byte) (int, error) {
-	input.sendPrefix()
-	if input.prefixErr != nil {
-		return 0, input.prefixErr
-	}
-	n, err := input.raw.Write(value)
-	input.count.Add(int64(n))
-	return n, err
-}
-
-func (input *inputPipe) Close() error {
-	input.sendPrefix()
-	return input.raw.Close()
-}
-
-// limitedReader returns at most limit bytes and kills the process on overflow.
-type limitedReader struct {
-	raw      io.ReadCloser
-	limit    int64
-	count    atomic.Int64
-	overflow func()
-}
-
-func (reader *limitedReader) Read(value []byte) (int, error) {
-	remaining := reader.limit - reader.count.Load()
-	if remaining <= 0 {
-		var probe [1]byte
-		n, err := reader.raw.Read(probe[:])
-		if n > 0 {
-			reader.overflow()
-			return 0, ErrOutputLimit
-		}
-		return 0, err
-	}
-	readSize := int64(len(value))
-	if readSize > remaining+1 {
-		readSize = remaining + 1
-	}
-	n, err := reader.raw.Read(value[:readSize])
-	if int64(n) > remaining {
-		accepted := int(remaining)
-		reader.count.Add(remaining)
-		reader.overflow()
-		return accepted, ErrOutputLimit
-	}
-	reader.count.Add(int64(n))
-	return n, err
-}
-
-func (reader *limitedReader) Close() error { return reader.raw.Close() }
-
-type stderrCapture struct {
-	raw      io.ReadCloser
-	limit    int64
-	count    atomic.Int64
-	overflow func()
-	data     []byte
-}
-
-func (capture *stderrCapture) drain() error {
-	buffer := make([]byte, 32*1024)
-	for {
-		n, err := capture.raw.Read(buffer)
-		if n > 0 {
-			remaining := capture.limit - capture.count.Load()
-			accepted := int64(n)
-			if accepted > remaining {
-				accepted = remaining
-			}
-			if accepted > 0 {
-				capture.data = append(capture.data, buffer[:accepted]...)
-				capture.count.Add(accepted)
-			}
-			if accepted < int64(n) {
-				capture.overflow()
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return err
-		}
-	}
 }

@@ -63,7 +63,7 @@ func TestCallDoesNotInheritEnvironmentWhenExactEnvironmentIsEmpty(t *testing.T) 
 	t.Setenv("REPOWOLF_MUST_NOT_BE_INHERITED", "service-secret")
 	command := Command{
 		Path: envPath, Env: []string{}, Timeout: 3 * time.Second,
-		StdoutLimit: 4096, StderrLimit: 4096,
+		StdinLimit: 4096, StdoutLimit: 4096, StderrLimit: 4096,
 	}
 	result, err := (&Runner{}).Call(context.Background(), command)
 	if err != nil {
@@ -84,6 +84,22 @@ func TestCallSendsBoundedInput(t *testing.T) {
 	if string(result.Stdout) != "request-body" || result.StdinBytes != int64(len(command.Stdin)) {
 		t.Fatalf("result = %#v", result)
 	}
+}
+
+func TestCallRejectsUnaryInputOverBudgetWithoutCreatingCWD(t *testing.T) {
+	tempRoot := t.TempDir()
+	command := testCommand("stdin")
+	command.StdinLimit = 4
+	command.Stdin = []byte("12345")
+
+	result, err := (&Runner{tempRoot: tempRoot}).Call(context.Background(), command)
+	if !errors.Is(err, ErrInputLimit) {
+		t.Fatalf("error = %v, want input limit", err)
+	}
+	if result.StdinBytes != 0 {
+		t.Fatalf("stdin bytes = %d, want 0", result.StdinBytes)
+	}
+	assertEmptyDirectory(t, tempRoot)
 }
 
 func TestCallBoundsStdoutAndStderr(t *testing.T) {
@@ -172,9 +188,7 @@ func TestCallTimeoutAndCancellationKillDescendants(t *testing.T) {
 			if got.err == nil || got.result.TimedOut != test.timed {
 				t.Fatalf("result=%#v error=%v", got.result, got.err)
 			}
-			pid := readPID(t, pidFile)
-			t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
-			waitForGone(t, pid)
+			assertProcessGone(t, readPID(t, pidFile))
 		})
 	}
 }
@@ -190,10 +204,115 @@ func TestCallCompletionCleansDescendants(t *testing.T) {
 			if mode == "spawn-failure" && (!errors.Is(err, ErrCommandFailed) || result.ExitCode != 23) {
 				t.Fatalf("result=%#v error=%v", result, err)
 			}
-			pid := readPID(t, pidFile)
-			t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
-			waitForGone(t, pid)
+			assertProcessGone(t, readPID(t, pidFile))
 		})
+	}
+}
+
+func TestCallReapsAdoptedGroupDescendantsBeforeReturn(t *testing.T) {
+	for _, scenario := range []string{"natural", "cancellation", "timeout", "stdout-overflow", "stderr-overflow", "concurrent"} {
+		t.Run(scenario, func(t *testing.T) {
+			command := exec.Command(os.Args[0], "-test.run=^TestSubreaperLifecycleHelper$", "--", scenario)
+			command.Env = append(os.Environ(), "GO_WANT_SUBREAPER_HELPER=1")
+			output, err := command.CombinedOutput()
+			if err != nil {
+				t.Fatalf("subreaper helper: %v\n%s", err, output)
+			}
+		})
+	}
+}
+
+func TestSubreaperLifecycleHelper(t *testing.T) {
+	if os.Getenv("GO_WANT_SUBREAPER_HELPER") != "1" {
+		return
+	}
+	if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, 36, 1, 0, 0, 0, 0); errno != 0 { // PR_SET_CHILD_SUBREAPER
+		t.Fatalf("enable subreaper: %v", errno)
+	}
+	scenario := os.Args[len(os.Args)-1]
+	if scenario == "concurrent" {
+		runConcurrentSubreaperCalls(t)
+		return
+	}
+	runSubreaperCall(t, scenario)
+}
+
+func runSubreaperCall(t *testing.T, scenario string) {
+	t.Helper()
+	pidFile := filepath.Join(t.TempDir(), scenario+".pid")
+	mode := "spawn-success"
+	command := testCommand(mode, pidFile)
+	ctx := context.Background()
+	cancel := func() {}
+
+	switch scenario {
+	case "cancellation":
+		mode = "spawn"
+		ctx, cancel = context.WithCancel(context.Background())
+	case "timeout":
+		mode = "spawn"
+		command.Timeout = 80 * time.Millisecond
+	case "stdout-overflow":
+		mode = "spawn-stdout-overflow"
+		command.StdoutLimit = 16
+	case "stderr-overflow":
+		mode = "spawn-stderr-overflow"
+		command.StderrLimit = 16
+	}
+	command.Args[2] = mode
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := (&Runner{}).Call(ctx, command)
+		done <- err
+	}()
+	waitForFile(t, pidFile)
+	if scenario == "cancellation" {
+		cancel()
+	}
+	err := <-done
+	switch scenario {
+	case "natural":
+		if err != nil {
+			t.Fatal(err)
+		}
+	case "cancellation":
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want cancellation", err)
+		}
+	case "timeout":
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("error = %v, want deadline", err)
+		}
+	default:
+		if !errors.Is(err, ErrOutputLimit) {
+			t.Fatalf("error = %v, want output limit", err)
+		}
+	}
+	assertProcessGone(t, readPID(t, pidFile))
+}
+
+func runConcurrentSubreaperCalls(t *testing.T) {
+	t.Helper()
+	type call struct {
+		pidFile string
+		done    chan error
+	}
+	calls := make([]call, 2)
+	for index := range calls {
+		calls[index] = call{pidFile: filepath.Join(t.TempDir(), strconv.Itoa(index)+".pid"), done: make(chan error, 1)}
+		command := testCommand("spawn-success", calls[index].pidFile)
+		go func() {
+			_, err := (&Runner{}).Call(context.Background(), command)
+			calls[index].done <- err
+		}()
+	}
+	for _, current := range calls {
+		if err := <-current.done; err != nil {
+			t.Fatal(err)
+		}
+		assertProcessGone(t, readPID(t, current.pidFile))
 	}
 }
 
@@ -202,6 +321,7 @@ func TestCallRejectsUnpinnedOrUnboundedCommand(t *testing.T) {
 	for name, mutate := range map[string]func(*Command){
 		"relative path": func(command *Command) { command.Path = "provider" },
 		"zero timeout":  func(command *Command) { command.Timeout = 0 },
+		"zero stdin":    func(command *Command) { command.StdinLimit = 0 },
 		"zero stdout":   func(command *Command) { command.StdoutLimit = 0 },
 		"zero stderr":   func(command *Command) { command.StderrLimit = 0 },
 	} {
@@ -234,13 +354,35 @@ func TestProcessAuthorityRetiresBeforeLeaderReap(t *testing.T) {
 			leaderReaped = true
 			return nil
 		},
+		reapGroup: func(int) error { return nil },
 	}
-	if err := authority.retireAndReap(); err != nil {
-		t.Fatal(err)
+	if leaderErr, groupErr := authority.retireAndReap(); leaderErr != nil || groupErr != nil {
+		t.Fatalf("leader error=%v group error=%v", leaderErr, groupErr)
 	}
-	authority.terminate()
+	authority.terminate(nil)
 	if kills != 1 || !leaderReaped {
 		t.Fatalf("kills=%d leaderReaped=%t", kills, leaderReaped)
+	}
+}
+
+func TestProcessAuthorityPublishesReasonBeforeTerminationSignal(t *testing.T) {
+	var authority processAuthority
+	authority = processAuthority{
+		pgid: 42,
+		kill: func(int, syscall.Signal) error {
+			if !errors.Is(authority.reason, context.Canceled) {
+				t.Fatalf("termination signal observed before reason publication: %v", authority.reason)
+			}
+			return nil
+		},
+		reap:      func() error { return nil },
+		reapGroup: func(int) error { return nil },
+	}
+	if !authority.terminate(context.Canceled) {
+		t.Fatal("termination did not win")
+	}
+	if !errors.Is(authority.terminationReason(), context.Canceled) {
+		t.Fatalf("termination reason = %v", authority.terminationReason())
 	}
 }
 
@@ -249,7 +391,7 @@ func testCommand(mode string, arguments ...string) Command {
 	return Command{
 		Path: os.Args[0], Args: args,
 		Env: []string{"GO_WANT_RUNNER_HELPER=1"}, Timeout: 3 * time.Second,
-		StdoutLimit: 4096, StderrLimit: 4096,
+		StdinLimit: 4096, StdoutLimit: 4096, StderrLimit: 4096,
 	}
 }
 
@@ -292,7 +434,7 @@ func TestRunnerHelperProcess(t *testing.T) {
 	case "stderr-overflow":
 		_, _ = os.Stderr.WriteString(strings.Repeat("x", 4096))
 		time.Sleep(time.Second)
-	case "spawn", "spawn-success", "spawn-failure":
+	case "spawn", "spawn-success", "spawn-failure", "spawn-stdout-overflow", "spawn-stderr-overflow", "spawn-no-read":
 		child := exec.Command(os.Args[0], "-test.run=TestRunnerHelperProcess", "--", "sleep")
 		child.Env = []string{"GO_WANT_RUNNER_HELPER=1"}
 		if err := child.Start(); err != nil {
@@ -304,6 +446,14 @@ func TestRunnerHelperProcess(t *testing.T) {
 			os.Exit(0)
 		case "spawn-failure":
 			os.Exit(23)
+		case "spawn-stdout-overflow":
+			_, _ = os.Stdout.WriteString(strings.Repeat("x", 4096))
+			time.Sleep(time.Second)
+		case "spawn-stderr-overflow":
+			_, _ = os.Stderr.WriteString(strings.Repeat("x", 4096))
+			time.Sleep(time.Second)
+		case "spawn-no-read":
+			time.Sleep(5 * time.Second)
 		default:
 			_ = child.Wait()
 		}
@@ -344,14 +494,20 @@ func readPID(t *testing.T, path string) int {
 	return pid
 }
 
-func waitForGone(t *testing.T, pid int) {
+func assertProcessGone(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("process %d remains immediately after Wait: %v", pid, err)
 	}
-	t.Fatalf("process %d survived", pid)
+}
+
+func assertEmptyDirectory(t *testing.T, path string) {
+	t.Helper()
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("residual provider directories: %v", entries)
+	}
 }
