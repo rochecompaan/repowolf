@@ -167,11 +167,15 @@ principals:
       - repository: clubhouse-infra
         capabilities:
           - repository:read
+          - issues:read
+          - issues:write
+          - pull_requests:read
+          - pull_requests:write
+          - actions:read
+          - statuses:read
           - git:read
           - git:write
 ```
-
-The example grant is intentionally partial; production principals receive only the capabilities they require.
 
 A `null` tool path means resolve the executable once from the service startup `PATH`. An absolute path pins a deterministic executable for Nix and container deployments. The resolved canonical path remains fixed for the service lifetime. Request data never influences executable selection.
 
