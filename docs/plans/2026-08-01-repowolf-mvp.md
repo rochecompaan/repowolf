@@ -579,7 +579,7 @@ Cover TLS 1.3 minimum, wrong key rejection, CA verification, DNS/IP SAN verifica
 
 ```go
 func TestInitRefusesOverwrite(t *testing.T) {
-    dir := t.TempDir()
+    dir := filepath.Join(t.TempDir(), "pki")
     if _, err := tlsconfig.Init(testOptions(dir)); err != nil { t.Fatal(err) }
     if _, err := tlsconfig.Init(testOptions(dir)); !errors.Is(err, fs.ErrExist) {
         t.Fatalf("second Init error = %v, want fs.ErrExist", err)
