@@ -5,8 +5,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"os"
 )
+
+const caFileLimit = 1 << 20
 
 func tlsConfig(config Config) (*tls.Config, error) {
 	endpoint, err := validate(config)
@@ -36,7 +37,7 @@ func trustRoots(caFile string) (*x509.CertPool, error) {
 		}
 		return roots, nil
 	}
-	contents, err := os.ReadFile(caFile)
+	contents, err := readRegularFile(caFile, caFileLimit)
 	if err != nil {
 		return nil, fmt.Errorf("read REPOWOLF_CA_FILE: %w", err)
 	}
@@ -44,10 +45,10 @@ func trustRoots(caFile string) (*x509.CertPool, error) {
 	foundCA := false
 	for rest := contents; len(rest) != 0; {
 		block, remaining := pem.Decode(rest)
-		rest = remaining
 		if block == nil {
 			break
 		}
+		rest = remaining
 		if block.Type != "CERTIFICATE" {
 			continue
 		}
@@ -56,10 +57,11 @@ func trustRoots(caFile string) (*x509.CertPool, error) {
 			return nil, fmt.Errorf("parse REPOWOLF_CA_FILE: %w", err)
 		}
 		if certificate.IsCA {
+			roots.AddCert(certificate)
 			foundCA = true
 		}
 	}
-	if !foundCA || !roots.AppendCertsFromPEM(contents) {
+	if !foundCA {
 		return nil, fmt.Errorf("REPOWOLF_CA_FILE contains no CA certificates")
 	}
 	return roots, nil

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 )
@@ -182,5 +183,10 @@ func cell(value any) string {
 	default:
 		text = fmt.Sprint(typed)
 	}
-	return strings.NewReplacer("\t", " ", "\r", " ", "\n", " ").Replace(text)
+	return strings.Map(func(character rune) rune {
+		if unicode.IsControl(character) {
+			return ' '
+		}
+		return character
+	}, text)
 }

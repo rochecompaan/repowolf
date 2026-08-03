@@ -8,11 +8,13 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"math/big"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -42,6 +44,37 @@ func TestRenderNativeIssueListAndSelectedJSON(t *testing.T) {
 	}
 	if want := `[{"number":1,"title":"First issue"}]` + "\n"; string(jsonOutput) != want {
 		t.Fatalf("JSON output = %q, want %q", jsonOutput, want)
+	}
+}
+
+func TestRenderSanitizesUnicodeControlsOnlyInNativeOutput(t *testing.T) {
+	hostile := "start\x00\b\t\n\r\x1b\x7f\u0085\u009bend"
+	response := &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueView{IssueView: &repowolfv1.GitHubIssueViewResult{Issue: &repowolfv1.GitHubIssueRecord{
+		Number: 7, Title: hostile, State: "OPEN", Author: "octocat", Body: &hostile,
+	}}}}
+	native, err := render(command{kind: operationIssueView}, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCell := "start" + strings.Repeat(" ", 9) + "end"
+	wantNative := "title:\t" + wantCell + "\nstate:\tOPEN\nauthor:\toctocat\nlabels:\t\nassignees:\t\nnumber:\t7\nurl:\t\n--\n" + wantCell + "\n"
+	if string(native) != wantNative {
+		t.Fatalf("native output = %q, want %q", native, wantNative)
+	}
+
+	jsonOutput, err := render(command{kind: operationIssueView, fields: []string{"title", "body"}}, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !json.Valid(jsonOutput) {
+		t.Fatalf("invalid JSON output %q", jsonOutput)
+	}
+	var decoded map[string]string
+	if err := json.Unmarshal(jsonOutput, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["title"] != hostile || decoded["body"] != hostile {
+		t.Fatalf("JSON controls were altered: %#v", decoded)
 	}
 }
 
