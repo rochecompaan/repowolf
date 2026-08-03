@@ -21,8 +21,10 @@ import (
 const stderrLimitBytes = 1 << 20
 
 var (
-	trustedOwner = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})?$`)
-	trustedName  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+	trustedOwner        = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})?$`)
+	trustedName         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+	errTerminalDelivery = errors.New("git terminal delivery failed")
+	errTerminalAudit    = errors.New("git terminal audit failed")
 )
 
 // ProcessRunner starts a pinned provider process.
@@ -104,27 +106,29 @@ func (service *Service) UploadPack(stream repowolfv1.GitService_UploadPackServer
 
 func (service *Service) uploadPack(stream gitStream) error {
 	started := time.Now()
+	sender := newSendPump(stream)
+	defer sender.Stop()
 	state := &clientFrameState{}
 	first, err := receiveWithTimeout(stream.Context(), service.options.Limits.InitialStreamTimeout, stream.Recv)
 	if err == nil {
 		err = state.Accept(first)
 	}
 	if err != nil {
-		return service.finish(stream, policy.ResolvedRepository{}, "git.upload-pack", started, 0, 0, nil, 0, err)
+		return service.finish(stream, sender, policy.ResolvedRepository{}, "git.upload-pack", started, 0, 0, nil, 0, err)
 	}
 	command, repository, err := service.command(stream.Context(), first.GetOpen(), config.GitRead, "git-upload-pack")
 	if err != nil {
-		return service.finish(stream, repository, "git.upload-pack", started, 0, 0, nil, 0, err)
+		return service.finish(stream, sender, repository, "git.upload-pack", started, 0, 0, nil, 0, err)
 	}
 	if err := service.writeAudit(stream.Context(), repository, "git.upload-pack", audit.OutcomeAccepted, "", started, 0, 0, nil, 0); err != nil {
-		return service.finish(stream, repository, "git.upload-pack", started, 0, 0, nil, 0, rpcstatus.ErrServiceUnavailable)
+		return service.finish(stream, sender, repository, "git.upload-pack", started, 0, 0, nil, 0, rpcstatus.ErrServiceUnavailable)
 	}
 
 	processContext, cancel := context.WithCancelCause(stream.Context())
 	process, err := service.options.Runner.Start(processContext, command)
 	if err != nil {
 		cancel(err)
-		return service.finish(stream, repository, "git.upload-pack", started, 0, 0, nil, 0, err)
+		return service.finish(stream, sender, repository, "git.upload-pack", started, 0, 0, nil, 0, err)
 	}
 	activity := make(chan struct{}, 1)
 	go watchIdle(processContext, service.options.Limits.IdleStreamTimeout, activity, cancel)
@@ -142,7 +146,7 @@ func (service *Service) uploadPack(stream gitStream) error {
 		inputDone <- copyResult{bytes: count, err: copyErr}
 	}()
 	go func() {
-		count, copyErr := copyOutputToFrames(process.Stdout, stream, service.options.Limits.MaxStreamChunkBytes, activity)
+		count, copyErr := copyOutputToFrames(processContext, process.Stdout, sender, service.options.Limits.MaxStreamChunkBytes, activity)
 		if copyErr != nil {
 			cancel(copyErr)
 		}
@@ -181,9 +185,12 @@ func (service *Service) uploadPack(stream gitStream) error {
 	if inputPending {
 		input.bytes = result.StdinBytes
 	}
-	cause := firstError(input.err, context.Cause(processContext), output.err, operationCause, waitErr)
+	cause := firstError(context.Cause(processContext), operationCause, input.err, output.err, waitErr)
+	if result.TimedOut {
+		cause = context.DeadlineExceeded
+	}
 	cancel(cause)
-	return service.finish(stream, repository, "git.upload-pack", started, input.bytes, output.bytes, nil, 0, causeWithExit(cause, result.ExitCode))
+	return service.finish(stream, sender, repository, "git.upload-pack", started, input.bytes, output.bytes, nil, 0, causeWithExit(cause, result.ExitCode))
 }
 
 func firstError(values ...error) error {
@@ -213,7 +220,7 @@ func causeWithExit(err error, exitCode int) error {
 	return processFailure{err: err, exitCode: exitCode}
 }
 
-func (service *Service) finish(stream gitStream, repository policy.ResolvedRepository, operation string, started time.Time, inputBytes, outputBytes int64, refs []string, updates int, operationErr error) error {
+func (service *Service) finish(stream gitStream, sender *sendPump, repository policy.ResolvedRepository, operation string, started time.Time, inputBytes, outputBytes int64, refs []string, updates int, operationErr error) error {
 	category := terminalCategory(operationErr)
 	exitCode := int32(0)
 	if category != repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED {
@@ -225,11 +232,12 @@ func (service *Service) finish(stream gitStream, repository policy.ResolvedRepos
 	}
 	terminal := &repowolfv1.GitFrame{Payload: &repowolfv1.GitFrame_Terminal{Terminal: &repowolfv1.GitTerminal{ExitCode: exitCode, Category: category}}}
 	var frameState serverFrameState
-	if _, err := frameState.Accept(terminal); err != nil {
-		return rpcstatus.ErrServiceUnavailable
-	}
-	if err := stream.Send(terminal); err != nil {
-		return err
+	_, validationErr := frameState.Accept(terminal)
+	var deliveryErr error
+	if validationErr != nil {
+		deliveryErr = validationErr
+	} else {
+		deliveryErr = sender.SendFinal(stream.Context(), service.options.Limits.IdleStreamTimeout, terminal)
 	}
 	outcome := audit.OutcomeCompleted
 	if operationErr != nil {
@@ -240,7 +248,22 @@ func (service *Service) finish(stream gitStream, repository policy.ResolvedRepos
 			outcome = audit.OutcomeCancelled
 		}
 	}
-	return service.writeAudit(stream.Context(), repository, operation, outcome, category.String(), started, inputBytes, outputBytes, refs, updates)
+	auditErr := service.writeAudit(stream.Context(), repository, operation, outcome, category.String(), started, inputBytes, outputBytes, refs, updates)
+	return finishDeliveryError(deliveryErr, auditErr)
+}
+
+func finishDeliveryError(deliveryErr, auditErr error) error {
+	var failures []error
+	if deliveryErr != nil {
+		failures = append(failures, errTerminalDelivery)
+	}
+	if auditErr != nil {
+		failures = append(failures, errTerminalAudit)
+	}
+	if len(failures) == 0 {
+		return nil
+	}
+	return errors.Join(append([]error{rpcstatus.ErrServiceUnavailable}, failures...)...)
 }
 
 func terminalCategory(err error) repowolfv1.GitTerminalCategory {

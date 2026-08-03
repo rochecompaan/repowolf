@@ -22,38 +22,40 @@ func (service *Service) ReceivePack(stream repowolfv1.GitService_ReceivePackServ
 
 func (service *Service) receivePack(stream gitStream) error {
 	started := time.Now()
+	sender := newSendPump(stream)
+	defer sender.Stop()
 	state := &clientFrameState{}
 	first, err := receiveWithTimeout(stream.Context(), service.options.Limits.InitialStreamTimeout, stream.Recv)
 	if err == nil {
 		err = state.Accept(first)
 	}
 	if err != nil {
-		return service.finish(stream, policy.ResolvedRepository{}, "git.receive-pack", started, 0, 0, nil, 0, err)
+		return service.finish(stream, sender, policy.ResolvedRepository{}, "git.receive-pack", started, 0, 0, nil, 0, err)
 	}
 	repository, command, err := service.receiveCommand(stream.Context(), first.GetOpen())
 	if err != nil {
-		return service.finish(stream, repository, "git.receive-pack", started, 0, 0, nil, 0, err)
+		return service.finish(stream, sender, repository, "git.receive-pack", started, 0, 0, nil, 0, err)
 	}
 	if err := service.writeAudit(stream.Context(), repository, "git.receive-pack", audit.OutcomeAccepted, "", started, 0, 0, nil, 0); err != nil {
-		return service.finish(stream, repository, "git.receive-pack", started, 0, 0, nil, 0, rpcstatus.ErrServiceUnavailable)
+		return service.finish(stream, sender, repository, "git.receive-pack", started, 0, 0, nil, 0, rpcstatus.ErrServiceUnavailable)
 	}
 
 	processContext, cancel := context.WithCancelCause(stream.Context())
 	process, err := service.options.Runner.Start(processContext, command)
 	if err != nil {
 		cancel(err)
-		return service.finish(stream, repository, "git.receive-pack", started, 0, 0, nil, 0, err)
+		return service.finish(stream, sender, repository, "git.receive-pack", started, 0, 0, nil, 0, err)
 	}
 	activity := make(chan struct{}, 1)
 	go watchIdle(processContext, service.options.Limits.IdleStreamTimeout, activity, cancel)
 	advertisement, err := gitproto.ParseAdvertisement(&activityReader{reader: process.Stdout, activity: activity}, service.options.Limits.MaxPushPrefixBytes)
 	if err != nil {
 		result, cleanupErr := stopProcess(cancel, process, err)
-		return service.finish(stream, repository, "git.receive-pack", started, 0, result.StdoutBytes, nil, 0, firstError(context.Cause(processContext), err, cleanupErr))
+		return service.finish(stream, sender, repository, "git.receive-pack", started, 0, result.StdoutBytes, nil, 0, firstError(context.Cause(processContext), err, cleanupErr))
 	}
-	if err := sendBytes(stream, advertisement.Raw, service.options.Limits.MaxStreamChunkBytes); err != nil {
-		_, _ = stopProcess(cancel, process, err)
-		return err
+	if err := sendBytes(processContext, sender, advertisement.Raw, service.options.Limits.MaxStreamChunkBytes); err != nil {
+		result, cleanupErr := stopProcess(cancel, process, err)
+		return service.finish(stream, sender, repository, "git.receive-pack", started, 0, result.StdoutBytes, nil, 0, firstError(err, cleanupErr))
 	}
 	noteActivity(activity)
 
@@ -66,23 +68,22 @@ func (service *Service) receivePack(stream gitStream) error {
 		Policy: repository.Repository.Git, AdvertisedCaps: advertisement.Capabilities,
 	})
 	if err != nil {
+		updates := gitproto.RejectedUpdates(err)
+		refs := updateRefs(updates)
 		result, cleanupErr := stopProcess(cancel, process, err)
 		requestErr := classifyReceiveRequestError(err)
 		// The request prefix was never written to the provider, so audit zero
 		// provider input rather than the bytes buffered for validation.
-		return service.finish(stream, repository, "git.receive-pack", started, 0, result.StdoutBytes, nil, 0, firstError(requestErr, cleanupErr))
+		return service.finish(stream, sender, repository, "git.receive-pack", started, 0, result.StdoutBytes, refs, len(updates), firstError(requestErr, cleanupErr))
 	}
-	refs := make([]string, len(parsed.Updates))
-	for index, update := range parsed.Updates {
-		refs[index] = update.Ref
-	}
+	refs := updateRefs(parsed.Updates)
 
 	outputDone := make(chan struct {
 		bytes int64
 		err   error
 	}, 1)
 	go func() {
-		count, copyErr := copyOutputToFrames(process.Stdout, stream, service.options.Limits.MaxStreamChunkBytes, activity)
+		count, copyErr := copyOutputToFrames(processContext, process.Stdout, sender, service.options.Limits.MaxStreamChunkBytes, activity)
 		if copyErr != nil {
 			cancel(copyErr)
 		}
@@ -98,8 +99,11 @@ func (service *Service) receivePack(stream gitStream) error {
 	output := <-outputDone
 	result, waitErr := process.Wait()
 	cause := firstError(inputErr, context.Cause(processContext), output.err, waitErr)
+	if result.TimedOut {
+		cause = context.DeadlineExceeded
+	}
 	cancel(cause)
-	return service.finish(stream, repository, "git.receive-pack", started, inputBytes, int64(len(advertisement.Raw))+output.bytes, refs, len(parsed.Updates), causeWithExit(cause, result.ExitCode))
+	return service.finish(stream, sender, repository, "git.receive-pack", started, inputBytes, int64(len(advertisement.Raw))+output.bytes, refs, len(parsed.Updates), causeWithExit(cause, result.ExitCode))
 }
 
 func (service *Service) receiveCommand(ctx context.Context, open *repowolfv1.GitOpen) (policy.ResolvedRepository, runner.Command, error) {
@@ -115,6 +119,14 @@ func (service *Service) receiveCommand(ctx context.Context, open *repowolfv1.Git
 		return readRepository, runner.Command{}, err
 	}
 	return writeRepository, command, nil
+}
+
+func updateRefs(updates []policy.Update) []string {
+	refs := make([]string, len(updates))
+	for index, update := range updates {
+		refs[index] = update.Ref
+	}
+	return refs
 }
 
 func classifyReceiveRequestError(err error) error {
@@ -148,7 +160,7 @@ func stopProcess(cancel context.CancelCauseFunc, process *runner.Process, reason
 	return process.Wait()
 }
 
-func sendBytes(stream gitStream, data []byte, chunkSize int) error {
+func sendBytes(ctx context.Context, sender *sendPump, data []byte, chunkSize int) error {
 	if chunkSize <= 0 || chunkSize > maxChunkBytes {
 		return errChunkLimit
 	}
@@ -157,7 +169,7 @@ func sendBytes(stream gitStream, data []byte, chunkSize int) error {
 		if size > chunkSize {
 			size = chunkSize
 		}
-		if err := stream.Send(dataFrameForWire(append([]byte(nil), data[:size]...))); err != nil {
+		if err := sender.Send(ctx, dataFrameForWire(append([]byte(nil), data[:size]...))); err != nil {
 			return err
 		}
 		data = data[size:]

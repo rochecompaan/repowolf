@@ -75,11 +75,20 @@ func (state *serverFrameState) Accept(frame *repowolfv1.GitFrame) (bool, error) 
 }
 
 func validTerminal(terminal *repowolfv1.GitTerminal) bool {
-	if terminal == nil || terminal.Category == repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_UNSPECIFIED {
+	if terminal == nil {
 		return false
 	}
-	if terminal.Category == repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED {
+	switch terminal.Category {
+	case repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED:
 		return terminal.ExitCode == 0
+	case repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PERMISSION_DENIED,
+		repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST,
+		repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PROVIDER_FAILURE,
+		repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_DEADLINE_EXCEEDED,
+		repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_LIMIT_EXCEEDED,
+		repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_UNAVAILABLE:
+		return terminal.ExitCode != 0
+	default:
+		return false
 	}
-	return terminal.ExitCode != 0
 }

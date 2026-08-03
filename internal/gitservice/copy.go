@@ -65,7 +65,7 @@ func copyFramesToInput(stream gitStream, input io.WriteCloser, state *clientFram
 	}
 }
 
-func copyOutputToFrames(output io.Reader, stream gitStream, chunkSize int, activity chan<- struct{}) (int64, error) {
+func copyOutputToFrames(ctx context.Context, output io.Reader, sender *sendPump, chunkSize int, activity chan<- struct{}) (int64, error) {
 	if chunkSize <= 0 || chunkSize > maxChunkBytes {
 		return 0, errChunkLimit
 	}
@@ -75,10 +75,10 @@ func copyOutputToFrames(output io.Reader, stream gitStream, chunkSize int, activ
 		n, err := output.Read(buffer)
 		if n > 0 {
 			data := append([]byte(nil), buffer[:n]...)
-			if sendErr := stream.Send(dataFrameForWire(data)); sendErr != nil {
+			total += int64(n)
+			if sendErr := sender.Send(ctx, dataFrameForWire(data)); sendErr != nil {
 				return total, sendErr
 			}
-			total += int64(n)
 			noteActivity(activity)
 		}
 		if err != nil {

@@ -169,6 +169,14 @@ func TestParseReceivePackRejectsMainUnderDefaultPolicy(t *testing.T) {
 	if result.Prefix != nil || result.Updates != nil || result.Capabilities != nil {
 		t.Fatalf("result = %#v, want no forwardable result", result)
 	}
+	updates := RejectedUpdates(err)
+	if len(updates) != 1 || updates[0].Ref != "refs/heads/main" {
+		t.Fatalf("RejectedUpdates() = %#v", updates)
+	}
+	updates[0].Ref = "refs/heads/tampered"
+	if got := RejectedUpdates(err); len(got) != 1 || got[0].Ref != "refs/heads/main" {
+		t.Fatalf("RejectedUpdates() was not defensive: %#v", got)
+	}
 }
 
 func TestParseReceivePackRejectsMalformedInputsWithoutRawBytes(t *testing.T) {
