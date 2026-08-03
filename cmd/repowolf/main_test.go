@@ -18,3 +18,10 @@ func TestRunUsageForUnknownCommand(t *testing.T) {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
+
+func TestRunTokenGenerate(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"token", "generate"}, &stdout, &stderr); code != 0 || stdout.Len() != 48 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout-bytes=%d stderr=%q", code, stdout.Len(), stderr.String())
+	}
+}
