@@ -242,9 +242,11 @@ TLS provides service identity, confidentiality, and integrity. Bearer tokens pro
 - an Ed25519 local CA key and certificate;
 - an Ed25519 server key and certificate;
 - configured DNS and IP subject alternative names;
-- atomic files with restrictive private-key permissions.
+- one atomically published certificate directory with restrictive private-key permissions.
 
-It refuses to overwrite existing material. It does not install trust roots or run an online CA.
+`--output` must name a nonexistent child path beneath an existing, operator-controlled parent directory. The parent must not be writable by untrusted principals while initialization runs. RepoWolf creates all four files in a private sibling staging directory, syncs the files and staging directory, then uses one Linux descriptor-relative `renameat2(RENAME_NOREPLACE)` operation to publish it. Any existing destination file, directory, or symlink is left untouched and causes initialization to fail. Pre-publication failures remove only the staging directory; after publication RepoWolf never rolls back the complete output directory.
+
+It does not install trust roots or run an online CA.
 
 In Kubernetes, cert-manager or another platform component creates and rotates the mounted server certificate. MVP reloads updated files only after a service restart or rolling replacement.
 

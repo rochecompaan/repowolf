@@ -3,120 +3,82 @@ package tlsconfig
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sync/atomic"
+
+	"golang.org/x/sys/unix"
 )
 
-var temporarySequence atomic.Uint64
+var (
+	renameNoReplace = unix.Renameat2
+	removeStaging   = os.RemoveAll
+	syncParent      = unix.Fsync
+)
 
-type stagedFile struct {
-	temporary string
-	final     string
-	info      fs.FileInfo
-}
-
-type publishedFile struct {
-	path string
-	info fs.FileInfo
-}
-
-func publishAll(dir string, specs []fileSpec) error {
-	staged, err := stageAll(specs)
+func publishDirectory(output string, specs []fileSpec) (err error) {
+	parent := filepath.Dir(output)
+	parentFD, err := unix.Open(parent, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
-		return errors.Join(err, cleanupInvocation(dir, staged, nil))
+		return err
 	}
 
-	published := make([]publishedFile, 0, len(staged))
-	for _, file := range staged {
-		if err := os.Link(file.temporary, file.final); err != nil {
-			return errors.Join(err, cleanupInvocation(dir, staged, published))
+	staging, err := os.MkdirTemp(parent, ".repowolf-cert-")
+	if err != nil {
+		return errors.Join(err, unix.Close(parentFD))
+	}
+	published := false
+	defer func() {
+		if !published {
+			err = errors.Join(err, removeStaging(staging))
 		}
-		published = append(published, publishedFile{path: file.final, info: file.info})
-		if err := os.Remove(file.temporary); err != nil {
-			return errors.Join(err, cleanupInvocation(dir, staged, published))
+		err = errors.Join(err, unix.Close(parentFD))
+	}()
+
+	if err := writeStagedFiles(staging, specs); err != nil {
+		return err
+	}
+	if err := syncDirectory(staging); err != nil {
+		return err
+	}
+	if err := renameNoReplace(parentFD, filepath.Base(staging), parentFD, filepath.Base(output), unix.RENAME_NOREPLACE); err != nil {
+		if errors.Is(err, unix.EEXIST) {
+			return errors.Join(fs.ErrExist, err)
 		}
-		if err := syncDirectory(dir); err != nil {
-			return errors.Join(err, cleanupInvocation(dir, staged, published))
+		return err
+	}
+	published = true
+	return syncParent(parentFD)
+}
+
+func writeStagedFiles(staging string, specs []fileSpec) error {
+	for _, spec := range specs {
+		if err := writeStagedFile(filepath.Join(staging, filepath.Base(spec.path)), spec.contents, spec.mode); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func stageAll(specs []fileSpec) ([]stagedFile, error) {
-	staged := make([]stagedFile, 0, len(specs))
-	for _, spec := range specs {
-		file, err := stageOne(spec)
-		if file.temporary != "" {
-			staged = append(staged, file)
-		}
-		if err != nil {
-			return staged, err
-		}
-	}
-	return staged, nil
-}
-
-func stageOne(spec fileSpec) (stagedFile, error) {
-	temporary := filepath.Join(filepath.Dir(spec.path), fmt.Sprintf(".%s.repowolf-%d-%d", filepath.Base(spec.path), os.Getpid(), temporarySequence.Add(1)))
-	file, err := os.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, spec.mode)
+func writeStagedFile(path string, contents []byte, mode fs.FileMode) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
-		return stagedFile{}, err
-	}
-	staged := stagedFile{temporary: temporary, final: spec.path}
-	staged.info, err = file.Stat()
-	if err == nil {
-		var written int64
-		written, err = io.Copy(file, bytes.NewReader(spec.contents))
-		if err == nil && written != int64(len(spec.contents)) {
-			err = io.ErrShortWrite
-		}
-	}
-	if err == nil {
-		err = file.Sync()
-	}
-	return staged, errors.Join(err, file.Close())
-}
-
-func cleanupInvocation(dir string, staged []stagedFile, published []publishedFile) error {
-	return errors.Join(cleanupPublished(published), cleanupStaged(staged), syncDirectory(dir))
-}
-
-func cleanupPublished(published []publishedFile) error {
-	var cleanupErrors []error
-	for _, file := range published {
-		cleanupErrors = append(cleanupErrors, removeIfSame(file.path, file.info))
-	}
-	return errors.Join(cleanupErrors...)
-}
-
-func cleanupStaged(staged []stagedFile) error {
-	var cleanupErrors []error
-	for _, file := range staged {
-		cleanupErrors = append(cleanupErrors, removeIfSame(file.temporary, file.info))
-	}
-	return errors.Join(cleanupErrors...)
-}
-
-func removeIfSame(path string, stagedInfo fs.FileInfo) error {
-	if stagedInfo == nil {
-		return nil
-	}
-	current, err := os.Lstat(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil || !os.SameFile(current, stagedInfo) {
 		return err
 	}
-	return os.Remove(path)
+	var writeErr error
+	written, writeErr := io.Copy(file, bytes.NewReader(contents))
+	if writeErr == nil && written != int64(len(contents)) {
+		writeErr = io.ErrShortWrite
+	}
+	if writeErr == nil {
+		writeErr = file.Sync()
+	}
+	return errors.Join(writeErr, file.Close())
 }
 
-func syncDirectory(dir string) error {
-	directory, err := os.Open(dir)
+func syncDirectory(path string) error {
+	directory, err := os.Open(path)
 	if err != nil {
 		return err
 	}

@@ -46,17 +46,21 @@ type fileSpec struct {
 
 // Init creates a local CA and a server certificate without replacing any file.
 func Init(options InitOptions) (Files, error) {
-	files := outputFiles(options.OutputDir)
 	if options.OutputDir == "" || options.Now == nil || options.Random == nil ||
 		(len(options.DNSNames) == 0 && len(options.IPAddresses) == 0) {
 		return Files{}, errInvalidInitOptions
 	}
+	output := filepath.Clean(options.OutputDir)
+	if filepath.Base(output) == string(filepath.Separator) {
+		return Files{}, errInvalidInitOptions
+	}
+	files := outputFiles(output)
 
 	specs, err := generateFileSpecs(options, files)
 	if err != nil {
 		return Files{}, err
 	}
-	if err := publishAll(options.OutputDir, specs); err != nil {
+	if err := publishDirectory(output, specs); err != nil {
 		return Files{}, err
 	}
 	return files, nil

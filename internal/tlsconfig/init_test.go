@@ -11,17 +11,30 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
 
 var testNow = time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC)
 
-func TestInitGeneratesVerifiableCertificates(t *testing.T) {
-	files, err := Init(testOptions(t.TempDir()))
+func TestInitPublishesCompleteVerifiableCertificateDirectory(t *testing.T) {
+	output := testOutput(t)
+	files, err := Init(testOptions(output))
 	if err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
+	if files != outputFiles(output) {
+		t.Fatalf("Init() files = %#v, want %#v", files, outputFiles(output))
+	}
+	info, err := os.Stat(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.IsDir() || info.Mode().Perm() != 0o700 {
+		t.Fatalf("output mode = %v, want private directory mode 0700", info.Mode())
+	}
+	assertNoStagingDirectories(t, filepath.Dir(output))
 
 	ca := readCertificate(t, files.CACertificate)
 	server := readCertificate(t, files.ServerCertificate)
@@ -72,7 +85,7 @@ func TestInitGeneratesVerifiableCertificates(t *testing.T) {
 }
 
 func TestInitUsesRestrictivePrivateKeyModes(t *testing.T) {
-	files, err := Init(testOptions(t.TempDir()))
+	files, err := Init(testOptions(testOutput(t)))
 	if err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -96,15 +109,15 @@ func TestInitUsesRestrictivePrivateKeyModes(t *testing.T) {
 	}
 }
 
-func TestInitRefusesOverwriteWithoutChangingAnyFile(t *testing.T) {
-	dir := t.TempDir()
-	files, err := Init(testOptions(dir))
+func TestInitRefusesExistingDestinationWithoutChangingItsFiles(t *testing.T) {
+	output := testOutput(t)
+	files, err := Init(testOptions(output))
 	if err != nil {
 		t.Fatalf("first Init() error = %v", err)
 	}
 	before := snapshotFiles(t, allFiles(files))
 
-	if _, err := Init(testOptions(dir)); !errors.Is(err, fs.ErrExist) {
+	if _, err := Init(testOptions(output)); !errors.Is(err, fs.ErrExist) {
 		t.Fatalf("second Init() error = %v, want fs.ErrExist", err)
 	}
 	for path, want := range before {
@@ -112,90 +125,130 @@ func TestInitRefusesOverwriteWithoutChangingAnyFile(t *testing.T) {
 			t.Fatalf("%s after refusal = %x, %v; want unchanged", filepath.Base(path), got, err)
 		}
 	}
-	assertNoTemporaryFiles(t, dir)
+	assertNoStagingDirectories(t, filepath.Dir(output))
 }
 
-func TestInitPreexistingFinalIsPreservedAndInvocationFilesAreCleaned(t *testing.T) {
-	const sentinel = "preexisting sentinel"
-	for _, finalName := range []string{"ca.crt", "ca.key", "tls.crt", "tls.key"} {
-		t.Run(finalName, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, finalName)
-			if err := os.WriteFile(path, []byte(sentinel), 0o600); err != nil {
-				t.Fatal(err)
+func TestInitPreservesEveryExistingDestinationType(t *testing.T) {
+	for _, destinationType := range []string{"file", "directory", "symlink"} {
+		t.Run(destinationType, func(t *testing.T) {
+			parent := t.TempDir()
+			output := filepath.Join(parent, "certificates")
+			const sentinel = "preexisting sentinel"
+			switch destinationType {
+			case "file":
+				if err := os.WriteFile(output, []byte(sentinel), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Mkdir(output, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(output, "sentinel"), []byte(sentinel), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "symlink":
+				target := filepath.Join(parent, "target")
+				if err := os.Mkdir(target, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(target, "sentinel"), []byte(sentinel), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, output); err != nil {
+					t.Fatal(err)
+				}
 			}
 
-			if _, err := Init(testOptions(dir)); !errors.Is(err, fs.ErrExist) {
+			if _, err := Init(testOptions(output)); !errors.Is(err, fs.ErrExist) {
 				t.Fatalf("Init() error = %v, want fs.ErrExist", err)
 			}
-			got, err := os.ReadFile(path)
-			if err != nil || string(got) != sentinel {
-				t.Fatalf("preexisting file = %q, %v; want sentinel", got, err)
+			switch destinationType {
+			case "file":
+				assertFileContents(t, output, sentinel)
+			case "directory":
+				assertOnlySentinel(t, output, sentinel)
+			case "symlink":
+				info, err := os.Lstat(output)
+				if err != nil || info.Mode()&fs.ModeSymlink == 0 {
+					t.Fatalf("destination after Init = %v, %v; want symlink", info, err)
+				}
+				assertOnlySentinel(t, output, sentinel)
 			}
-			entries, err := os.ReadDir(dir)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(entries) != 1 || entries[0].Name() != finalName {
-				t.Fatalf("directory entries = %v; want only %s", entryNames(entries), finalName)
-			}
+			assertNoStagingDirectories(t, parent)
 		})
 	}
 }
 
-func TestCleanupPublishedPreservesAReplacement(t *testing.T) {
-	dir := t.TempDir()
-	staged := filepath.Join(dir, "staged")
-	final := filepath.Join(dir, "final")
-	generatedInfo := writeAndStat(t, staged, "generated")
-	if err := os.Link(staged, final); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(final); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(final, []byte("replacement"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+func TestInitPrepublicationFailureLeavesNoFinalPath(t *testing.T) {
+	publishError := errors.New("publish failed")
+	originalRename := renameNoReplace
+	renameNoReplace = func(int, string, int, string, uint) error { return publishError }
+	t.Cleanup(func() { renameNoReplace = originalRename })
 
-	if err := cleanupPublished([]publishedFile{{path: final, info: generatedInfo}}); err != nil {
-		t.Fatalf("cleanupPublished() error = %v", err)
+	output := testOutput(t)
+	if _, err := Init(testOptions(output)); !errors.Is(err, publishError) {
+		t.Fatalf("Init() error = %v, want publication error", err)
 	}
-	assertFileContents(t, final, "replacement")
+	if _, err := os.Lstat(output); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("output after failed Init = %v, want absent", err)
+	}
+	assertNoStagingDirectories(t, filepath.Dir(output))
 }
 
-func TestCleanupInvocationPreservesAReplacedTemporaryFile(t *testing.T) {
-	dir := t.TempDir()
-	temporary := filepath.Join(dir, "temporary")
-	generatedInfo := writeAndStat(t, temporary, "generated")
-	if err := os.Link(temporary, filepath.Join(dir, "generated-anchor")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(temporary); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(temporary, []byte("replacement"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+func TestInitDoesNotRollBackAfterPublication(t *testing.T) {
+	syncError := errors.New("parent sync failed")
+	originalSync := syncParent
+	syncParent = func(int) error { return syncError }
+	t.Cleanup(func() { syncParent = originalSync })
 
-	staged := []stagedFile{{temporary: temporary, info: generatedInfo}}
-	if err := cleanupInvocation(dir, staged, nil); err != nil {
-		t.Fatalf("cleanupInvocation() error = %v", err)
+	output := testOutput(t)
+	if _, err := Init(testOptions(output)); !errors.Is(err, syncError) {
+		t.Fatalf("Init() error = %v, want parent sync error", err)
 	}
-	assertFileContents(t, temporary, "replacement")
+	entries, err := os.ReadDir(output)
+	if err != nil || len(entries) != 4 {
+		t.Fatalf("published output entries = %v, %v; want complete output", entries, err)
+	}
 }
 
-func testOptions(dir string) InitOptions {
+func TestInitJoinsPrepublicationAndCleanupErrors(t *testing.T) {
+	publishError := errors.New("publish failed")
+	cleanupError := errors.New("staging cleanup failed")
+	originalRename := renameNoReplace
+	originalRemove := removeStaging
+	renameNoReplace = func(int, string, int, string, uint) error { return publishError }
+	removeStaging = func(string) error { return cleanupError }
+	t.Cleanup(func() {
+		renameNoReplace = originalRename
+		removeStaging = originalRemove
+	})
+
+	output := testOutput(t)
+	_, err := Init(testOptions(output))
+	if !errors.Is(err, publishError) || !errors.Is(err, cleanupError) {
+		t.Fatalf("Init() error = %v, want joined publication and cleanup errors", err)
+	}
+	if _, statErr := os.Lstat(output); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("output after failed Init = %v, want absent", statErr)
+	}
+}
+
+func testOptions(output string) InitOptions {
 	entropy := append(bytes.Repeat([]byte{0x91}, 32), bytes.Repeat([]byte{0xa2}, 16)...)
 	entropy = append(entropy, bytes.Repeat([]byte{0xb3}, 32)...)
 	entropy = append(entropy, bytes.Repeat([]byte{0xc4}, 16)...)
 	return InitOptions{
-		OutputDir:   dir,
+		OutputDir:   output,
 		DNSNames:    []string{"repo.internal"},
 		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
 		Now:         func() time.Time { return testNow },
 		Random:      bytes.NewReader(entropy),
 	}
+}
+
+func testOutput(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "certificates")
 }
 
 func readCertificate(t *testing.T, path string) *x509.Certificate {
@@ -232,35 +285,26 @@ func snapshotFiles(t *testing.T, paths []string) map[string][]byte {
 	return result
 }
 
-func assertNoTemporaryFiles(t *testing.T, dir string) {
+func assertNoStagingDirectories(t *testing.T, parent string) {
 	t.Helper()
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(parent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 4 {
-		t.Fatalf("directory entries = %v; want four final files", entryNames(entries))
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".repowolf-cert-") {
+			t.Fatalf("staging directory %q remains", entry.Name())
+		}
 	}
 }
 
-func entryNames(entries []os.DirEntry) []string {
-	names := make([]string, len(entries))
-	for i, entry := range entries {
-		names[i] = entry.Name()
-	}
-	return names
-}
-
-func writeAndStat(t *testing.T, path, contents string) fs.FileInfo {
+func assertOnlySentinel(t *testing.T, directory, contents string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
-		t.Fatal(err)
+	entries, err := os.ReadDir(directory)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "sentinel" {
+		t.Fatalf("%s entries = %v, %v; want only sentinel", directory, entries, err)
 	}
-	info, err := os.Lstat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return info
+	assertFileContents(t, filepath.Join(directory, "sentinel"), contents)
 }
 
 func assertFileContents(t *testing.T, path, want string) {

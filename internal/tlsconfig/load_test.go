@@ -6,7 +6,7 @@ import (
 )
 
 func TestLoadServerRequiresTLS13(t *testing.T) {
-	files, err := Init(testOptions(t.TempDir()))
+	files, err := Init(testOptions(testOutput(t)))
 	if err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -23,7 +23,7 @@ func TestLoadServerRequiresTLS13(t *testing.T) {
 }
 
 func TestLoadServerRejectsWrongPrivateKey(t *testing.T) {
-	files, err := Init(testOptions(t.TempDir()))
+	files, err := Init(testOptions(testOutput(t)))
 	if err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}

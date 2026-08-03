@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -29,7 +30,7 @@ func TestRunTokenGenerate(t *testing.T) {
 }
 
 func TestRunCertInit(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "certificates")
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"cert", "init", "--output", dir, "--dns", "repo.internal"}, &stdout, &stderr)
 	if code != 0 || stderr.Len() != 0 {
