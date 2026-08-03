@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -150,6 +151,75 @@ func TestStartFailureRemovesPrivateCWD(t *testing.T) {
 		t.Fatalf("error = %v, want start failed", err)
 	}
 	assertEmptyDirectory(t, tempRoot)
+}
+
+func TestStartRechecksExpiredParentAfterBlockedCleanup(t *testing.T) {
+	tempRoot := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "launched")
+	command := testCommand("mark-launch", marker)
+	ctx := newExpiringTestContext()
+	type startResult struct {
+		process *Process
+		err     error
+	}
+	done := make(chan startResult, 1)
+
+	cleanupEntered := make(chan struct{})
+	allowCleanup := make(chan struct{})
+	cleanupDone := make(chan struct{})
+	authority := &processAuthority{
+		pgid: 42,
+		kill: func(int, syscall.Signal) error { return nil },
+		reap: func() error { return nil },
+		reapGroup: func(int) error {
+			close(cleanupEntered)
+			<-allowCleanup
+			return nil
+		},
+	}
+	go func() {
+		_, _ = authority.retireAndReap()
+		close(cleanupDone)
+	}()
+	<-cleanupEntered
+	go func() {
+		process, err := (&Runner{tempRoot: tempRoot}).Start(ctx, command)
+		done <- startResult{process: process, err: err}
+	}()
+	waitForDirectoryEntry(t, tempRoot)
+	ctx.expire()
+	close(allowCleanup)
+	<-cleanupDone
+
+	got := <-done
+	if got.process != nil {
+		_ = got.process.Stdin.Close()
+		_, _ = io.Copy(io.Discard, got.process.Stdout)
+		_, _ = got.process.Wait()
+	}
+	if !errors.Is(got.err, context.DeadlineExceeded) {
+		t.Fatalf("Start returned process=%v error=%v, want deadline", got.process != nil, got.err)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("provider launched after parent expiry: %v", err)
+	}
+	assertEmptyDirectory(t, tempRoot)
+}
+
+func waitForDirectoryEntry(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) > 0 {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for private cwd creation")
 }
 
 func TestStartDiscardsBoundedStderrBeforeWaitReturns(t *testing.T) {

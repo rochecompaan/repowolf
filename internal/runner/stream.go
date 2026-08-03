@@ -80,8 +80,22 @@ func (runner *Runner) Start(parent context.Context, requested Command) (*Process
 		return nil, ErrStartFailed
 	}
 	processTableMu.Lock()
-	err = cmd.Start()
+	contextErr := parent.Err()
+	if contextErr == nil {
+		contextErr = operation.Err()
+	}
+	if contextErr == nil {
+		err = cmd.Start()
+	}
 	processTableMu.Unlock()
+	if contextErr != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
+		_ = stderr.Close()
+		cancel()
+		cleanup()
+		return nil, contextErr
+	}
 	if err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
@@ -178,28 +192,22 @@ func (process *Process) wait() {
 
 func (process *Process) classifyWaitError(observationErr, waitErr, groupErr, stderrErr, cleanupErr error) error {
 	interruption := process.authority.terminationReason()
+	var primary error
 	if errors.Is(interruption, ErrInputLimit) {
-		return ErrInputLimit
-	}
-	if errors.Is(interruption, ErrOutputLimit) {
-		return ErrOutputLimit
-	}
-	if errors.Is(interruption, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
-	}
-	if errors.Is(interruption, context.Canceled) {
-		return context.Canceled
+		primary = ErrInputLimit
+	} else if errors.Is(interruption, ErrOutputLimit) {
+		primary = ErrOutputLimit
+	} else if errors.Is(interruption, context.DeadlineExceeded) {
+		primary = context.DeadlineExceeded
+	} else if errors.Is(interruption, context.Canceled) {
+		primary = context.Canceled
+	} else if observationErr != nil || (stderrErr != nil && !errors.Is(stderrErr, os.ErrClosed)) || waitErr != nil {
+		primary = ErrCommandFailed
 	}
 	if groupErr != nil || cleanupErr != nil {
-		return ErrCleanupFailed
+		return errors.Join(primary, ErrCleanupFailed)
 	}
-	if observationErr != nil || (stderrErr != nil && !errors.Is(stderrErr, os.ErrClosed)) {
-		return ErrCommandFailed
-	}
-	if waitErr != nil {
-		return ErrCommandFailed
-	}
-	return nil
+	return primary
 }
 
 func exitCode(err error) int {
