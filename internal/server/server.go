@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/audit"
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"google.golang.org/grpc"
@@ -59,6 +60,9 @@ func New(options Options) (*Server, error) {
 		grpc.ChainStreamInterceptor(service.streamInterceptors()...),
 	)
 	grpc_health_v1.RegisterHealthServer(service.grpc, service.health)
+	if options.Policy != nil {
+		repowolfv1.RegisterGitHubServiceServer(service.grpc, newGitHubService(options.Policy, options.GitHub, options.AuditWriter))
+	}
 	if options.Register != nil {
 		options.Register(service.grpc)
 	}
@@ -89,6 +93,9 @@ func validateOptions(options Options) error {
 	}
 	if options.OperationTimeout <= 0 || options.GracePeriod <= 0 {
 		return fmt.Errorf("invalid server time limits")
+	}
+	if (options.Policy == nil) != (options.GitHub == nil) {
+		return fmt.Errorf("incomplete GitHub service dependencies")
 	}
 	return nil
 }

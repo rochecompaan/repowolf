@@ -13,6 +13,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/policy"
+	providergithub "github.com/rochecompaan/repowolf/internal/provider/github"
 	"github.com/rochecompaan/repowolf/internal/runner"
 	"github.com/rochecompaan/repowolf/internal/server"
 	"github.com/rochecompaan/repowolf/internal/tlsconfig"
@@ -28,6 +29,7 @@ type Runtime struct {
 	Tools               runner.Toolset
 	Policy              *policy.Snapshot
 	ProviderEnvironment []string
+	GitHub              *providergithub.Adapter
 	Server              *server.Server
 }
 
@@ -54,19 +56,27 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 		return nil, fmt.Errorf("build policy: %w", err)
 	}
 	providerEnvironment := runner.ProviderEnvironment(os.Environ(), tokenEnvironmentNames(cfg))
+	githubAdapter, err := providergithub.New(providergithub.AdapterOptions{
+		Path: tools.GH, Environment: providerEnvironment,
+		Timeout: cfg.Limits.OperationTimeout, Caller: &runner.Runner{},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create GitHub adapter: %w", err)
+	}
 	auditWriter := audit.NewWriter(auditOutput)
 	grpcServer, err := server.New(server.Options{
 		TLSConfig: tlsConfig, Tokens: tokens, AuditWriter: auditWriter,
 		MaxConcurrentRequests:             cfg.Limits.MaxConcurrentRequests,
 		MaxConcurrentRequestsPerPrincipal: cfg.Limits.MaxConcurrentRequestsPerPrincipal,
 		OperationTimeout:                  cfg.Limits.OperationTimeout, GracePeriod: shutdownGracePeriod,
+		Policy: policySnapshot, GitHub: githubAdapter,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create server: %w", err)
 	}
 	runtime := &Runtime{
 		Config: cfg, Tokens: tokens, TLSConfig: tlsConfig, Tools: tools,
-		Policy: policySnapshot, ProviderEnvironment: providerEnvironment, Server: grpcServer,
+		Policy: policySnapshot, ProviderEnvironment: providerEnvironment, GitHub: githubAdapter, Server: grpcServer,
 	}
 	runtime.Server.MarkReady()
 	return runtime, nil
