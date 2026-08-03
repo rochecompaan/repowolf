@@ -3,14 +3,16 @@ package gitproto
 import (
 	"bytes"
 	"io"
+
+	"github.com/rochecompaan/repowolf/internal/config"
 )
 
 func receiveOptions(maxBytes int) ReceiveOptions {
-	return ReceiveOptions{MaxBytes: maxBytes, MaxCommands: 16, AdvertisedCaps: standardCapabilities()}
+	return ReceiveOptions{MaxBytes: maxBytes, MaxCommands: 16, Policy: config.PushPolicy{MaxRefUpdates: 16}, AdvertisedCaps: standardCapabilities()}
 }
 
 func receiveCertificateOptions(maxBytes int) ReceiveOptions {
-	return ReceiveOptions{MaxBytes: maxBytes, MaxCommands: 16, AdvertisedCaps: certificateCapabilities()}
+	return ReceiveOptions{MaxBytes: maxBytes, MaxCommands: 16, Policy: config.PushPolicy{MaxRefUpdates: 16}, AdvertisedCaps: certificateCapabilities()}
 }
 
 func standardCapabilities() Capabilities {

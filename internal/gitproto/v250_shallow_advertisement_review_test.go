@@ -2,10 +2,11 @@ package gitproto
 
 import (
 	"bytes"
-	"strings"
+	"errors"
 	"testing"
 
 	"github.com/rochecompaan/repowolf/internal/config"
+	"github.com/rochecompaan/repowolf/internal/policy"
 )
 
 func TestParseReceivePackAcceptsCapturedGitV250ShallowPayload(t *testing.T) {
@@ -22,10 +23,10 @@ func TestParseReceivePackAppliesPolicyAfterCapturedGitV250ShallowPayload(t *test
 		MaxBytes:       4096,
 		MaxCommands:    16,
 		AdvertisedCaps: receiveOptions(4096).AdvertisedCaps,
-		Policy:         config.PushPolicy{DenyRefs: []string{"refs/heads/main"}},
+		Policy:         config.PushPolicy{MaxRefUpdates: 16, DenyRefs: []string{"refs/heads/main"}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "refs/heads/main") {
-		t.Fatalf("ParseReceivePack() error = %v, want main policy denial", err)
+	if !errors.Is(err, policy.ErrRefPolicy) {
+		t.Fatalf("ParseReceivePack() error = %v, want policy.ErrRefPolicy", err)
 	}
 	assertNoForwardableReceiveResult(t, result)
 }

@@ -2,10 +2,12 @@ package gitproto
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/rochecompaan/repowolf/internal/config"
+	"github.com/rochecompaan/repowolf/internal/policy"
 )
 
 func TestParseReceivePackRejectsUnadvertisedRequestedCapability(t *testing.T) {
@@ -37,10 +39,10 @@ func TestParseReceivePackAppliesMainPolicyAfterShallowPrefix(t *testing.T) {
 		flush(),
 	)
 	options := receiveOptions(4096)
-	options.Policy = config.PushPolicy{DenyRefs: []string{"refs/heads/main"}}
+	options.Policy = config.PushPolicy{MaxRefUpdates: 16, DenyRefs: []string{"refs/heads/main"}}
 	result, err := ParseReceivePack(fragmented(raw, 1), options)
-	if err == nil || !strings.Contains(err.Error(), "refs/heads/main") {
-		t.Fatalf("ParseReceivePack() error = %v, want main denial", err)
+	if !errors.Is(err, policy.ErrRefPolicy) {
+		t.Fatalf("ParseReceivePack() error = %v, want policy.ErrRefPolicy", err)
 	}
 	assertNoForwardableReceiveResult(t, result)
 }

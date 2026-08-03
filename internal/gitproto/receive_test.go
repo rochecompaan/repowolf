@@ -2,10 +2,12 @@ package gitproto
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/rochecompaan/repowolf/internal/config"
+	"github.com/rochecompaan/repowolf/internal/policy"
 )
 
 const (
@@ -97,6 +99,44 @@ func TestParseReceivePackRejectsPolicyLimitWithoutPartialResult(t *testing.T) {
 	assertNoForwardableReceiveResult(t, result)
 }
 
+func TestParseReceivePackReturnsCanonicalPolicyFailuresWithoutPartialResult(t *testing.T) {
+	oneUpdate := joinPackets(packet(sha1A+" "+sha1B+" refs/heads/feature\x00report-status"), flush())
+	twoUpdates := joinPackets(
+		packet(sha1A+" "+sha1B+" refs/heads/feature\x00report-status"),
+		packet(zero1+" "+sha1B+" refs/tags/v1"),
+		flush(),
+	)
+	deleteUpdate := joinPackets(packet(sha1A+" "+zero1+" refs/heads/feature\x00report-status"), flush())
+
+	tests := []struct {
+		name    string
+		raw     []byte
+		policy  config.PushPolicy
+		options func(ReceiveOptions) ReceiveOptions
+	}{
+		{"zero limit", oneUpdate, config.PushPolicy{}, func(options ReceiveOptions) ReceiveOptions { return options }},
+		{"negative limit", oneUpdate, config.PushPolicy{MaxRefUpdates: -1}, func(options ReceiveOptions) ReceiveOptions { return options }},
+		{"update limit", twoUpdates, config.PushPolicy{MaxRefUpdates: 1}, func(options ReceiveOptions) ReceiveOptions { return options }},
+		{"denied ref", oneUpdate, config.PushPolicy{MaxRefUpdates: 1, DenyRefs: []string{"refs/heads/feature"}}, func(options ReceiveOptions) ReceiveOptions { return options }},
+		{"denied delete", deleteUpdate, config.PushPolicy{MaxRefUpdates: 1, DenyDeletes: true}, func(options ReceiveOptions) ReceiveOptions {
+			options.AdvertisedCaps["delete-refs"] = ""
+			return options
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			options := test.options(receiveOptions(4096))
+			options.Policy = test.policy
+
+			result, err := ParseReceivePack(bytes.NewReader(test.raw), options)
+			if !errors.Is(err, policy.ErrRefPolicy) {
+				t.Fatalf("ParseReceivePack() error = %v, want policy.ErrRefPolicy", err)
+			}
+			assertNoForwardableReceiveResult(t, result)
+		})
+	}
+}
+
 func TestParseReceivePackAcceptsShallowDeclarationsBeforeOrdinaryCommands(t *testing.T) {
 	raw := joinPackets(
 		packet("shallow "+sha1A+"\n"),
@@ -121,10 +161,10 @@ func TestParseReceivePackRejectsMainUnderDefaultPolicy(t *testing.T) {
 		MaxBytes:       4096,
 		MaxCommands:    16,
 		AdvertisedCaps: certificateCapabilities(),
-		Policy:         config.PushPolicy{DenyRefs: []string{"refs/heads/main"}},
+		Policy:         config.PushPolicy{MaxRefUpdates: 16, DenyRefs: []string{"refs/heads/main"}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "refs/heads/main") {
-		t.Fatalf("ParseReceivePack() error = %v, want main denial", err)
+	if !errors.Is(err, policy.ErrRefPolicy) {
+		t.Fatalf("ParseReceivePack() error = %v, want policy.ErrRefPolicy", err)
 	}
 	if result.Prefix != nil || result.Updates != nil || result.Capabilities != nil {
 		t.Fatalf("result = %#v, want no forwardable result", result)
@@ -183,6 +223,7 @@ func TestParseReceivePackAcceptsShallowPushCertificateAndAdvertisedOptions(t *te
 	result, err := ParseReceivePack(fragmented(raw, 1), ReceiveOptions{
 		MaxBytes:       4096,
 		MaxCommands:    16,
+		Policy:         config.PushPolicy{MaxRefUpdates: 16},
 		AdvertisedCaps: certificateCapabilities(),
 	})
 	if err != nil {
@@ -238,10 +279,10 @@ func TestParseReceivePackAppliesPolicyToSignedCertificateCommands(t *testing.T) 
 		MaxBytes:       4096,
 		MaxCommands:    16,
 		AdvertisedCaps: certificateCapabilities(),
-		Policy:         config.PushPolicy{DenyRefs: []string{"refs/heads/main"}},
+		Policy:         config.PushPolicy{MaxRefUpdates: 16, DenyRefs: []string{"refs/heads/main"}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "refs/heads/main") {
-		t.Fatalf("ParseReceivePack() error = %v, want main denial", err)
+	if !errors.Is(err, policy.ErrRefPolicy) {
+		t.Fatalf("ParseReceivePack() error = %v, want policy.ErrRefPolicy", err)
 	}
 	assertNoForwardableReceiveResult(t, result)
 }

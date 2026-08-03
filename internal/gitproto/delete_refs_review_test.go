@@ -3,6 +3,8 @@ package gitproto
 import (
 	"bytes"
 	"testing"
+
+	"github.com/rochecompaan/repowolf/internal/config"
 )
 
 func TestParseReceivePackRequiresAdvertisedDeleteRefsForDeletes(t *testing.T) {
@@ -20,14 +22,14 @@ func TestParseReceivePackRequiresAdvertisedDeleteRefsForDeletes(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			unadvertised := ReceiveOptions{MaxBytes: 4096, MaxCommands: 16, AdvertisedCaps: testCase.advertised}
+			unadvertised := ReceiveOptions{MaxBytes: 4096, MaxCommands: 16, Policy: config.PushPolicy{MaxRefUpdates: 16}, AdvertisedCaps: testCase.advertised}
 			result, err := ParseReceivePack(bytes.NewReader(testCase.raw), unadvertised)
 			if err == nil {
 				t.Fatal("ParseReceivePack() error = nil without delete-refs")
 			}
 			assertNoForwardableReceiveResult(t, result)
 
-			advertised := ReceiveOptions{MaxBytes: 4096, MaxCommands: 16, AdvertisedCaps: make(Capabilities, len(testCase.advertised)+1)}
+			advertised := ReceiveOptions{MaxBytes: 4096, MaxCommands: 16, Policy: config.PushPolicy{MaxRefUpdates: 16}, AdvertisedCaps: make(Capabilities, len(testCase.advertised)+1)}
 			for capability, value := range testCase.advertised {
 				advertised.AdvertisedCaps[capability] = value
 			}

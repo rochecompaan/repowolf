@@ -5,7 +5,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/policy"
 )
 
@@ -75,25 +74,6 @@ func (parser *receiveParser) addCommand(line string) error {
 	}
 	parser.seenRefs[ref] = struct{}{}
 	parser.updates = append(parser.updates, policy.Update{OldOID: oldID, NewOID: newID, Ref: ref})
-	return nil
-}
-
-func validatePushPolicy(pushPolicy config.PushPolicy, updates []policy.Update) error {
-	if pushPolicy.MaxRefUpdates > 0 && len(updates) > pushPolicy.MaxRefUpdates {
-		return fmt.Errorf("push updates %d refs, maximum is %d", len(updates), pushPolicy.MaxRefUpdates)
-	}
-	denied := make(map[string]struct{}, len(pushPolicy.DenyRefs))
-	for _, ref := range pushPolicy.DenyRefs {
-		denied[ref] = struct{}{}
-	}
-	for _, update := range updates {
-		if _, blocked := denied[update.Ref]; blocked {
-			return fmt.Errorf("push update for denied ref %q", update.Ref)
-		}
-		if pushPolicy.DenyDeletes && isZeroObjectID(update.NewOID) {
-			return fmt.Errorf("push deletion for ref %q is denied", update.Ref)
-		}
-	}
 	return nil
 }
 
