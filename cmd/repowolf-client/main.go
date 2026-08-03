@@ -10,13 +10,14 @@ import (
 	"syscall"
 
 	clientgithub "github.com/rochecompaan/repowolf/internal/client/github"
+	"github.com/rochecompaan/repowolf/internal/client/gitssh"
 )
 
 func main() {
-	os.Exit(runMain(os.Args, os.Stdout, os.Stderr))
+	os.Exit(runMain(os.Args, os.Stdin, os.Stdout, os.Stderr))
 }
 
-func runMain(args []string, stdout, stderr io.Writer) int {
+func runMain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	signals := make(chan os.Signal, 1)
 	finished := make(chan struct{})
@@ -35,7 +36,7 @@ func runMain(args []string, stdout, stderr io.Writer) int {
 		}
 	}()
 
-	status := runClient(ctx, args[0], args[1:], stdout, stderr)
+	status := runClient(ctx, args[0], args[1:], stdin, stdout, stderr)
 	signal.Stop(signals)
 	close(finished)
 	cancel(context.Canceled)
@@ -48,7 +49,7 @@ type signalCause struct{ signal syscall.Signal }
 func (cause signalCause) Error() string { return "interrupted" }
 func (cause signalCause) ExitCode() int { return 128 + int(cause.signal) }
 
-func runClient(ctx context.Context, name string, args []string, stdout, stderr io.Writer) int {
+func runClient(ctx context.Context, name string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	mode, ok := modeForBase(name)
 	if !ok {
 		fmt.Fprintln(stderr, "usage: gh | repowolf-git-ssh")
@@ -57,8 +58,7 @@ func runClient(ctx context.Context, name string, args []string, stdout, stderr i
 	if mode == "gh" {
 		return clientgithub.Run(ctx, args, stdout, stderr)
 	}
-	fmt.Fprintln(stderr, "usage: repowolf-git-ssh")
-	return 2
+	return gitssh.Run(ctx, args, stdin, stdout, stderr)
 }
 
 func modeForBase(name string) (string, bool) {
