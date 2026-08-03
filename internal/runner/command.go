@@ -11,6 +11,7 @@ var (
 	ErrInvalidCommand = errors.New("invalid provider command")
 	ErrStartFailed    = errors.New("provider command start failed")
 	ErrCommandFailed  = errors.New("provider command failed")
+	ErrInputLimit     = errors.New("provider input limit exceeded")
 	ErrOutputLimit    = errors.New("provider output limit exceeded")
 	ErrCleanupFailed  = errors.New("provider command cleanup failed")
 )
@@ -22,6 +23,7 @@ type Command struct {
 	Stdin       []byte
 	Env         []string
 	Timeout     time.Duration
+	StdinLimit  int
 	StdoutLimit int
 	StderrLimit int
 }
@@ -38,8 +40,11 @@ type Result struct {
 }
 
 func cloneAndValidate(command Command) (Command, error) {
-	if !filepath.IsAbs(command.Path) || command.Timeout <= 0 || command.StdoutLimit <= 0 || command.StderrLimit <= 0 {
+	if !filepath.IsAbs(command.Path) || command.Timeout <= 0 || command.StdinLimit <= 0 || command.StdoutLimit <= 0 || command.StderrLimit <= 0 {
 		return Command{}, ErrInvalidCommand
+	}
+	if len(command.Stdin) > command.StdinLimit {
+		return Command{}, ErrInputLimit
 	}
 	if strings.IndexByte(command.Path, 0) >= 0 {
 		return Command{}, ErrInvalidCommand
