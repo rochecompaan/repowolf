@@ -7,7 +7,7 @@
 
 ## Summary
 
-RepoWolf is a repository-scoped access broker for Git and forge tooling. It lets an untrusted agent use familiar `gh`, `tea`, and Git workflows without receiving the service operator's forge tokens, SSH keys, forge configuration, or SSH agent.
+RepoWolf is a repository-scoped access broker for Git and forge tooling. It lets an untrusted agent use familiar `gh` and Git workflows without receiving the service operator's forge tokens, SSH keys, forge configuration, or SSH agent.
 
 The MVP is a sandbox-agnostic network service. Restricted client shims run inside an independently managed sandbox and communicate with `repowolf serve` over gRPC, HTTP/2, and mandatory server-side TLS. Opaque bearer tokens authenticate sandbox/project principals. Strict server-side policy grants each principal explicit capabilities over exact repositories.
 
@@ -21,7 +21,7 @@ RepoWolf does not create, inspect, register, or attest sandboxes. There is no sa
 
 The MVP must:
 
-- support repository-pinned GitHub and Gitea operations through restricted `gh` and `tea` compatibility shims;
+- support repository-pinned GitHub operations through a restricted `gh` compatibility shim;
 - support repository-pinned Git fetch and push over SSH while real Git remains inside the sandbox;
 - keep provider credentials and provider CLI implementations outside the agent sandbox;
 - enforce principal × exact repository × capability policy on the service;
@@ -42,7 +42,7 @@ The MVP does not provide:
 - Unix-socket transport;
 - HTTPS Git credential transport;
 - arbitrary Git execution on the service;
-- arbitrary `gh` or `tea` argv forwarding;
+- arbitrary provider CLI argv forwarding;
 - arbitrary provider API, GraphQL, URL, header, or endpoint access;
 - aliases, CLI extensions, templates, editors, browsers, or shell execution;
 - pull-request merge;
@@ -54,7 +54,7 @@ The MVP does not provide:
 - mTLS, workload identity, or GitHub App token issuance;
 - ACME, an online certificate authority, trust-store installation, or automatic certificate rotation;
 - configuration, token, certificate, or executable hot reload;
-- Windows support.
+- macOS or Windows support.
 
 Anonymous direct network access from an agent sandbox is outside RepoWolf's authority. The sandbox platform may restrict it separately.
 
@@ -64,9 +64,8 @@ Anonymous direct network access from an agent sandbox is outside RepoWolf's auth
 Agent sandbox                         RepoWolf service
 ┌──────────────────────┐              ┌──────────────────────────┐
 │ restricted gh        │── gRPC/TLS ─▶│ TLS and authentication   │
-│ restricted tea       │              │ policy engine            │
-│ real Git             │              │ GitHub adapter → gh      │
-│  └─ repowolf-git-ssh │◀─ streaming ─│ Gitea adapter → tea      │
+│ real Git             │              │ policy engine            │
+│  └─ repowolf-git-ssh │◀─ streaming ─│ GitHub adapter → gh      │
 └──────────────────────┘              │ Git SSH adapter → ssh    │
                                       │ subprocess runner        │
                                       │ audit writer             │
@@ -82,7 +81,7 @@ The service artifact contains:
 - bearer-token authentication;
 - policy evaluation;
 - versioned gRPC services;
-- GitHub, Gitea, and Git SSH provider adapters;
+- GitHub and Git SSH provider adapters;
 - bounded provider process execution;
 - safe structured audit output;
 - `repowolf config validate`;
@@ -92,7 +91,6 @@ The service artifact contains:
 The credential-free client artifact is a multicall binary installed as:
 
 - `gh` for GitHub-compatible commands;
-- `tea` for Gitea-compatible commands;
 - `repowolf-git-ssh` for Git SSH transport.
 
 The client artifact contains no provider credentials, provider executable paths, service policy, or provider process runner.
@@ -105,7 +103,7 @@ Trusted inputs are:
 - strict YAML policy supplied by the operator;
 - configured environment variables and mounted service Secrets;
 - server TLS private material;
-- installed `gh`, `tea`, and `ssh` implementations selected at service startup;
+- installed `gh` and `ssh` implementations selected at service startup;
 - provider credentials available to those service-side tools;
 - the service operator's logging and process supervisor.
 
@@ -141,7 +139,6 @@ tls:
 
 tools:
   gh: null
-  tea: null
   ssh: null
 
 providers:
@@ -170,19 +167,15 @@ principals:
       - repository: clubhouse-infra
         capabilities:
           - repository:read
-          - issues:read
-          - issues:write
-          - pull_requests:read
-          - pull_requests:write
-          - actions:read
-          - statuses:read
           - git:read
           - git:write
 ```
 
+The example grant is intentionally partial; production principals receive only the capabilities they require.
+
 A `null` tool path means resolve the executable once from the service startup `PATH`. An absolute path pins a deterministic executable for Nix and container deployments. The resolved canonical path remains fixed for the service lifetime. Request data never influences executable selection.
 
-Provider entries pin the provider kind, API host, Git SSH host, and SSH user. A Gitea provider may also name a non-secret operator-configured `tea` login profile. Repositories refer to a provider entry by ID; clients cannot supply or override provider hosts, profiles, SSH users, or executable choices.
+Provider entries pin the provider kind, API host, Git SSH host, and SSH user. Repositories refer to a provider entry by ID; clients cannot supply or override provider hosts, SSH users, or executable choices.
 
 The parser rejects:
 
@@ -223,14 +216,14 @@ MVP clients authenticate with opaque bearer tokens over mandatory TLS.
 The policy contains only environment variable names. At startup the service:
 
 1. reads every configured token environment variable;
-2. rejects missing, empty, malformed, or duplicate tokens;
+2. rejects missing, empty, malformed, or duplicate token values, including duplicate values assigned to the same principal;
 3. computes an in-memory digest for lookup;
 4. maps the digest to exactly one principal;
 5. excludes token values from logs, audit events, diagnostics, errors, and provider arguments.
 
-Provider subprocess environments are derived from the service startup environment by removing every configured RepoWolf client-token variable and RepoWolf's own internal control variables. All remaining provider-authentication variables are preserved byte-for-byte; RepoWolf does not inspect, retrieve, normalize, preflight, or mutate them. This prevents RepoWolf client credentials from being inherited by `gh`, `tea`, or `ssh`.
+Provider subprocess environments are derived from the service startup environment by removing every configured RepoWolf client-token variable and RepoWolf's own internal control variables. All remaining provider-authentication variables are preserved byte-for-byte; RepoWolf does not inspect, retrieve, normalize, preflight, or mutate them. This prevents RepoWolf client credentials from being inherited by `gh` or `ssh`.
 
-A service may temporarily configure multiple token environment variables for one principal during rotation. The operator restarts RepoWolf after adding or removing token sources.
+A service may temporarily configure multiple token environment variables for one principal during rotation, but each variable must contain a distinct token value. The operator restarts RepoWolf after adding or removing token sources.
 
 Clients send their token in gRPC authorization metadata. Tokens are never accepted in URLs, request payload fields, or command-line arguments.
 
@@ -280,17 +273,13 @@ Unknown services, methods, message variants, and protocol versions fail closed.
 
 Protocol operations are provider-specific while policy capabilities are provider-neutral.
 
-For example:
-
-- `github.issue.create` and `gitea.issue.create` have distinct request and result schemas;
-- both require `issues:write`;
-- each adapter constructs its own validated provider invocation.
+For example, `github.issue.create` has a GitHub-specific request and result schema, requires `issues:write`, and is converted into a validated GitHub invocation by the GitHub adapter. A future forge provider adds its own typed messages and adapter while reusing the capability where the authorization meaning matches.
 
 This preserves provider behavior without creating separate policy vocabularies or a lowest-common-denominator provider API.
 
 ### Supported operation surface
 
-The MVP preserves the current GitHub broker's useful clubhouse surface and adds safe Gitea equivalents where supported:
+The MVP preserves the current GitHub broker's useful clubhouse surface through typed GitHub operations:
 
 - exact repository metadata read;
 - issue list, view, create, edit, comment, close, and reopen;
@@ -302,11 +291,11 @@ The MVP preserves the current GitHub broker's useful clubhouse surface and adds 
 
 The server does not support merge, arbitrary API requests, GraphQL, workflow writes, repository administration, release administration, or command extensions.
 
-## `gh` and `tea` request flow
+## `gh` request flow
 
 A client shim parses supported native CLI syntax for compatibility. It may obtain the requested repository from an explicit native flag or from local Git metadata. That repository is untrusted request data, not authority.
 
-The shim sends a provider-specific typed RPC. The service:
+The shim sends a GitHub-specific typed RPC. The service:
 
 1. authenticates the bearer token;
 2. resolves the principal;
@@ -367,13 +356,13 @@ Validation includes:
 
 `refs/heads/main` is denied by default. A denied push forwards zero client update bytes to the remote receive-pack process.
 
-Once the prefix is accepted, RepoWolf forwards the validated prefix and remaining bounded stream in order. GitHub or Gitea branch protections remain authoritative for ancestry-sensitive rules that RepoWolf cannot determine without repository state.
+Once the prefix is accepted, RepoWolf forwards the validated prefix and remaining bounded stream in order. GitHub branch protections remain authoritative for ancestry-sensitive rules that RepoWolf cannot determine without repository state.
 
 The credential-bearing SSH process never opens or inspects the agent checkout.
 
 ## Provider execution
 
-At startup RepoWolf resolves required `gh`, `tea`, and `ssh` executables once from `PATH`, unless strict YAML provides absolute overrides. Startup fails before readiness if a configured provider lacks a required executable.
+At startup RepoWolf resolves required `gh` and `ssh` executables once from `PATH`, unless strict YAML provides absolute overrides. Startup fails before readiness if a configured provider lacks a required executable.
 
 Every provider request uses:
 
@@ -465,14 +454,12 @@ The MVP publishes:
 
 - Linux amd64 service and client binaries;
 - Linux arm64 service and client binaries;
-- macOS amd64 service and client binaries;
-- macOS arm64 service and client binaries;
-- an OCI service image containing RepoWolf, `gh`, `tea`, OpenSSH, and CA certificates;
+- an OCI service image containing RepoWolf, `gh`, OpenSSH, and CA certificates;
 - separate Nix flake service and client packages.
 
 The service and client remain separate build artifacts. A sandbox must receive only the client artifact.
 
-Windows support is deferred because provider process groups, signals, and Git SSH integration require a separate platform implementation.
+macOS and Windows support are deferred because provider process groups, signals, Git SSH integration, and release verification require separate platform work.
 
 ## Deployment
 
@@ -483,7 +470,7 @@ A host supervisor such as Home Manager or a systemd user service manages `repowo
 The existing Bubblewrap-based devenv jail remains responsible for filesystem and process isolation. Its RepoWolf integration is limited to:
 
 - including the credential-free client closure;
-- putting restricted `gh` and `tea` first in `PATH`;
+- putting restricted `gh` first in `PATH`;
 - setting `GIT_SSH_COMMAND=repowolf-git-ssh`;
 - providing `REPOWOLF_ENDPOINT`;
 - providing `REPOWOLF_TOKEN`;
@@ -498,7 +485,7 @@ A Kubernetes deployment uses:
 
 - a ConfigMap for strict policy YAML;
 - Secrets exposed as service token environment variables;
-- Secrets or mounted provider configuration for service-side `gh`, `tea`, and SSH authentication;
+- Secrets or mounted provider configuration for service-side `gh` and SSH authentication;
 - a Secret containing the TLS server certificate and key;
 - a ConfigMap or Secret containing the public trusted CA for agent pods;
 - a Service exposing the gRPC port;
@@ -517,8 +504,8 @@ Automated behavioral tests cover:
 - strict YAML parsing and startup failure;
 - environment token loading, duplicate detection, authentication, rotation, and non-disclosure;
 - principal × repository × capability policy matrices;
-- GitHub and Gitea client parsing;
-- provider-specific Protobuf validation;
+- GitHub client parsing;
+- GitHub-specific Protobuf validation;
 - generated provider commands and inert request data;
 - provider output validation;
 - error sanitization and anti-enumeration behavior;
@@ -536,16 +523,15 @@ Fuzz tests target CLI parsers, request validators, pkt-line parsing, receive-pac
 
 Integration verification must:
 
-- start a real TLS-enabled gRPC server and invoke all client modes;
-- use fake `gh`, `tea`, and `ssh` executables to prove generated argv and avoid real credentials;
+- start a real TLS-enabled gRPC server and invoke the `gh` and `repowolf-git-ssh` client modes;
+- use fake `gh` and `ssh` executables to prove generated argv and avoid real credentials;
 - exercise fetch and push against an offline fake Git host;
 - prove exact-main denial before forwarding client update bytes;
 - run the client inside a real Bubblewrap jail;
 - verify no service executable, host tool, provider configuration, SSH agent, or provider credential enters the client closure;
 - scan client errors and audit output for token, body, pack, environment, argv, and stderr leakage;
 - build and smoke-test the OCI image;
-- test Linux and macOS release binaries;
-- test supported Gitea behavior against a disposable local Gitea instance.
+- test Linux amd64 and arm64 release binaries.
 
 Exact-main denial is never tested against the real GitHub main branch.
 
@@ -568,7 +554,7 @@ Migration is incremental and rollback-safe:
 
 The MVP is complete when:
 
-- exact-repository GitHub, Gitea, Git fetch, and Git push operations work through one TLS gRPC service;
+- exact-repository GitHub, Git fetch, and Git push operations work through one TLS gRPC service;
 - clubhouse retains its current approved GitHub operation surface;
 - unauthorized repositories and capabilities fail closed;
 - exact-main push denial forwards zero client update bytes;
@@ -577,7 +563,7 @@ The MVP is complete when:
 - request, stream, process, time, and concurrency limits are enforced;
 - all accepted, denied, completed, cancelled, and failed operations produce safe audit metadata;
 - leak scans find no token, provider credential, body, pack, environment, argv, or raw-stderr exposure;
-- Linux, macOS, OCI, Nix, Bubblewrap, and offline Git integration verification passes;
+- Linux amd64/arm64, OCI, Nix, Bubblewrap, and offline Git integration verification passes;
 - the Go race suite passes;
 - the current embedded broker remains available until migration parity and review are complete.
 
@@ -585,11 +571,12 @@ The MVP is complete when:
 
 The architecture intentionally leaves room for:
 
+- Gitea typed operations, a restricted `tea` client, and Gitea service-account authentication;
 - mTLS or workload identity;
-- GitHub App, Gitea service-account, and external secret credential providers;
+- GitHub App and external secret credential providers;
 - native provider API adapters behind the existing typed operations;
 - certificate and configuration hot reload;
-- Windows process lifecycle support;
+- macOS and Windows process lifecycle, Git SSH, CI, and release support;
 - additional typed forge operations;
 - centralized audit sinks and metrics;
 - stronger distributed rate limiting;
