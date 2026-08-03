@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
 	"net"
@@ -212,8 +213,8 @@ func runLifecycleTest(t *testing.T, grace time.Duration, release bool) {
 			t.Fatalf("forced call code = %v", code)
 		}
 	}
-	if err := <-serveDone; err != nil {
-		t.Fatalf("Serve() error = %v", err)
+	if err := <-serveDone; (release && err != nil) || (!release && !errors.Is(err, audit.ErrIncomplete)) {
+		t.Fatalf("Serve() error = %v, release=%v", err, release)
 	}
 	connection.Close()
 }

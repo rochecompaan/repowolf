@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"sync"
 	"testing"
@@ -59,9 +60,9 @@ func TestBlockingAuditRetainsRequestLeaseAndDoesNotBlockForcedShutdown(t *testin
 	cancel()
 	select {
 	case err := <-serveDone:
-		if err != nil {
+		if !errors.Is(err, audit.ErrIncomplete) {
 			output.unblock()
-			t.Fatalf("Serve() error = %v", err)
+			t.Fatalf("forced shutdown error = %v, want audit incomplete", err)
 		}
 	case <-time.After(time.Second):
 		output.unblock()

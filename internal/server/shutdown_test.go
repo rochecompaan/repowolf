@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -46,8 +47,8 @@ func TestForceStopReturnsAndCleansUpWhenHandlerIgnoresCancellation(t *testing.T)
 	cancel()
 	select {
 	case err := <-serveDone:
-		if err != nil {
-			t.Fatalf("Serve() error = %v", err)
+		if !errors.Is(err, audit.ErrIncomplete) {
+			t.Fatalf("forced shutdown error = %v, want audit incomplete", err)
 		}
 	case <-time.After(400 * time.Millisecond):
 		close(release)

@@ -8,7 +8,10 @@ import (
 	"time"
 )
 
-var ErrSink = errors.New("audit sink unavailable")
+var (
+	ErrSink       = errors.New("audit sink unavailable")
+	ErrIncomplete = errors.New("audit incomplete")
+)
 
 // Sink accepts terminal audit events.
 type Sink interface {
@@ -65,9 +68,6 @@ func (writer *Writer) Flush() error {
 func (writer *Writer) FlushIfIdle() error {
 	if writer == nil {
 		return ErrSink
-	}
-	if _, ok := writer.output.(interface{ Flush() error }); !ok {
-		return nil
 	}
 	if !writer.mu.TryLock() {
 		return ErrSink
