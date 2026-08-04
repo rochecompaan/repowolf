@@ -21,6 +21,7 @@ repositories:
     git:
       denyRefs:
         - refs/heads/main
+        - refs/heads/task13-denied-update-marker
       denyDeletes: true
       maxRefUpdates: 16
   unauthorized:

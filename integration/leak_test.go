@@ -26,32 +26,94 @@ func TestMarkersRemainInTheirIntendedChannels(t *testing.T) {
 	checkout := filepath.Join(git.root, "leak-checkout")
 	clone := git.git(t, git.root, "clone", "ssh://git@github.com:22/alpha/repo.git", checkout)
 	if clone.err != nil {
-		t.Fatalf("offline clone: %v; stderr=%q", clone.err, clone.stderr)
+		t.Fatalf("offline clone: %v; stdout=%q stderr=%q", clone.err, clone.stdout, clone.stderr)
+	}
+	git.gitOK(t, checkout, "config", "user.name", "Task 13")
+	git.gitOK(t, checkout, "config", "user.email", "task13@invalid")
+	git.gitOK(t, checkout, "switch", "-c", "leak-matrix")
+	if err := os.WriteFile(filepath.Join(checkout, "allowed.txt"), []byte(allowedContentMarker+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git.gitOK(t, checkout, "add", "allowed.txt")
+	git.gitOK(t, checkout, "commit", "-m", "allowed leak matrix content")
+	allowedPush := git.git(t, checkout, "push", "origin", "HEAD:refs/heads/"+allowedUpdateMarker)
+	if allowedPush.err != nil {
+		t.Fatalf("allowed push: %v; stdout=%q stderr=%q", allowedPush.err, allowedPush.stdout, allowedPush.stderr)
+	}
+	allowedReceiveInput := string(mustRead(git.receiveInput))
+	if allowedReceiveInput == "" {
+		t.Fatal("allowed receive-pack forwarded no bytes")
+	}
+	allowedRemote := git.git(t, git.remote, "show", "refs/heads/"+allowedUpdateMarker+":allowed.txt")
+	if allowedRemote.err != nil || allowedRemote.stdout != allowedContentMarker+"\n" {
+		t.Fatalf("allowed remote content: %v; stdout=%q stderr=%q", allowedRemote.err, allowedRemote.stdout, allowedRemote.stderr)
+	}
+	if err := os.WriteFile(filepath.Join(checkout, "denied.txt"), []byte(deniedContentMarker+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git.gitOK(t, checkout, "add", "denied.txt")
+	git.gitOK(t, checkout, "commit", "-m", "denied leak matrix content")
+	deniedPush := git.git(t, checkout, "push", "origin", "HEAD:refs/heads/"+deniedUpdateMarker)
+	if deniedPush.err == nil || !strings.Contains(deniedPush.stderr, "repowolf git transport failed") {
+		t.Fatalf("denied push: %v; stdout=%q stderr=%q", deniedPush.err, deniedPush.stdout, deniedPush.stderr)
+	}
+	deniedReceiveInput := string(mustRead(git.receiveInput))
+	if deniedReceiveInput != "" {
+		t.Fatalf("denied receive-pack forwarded %d bytes", len(deniedReceiveInput))
+	}
+	deniedRemote := git.git(t, git.remote, "show", "refs/heads/"+deniedUpdateMarker+":denied.txt")
+	if deniedRemote.err == nil || deniedRemote.stdout != "" {
+		t.Fatalf("denied remote content exists: %v; stdout=%q stderr=%q", deniedRemote.err, deniedRemote.stdout, deniedRemote.stderr)
 	}
 	git.server.Stop(t)
 
 	channels := map[string]string{
-		"client.stdout":        listOut + createOut + commentOut + clone.stdout,
-		"client.diagnostics":   listErr + createErr + commentErr + clone.stderr,
-		"audit":                forge.audit() + string(mustRead(git.server.AuditPath)),
-		"server.stderr":        string(mustRead(forge.server.StderrPath)) + string(mustRead(git.server.StderrPath)),
-		"provider.argv":        string(mustRead(forge.providerArgvPath)),
-		"provider.stdin":       string(mustRead(forge.providerInputPath)),
-		"provider.stdout":      string(mustRead(forge.providerOutputPath)),
-		"provider.environment": string(mustRead(forge.providerEnvPath)),
-		"provider.stderr":      string(mustRead(forge.providerStderrPath)),
-		"checkout":             string(mustRead(filepath.Join(checkout, "pack.txt"))),
+		"forge.client.stdout":   listOut + createOut + commentOut,
+		"forge.client.stderr":   listErr + createErr + commentErr,
+		"git.clone.stdout":      clone.stdout,
+		"git.clone.stderr":      clone.stderr,
+		"git.allowed.stdout":    allowedPush.stdout,
+		"git.allowed.stderr":    allowedPush.stderr,
+		"git.denied.stdout":     deniedPush.stdout,
+		"git.denied.stderr":     deniedPush.stderr,
+		"git.remote.stdout":     allowedRemote.stdout + deniedRemote.stdout,
+		"git.remote.stderr":     allowedRemote.stderr + deniedRemote.stderr,
+		"forge.audit":           forge.audit(),
+		"git.audit":             string(mustRead(git.server.AuditPath)),
+		"server.stderr":         string(mustRead(forge.server.StderrPath)) + string(mustRead(git.server.StderrPath)),
+		"provider.argv":         string(mustRead(forge.providerArgvPath)),
+		"provider.stdin":        string(mustRead(forge.providerInputPath)),
+		"provider.stdout":       string(mustRead(forge.providerOutputPath)),
+		"provider.environment":  string(mustRead(forge.providerEnvPath)),
+		"provider.stderr":       string(mustRead(forge.providerStderrPath)),
+		"ssh.argv":              string(mustRead(git.sshArgv)),
+		"ssh.environment":       string(mustRead(git.sshEnvironment)),
+		"ssh.upload.input":      string(mustRead(git.uploadInput)),
+		"ssh.receive.allowed":   allowedReceiveInput,
+		"ssh.receive.denied":    deniedReceiveInput,
+		"git.checkout.contents": string(mustRead(filepath.Join(checkout, "pack.txt"))) + string(mustRead(filepath.Join(checkout, "allowed.txt"))) + string(mustRead(filepath.Join(checkout, "denied.txt"))),
 	}
+	assertAuditInvocations(t, channels["forge.audit"], forgeAuditExpectations(
+		"github.issue_list", "github.issue_create", "github.issue_comment",
+	), auditLeakMarkers())
+	gitForbidden := append(auditLeakMarkers(), allowedContentMarker, deniedContentMarker)
+	assertAuditInvocations(t, channels["git.audit"], gitAuditExpectations(
+		"refs/heads/"+allowedUpdateMarker, "refs/heads/"+deniedUpdateMarker,
+	), gitForbidden)
 	allowed := map[string]map[string]bool{
-		agentToken:         {},
-		providerCredential: {"provider.environment": true},
-		environmentMarker:  {"provider.environment": true},
-		issueBodyMarker:    {"client.stdout": true, "provider.stdin": true, "provider.stdout": true},
-		commentMarker:      {"provider.stdin": true, "provider.stdout": true},
-		packMarker:         {"checkout": true},
-		providerStderr:     {"provider.stderr": true},
-		argvMarker:         {"provider.argv": true},
-		sshStderrMarker:    {},
+		agentToken:           {},
+		providerCredential:   {"provider.environment": true, "ssh.environment": true},
+		environmentMarker:    {"provider.environment": true, "ssh.environment": true},
+		issueBodyMarker:      {"forge.client.stdout": true, "provider.stdin": true, "provider.stdout": true},
+		commentMarker:        {"provider.stdin": true, "provider.stdout": true},
+		packMarker:           {"git.checkout.contents": true},
+		allowedContentMarker: {"git.checkout.contents": true, "git.remote.stdout": true},
+		deniedContentMarker:  {"git.checkout.contents": true},
+		allowedUpdateMarker:  {"git.allowed.stderr": true, "git.audit": true, "ssh.receive.allowed": true},
+		deniedUpdateMarker:   {"git.audit": true, "git.remote.stderr": true},
+		providerStderr:       {"provider.stderr": true},
+		argvMarker:           {"provider.argv": true},
+		sshStderrMarker:      {},
 	}
 	for marker, intended := range allowed {
 		locations := markerLocations(channels, marker)
@@ -59,8 +121,17 @@ func TestMarkersRemainInTheirIntendedChannels(t *testing.T) {
 			t.Errorf("marker %q locations = %v, want %v", marker, locations, intended)
 		}
 	}
-	if environment := channels["provider.environment"]; !strings.Contains(environment, "REPOWOLF_TOKEN_AGENT=unset") || !strings.Contains(environment, "REPOWOLF_ENDPOINT=unset") {
-		t.Errorf("provider environment retained RepoWolf controls: %q", environment)
+	for _, channel := range []string{"provider.environment", "ssh.environment"} {
+		environment := channels[channel]
+		if !strings.Contains(environment, "REPOWOLF_TOKEN_AGENT=unset") || !strings.Contains(environment, "REPOWOLF_ENDPOINT=unset") {
+			t.Errorf("%s retained RepoWolf controls: %q", channel, environment)
+		}
+	}
+	for _, name := range []string{"FAKE_GIT_UPLOAD_PACK", "FAKE_GIT_RECEIVE_PACK", "FAKE_TEE"} {
+		value, ok := recordedEnvironmentValue(channels["ssh.environment"], name)
+		if !ok || !filepath.IsAbs(value) {
+			t.Errorf("fake SSH tool %s is not pinned: %q", name, value)
+		}
 	}
 	assertNoFixtureProcess(t, forge.root)
 	assertNoFixtureProcess(t, git.root)
@@ -107,6 +178,16 @@ func TestUnknownAndUnauthorizedRepositoriesHaveIdenticalGRPCStatus(t *testing.T)
 	fixture.stop(t)
 	assertNoFixtureProcess(t, fixture.root)
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
+}
+
+func recordedEnvironmentValue(contents, name string) (string, bool) {
+	prefix := name + "="
+	for _, line := range strings.Split(contents, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimPrefix(line, prefix), true
+		}
+	}
+	return "", false
 }
 
 func markerLocations(channels map[string]string, marker string) map[string]bool {

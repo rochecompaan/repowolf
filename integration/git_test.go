@@ -12,9 +12,37 @@ import (
 )
 
 const (
-	packMarker      = "task13-pack-payload-marker"
-	sshStderrMarker = "task13-ssh-stderr-marker"
+	packMarker           = "task13-pack-payload-marker"
+	sshStderrMarker      = "task13-ssh-stderr-marker"
+	allowedUpdateMarker  = "task13-allowed-update-marker"
+	allowedContentMarker = "task13-allowed-content-marker"
+	deniedUpdateMarker   = "task13-denied-update-marker"
+	deniedContentMarker  = "task13-denied-content-marker"
 )
+
+func TestGitFixtureIgnoresHostConfigurationInjection(t *testing.T) {
+	t.Setenv("GIT_CONFIG_COUNT", "2")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.sshCommand")
+	t.Setenv("GIT_CONFIG_VALUE_0", "/bin/false")
+	t.Setenv("GIT_CONFIG_KEY_1", "user.name")
+	t.Setenv("GIT_CONFIG_VALUE_1", "injected-count")
+	t.Setenv("GIT_CONFIG_PARAMETERS", "'user.email=injected-parameters'")
+
+	fixture := newGitFixture(t)
+	for _, key := range []string{"user.name", "user.email"} {
+		result := fixture.git(t, fixture.root, "config", "--get", key)
+		if result.err == nil || result.stdout != "" {
+			t.Fatalf("inherited %s injection: err=%v stdout=%q stderr=%q", key, result.err, result.stdout, result.stderr)
+		}
+	}
+	checkout := filepath.Join(fixture.root, "contamination-checkout")
+	if result := fixture.git(t, fixture.root, "clone", "ssh://git@github.com:22/alpha/repo.git", checkout); result.err != nil {
+		t.Fatalf("isolated clone: %v; stdout=%q stderr=%q", result.err, result.stdout, result.stderr)
+	}
+	fixture.server.Stop(t)
+	assertNoFixtureProcess(t, fixture.root)
+	assertRepositoryUnchanged(t, fixture.sourceStatus)
+}
 
 func TestRealGitStreamsOfflineAndDeniesDefaultMainBeforeProviderInput(t *testing.T) {
 	fixture := newGitFixture(t)
@@ -73,18 +101,18 @@ func TestRealGitStreamsOfflineAndDeniesDefaultMainBeforeProviderInput(t *testing
 			t.Errorf("fake SSH argv missing %q in %q", expected, argv)
 		}
 	}
-	if audit := string(mustRead(fixture.server.AuditPath)); strings.Contains(audit, packMarker) || strings.Contains(audit, sshStderrMarker) {
-		t.Errorf("Git audit leaked payload/stderr marker: %s", audit)
-	}
+	assertAuditInvocations(t, string(mustRead(fixture.server.AuditPath)), gitAuditExpectations(
+		"refs/heads/feature/task13", "refs/heads/main",
+	), auditLeakMarkers())
 	assertNoFixtureProcess(t, fixture.root)
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
 }
 
 type gitFixture struct {
-	root, remote, gitPath, uploadInput, receiveInput, sshArgv string
-	sourceStatus                                              string
-	binaries                                                  testutil.Binaries
-	server                                                    *testutil.Server
+	root, remote, gitPath, gitExecPath, uploadInput, receiveInput, sshArgv, sshEnvironment string
+	sourceStatus                                                                           string
+	binaries                                                                               testutil.Binaries
+	server                                                                                 *testutil.Server
 }
 
 type commandResult struct {
@@ -108,7 +136,20 @@ func newGitFixture(t *testing.T) *gitFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture := &gitFixture{root: root, sourceStatus: sourceStatus, remote: filepath.Join(root, "remote.git"), gitPath: gitPath, uploadInput: filepath.Join(root, "upload.input"), receiveInput: filepath.Join(root, "receive.input"), sshArgv: filepath.Join(root, "ssh.argv")}
+	tee, err := exec.LookPath("tee")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execPath, err := exec.Command(gitPath, "--exec-path").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := &gitFixture{
+		root: root, sourceStatus: sourceStatus, remote: filepath.Join(root, "remote.git"), gitPath: gitPath,
+		gitExecPath: strings.TrimSpace(string(execPath)), uploadInput: filepath.Join(root, "upload.input"),
+		receiveInput: filepath.Join(root, "receive.input"), sshArgv: filepath.Join(root, "ssh.argv"),
+		sshEnvironment: filepath.Join(root, "ssh.environment"),
+	}
 	fixture.gitOK(t, root, "init", "--bare", fixture.remote)
 	seed := filepath.Join(root, "seed")
 	fixture.gitOK(t, root, "init", seed)
@@ -130,9 +171,11 @@ func newGitFixture(t *testing.T) *gitFixture {
 		Binary: fixture.binaries.Service, PolicyPath: filepath.Join("testdata", "policy.yaml"), Certificate: certificate, GHPath: provider, SSHPath: ssh,
 		Environment: []string{
 			"REPOWOLF_TOKEN_AGENT=" + agentToken, "GH_TOKEN=" + providerCredential,
+			"TASK13_ENV_MARKER=" + environmentMarker,
 			"FAKE_SSH_REPOSITORY=" + fixture.remote, "FAKE_SSH_ARGV_LOG=" + fixture.sshArgv,
-			"FAKE_SSH_STDERR=" + sshStderrMarker, "FAKE_SSH_UPLOAD_INPUT=" + fixture.uploadInput,
-			"FAKE_SSH_RECEIVE_INPUT=" + fixture.receiveInput, "FAKE_GIT_UPLOAD_PACK=" + upload, "FAKE_GIT_RECEIVE_PACK=" + receive,
+			"FAKE_SSH_ENV_LOG=" + fixture.sshEnvironment, "FAKE_SSH_STDERR=" + sshStderrMarker,
+			"FAKE_SSH_UPLOAD_INPUT=" + fixture.uploadInput, "FAKE_SSH_RECEIVE_INPUT=" + fixture.receiveInput,
+			"FAKE_GIT_UPLOAD_PACK=" + upload, "FAKE_GIT_RECEIVE_PACK=" + receive, "FAKE_TEE=" + tee,
 		},
 	})
 	return fixture
@@ -142,10 +185,7 @@ func (fixture *gitFixture) git(t *testing.T, directory string, args ...string) c
 	t.Helper()
 	command := exec.Command(fixture.gitPath, args...)
 	command.Dir = directory
-	command.Env = testutil.Environment(os.Environ(),
-		"HOME="+filepath.Join(fixture.root, "empty-home"), "XDG_CONFIG_HOME="+filepath.Join(fixture.root, "empty-xdg"),
-		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_TERMINAL_PROMPT=0",
-	)
+	command.Env = isolatedGitEnvironment(fixture.root, fixture.gitPath, fixture.gitExecPath)
 	if fixture.server != nil {
 		command.Env = testutil.Environment(command.Env,
 			"GIT_SSH_COMMAND="+fixture.binaries.GitSSH,
@@ -157,6 +197,31 @@ func (fixture *gitFixture) git(t *testing.T, directory string, args ...string) c
 	command.Stdout, command.Stderr = &stdout, &stderr
 	err := command.Run()
 	return commandResult{stdout: stdout.String(), stderr: stderr.String(), err: err}
+}
+
+func isolatedGitEnvironment(root, gitPath, gitExecPath string) []string {
+	return []string{
+		"HOME=" + filepath.Join(root, "empty-home"),
+		"XDG_CONFIG_HOME=" + filepath.Join(root, "empty-xdg"),
+		"PATH=" + filepath.Dir(gitPath),
+		"GIT_EXEC_PATH=" + gitExecPath,
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_COUNT=0",
+		"GIT_CONFIG_PARAMETERS=",
+		"GIT_TERMINAL_PROMPT=0",
+		"LC_ALL=C",
+		"TZ=UTC",
+		"HTTP_PROXY=http://127.0.0.1:1",
+		"HTTPS_PROXY=http://127.0.0.1:1",
+		"ALL_PROXY=http://127.0.0.1:1",
+		"http_proxy=http://127.0.0.1:1",
+		"https_proxy=http://127.0.0.1:1",
+		"all_proxy=http://127.0.0.1:1",
+		"NO_PROXY=",
+		"no_proxy=",
+	}
 }
 
 func (fixture *gitFixture) gitOK(t *testing.T, directory string, args ...string) commandResult {
