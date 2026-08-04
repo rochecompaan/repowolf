@@ -2,7 +2,7 @@
 
 ## Scope and evidence boundary
 
-Local evidence was collected on 2026-08-04 on Linux amd64 from the Task 15 staged tree over `b99695c64c5ea0b8d54cb2b9eb59b6a02c495b71`. The final task commit is identified by `git show -s --format=%H HEAD` after commit creation; commands below are rerun from that commit before handoff.
+Local evidence was collected on 2026-08-04 on Linux amd64. The initial Task 15 evidence came from the staged tree over `b99695c64c5ea0b8d54cb2b9eb59b6a02c495b71`; it is not archive evidence for a later commit. The Release archives section records the exact clean source revision and tree that produced its archives. GoReleaser snapshot archives embed the source short commit in their version, so a later documentation-only commit is not represented as the producer of those archive checksums.
 
 This document does not invent external evidence. No run exists on GitHub for branch `docs/mvp-design`, no release tag was published, and no GHCR publication was attempted. Native arm64 execution and successful amd64/arm64 release-smoke job URLs therefore remain external residuals, explicitly recorded below.
 
@@ -102,12 +102,14 @@ done
 
 Result: `scripts/check-release.sh` exited 0. GoReleaser built service and client binaries for Linux amd64 and arm64, created both paired archives, executed native amd64 `repowolf --version`, and observed the expected usage exit from native `repowolf-client`. Both checksum validations returned `OK`. Each archive contains `README.md`, `repowolf`, and `repowolf-client`.
 
-The recorded local candidate checksums are:
+The earlier staged-tree checksum values are superseded. The following snapshot archives were rebuilt from a clean checkout at source revision `c053a5f41b207ee3ca107fc4e8a61d631fcb4d0a` and source tree `50ad1512a723557e5e502a2c2acdaffb159ac1f3` (before this evidence update was committed):
 
 ```text
-b773cc099dc0503ee9fbfba4d3bda20bd881e4c3aecb0cf2b74dd72dd533902e  repowolf_linux_amd64.tar.gz
-dca815f9d4420e9f13b8ed81a71b0095619c6db22b71d9aea3dab8e7151d0efd  repowolf_linux_arm64.tar.gz
+0861517c490b12a1db6896b70f9e2bfb075e9ab611f9882766d9dd8b4dd77e5e  repowolf_linux_amd64.tar.gz
+35e8c247d003f849c302f7b3f1d957fd791df3d7ecbda593864204f22536ed83  repowolf_linux_arm64.tar.gz
 ```
+
+`scripts/check-release.sh` invoked `goreleaser release --snapshot --clean`, whose generated `dist/metadata.json` identifies commit `c053a5f41b207ee3ca107fc4e8a61d631fcb4d0a` and version `0.0.0-SNAPSHOT-c053a5f`. `(cd dist && sha256sum -c checksums.txt)` reported both archive names `OK`. This evidence update necessarily creates a later documentation revision; it does **not** claim that these checksums belong to that later `HEAD`. Rebuilding from that later revision would use a different snapshot short commit and must record its own resulting checksums.
 
 Binary-format inspection used `file` from pinned nixpkgs because the host shell had no `file` executable:
 
