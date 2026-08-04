@@ -23,12 +23,12 @@ const (
 	testOID2 = "2222222222222222222222222222222222222222"
 )
 
-func TestReceivePackValidatesPrefixBeforeForwardingExactBytes(t *testing.T) {
+func TestReceivePackAcceptsOmittedPortBeforeForwardingExactBytes(t *testing.T) {
 	service, capture, _ := receiveExecutableService(t)
 	prefix := receivePrefix("refs/heads/feature")
 	pack := []byte("PACK\x00payload")
 	client := append(append([]byte(nil), prefix...), pack...)
-	stream := receiveStream(client)
+	stream := receiveStreamAtPort(client, 0)
 
 	if err := service.receivePack(stream); err != nil {
 		t.Fatalf("receivePack: %v", err)
@@ -118,7 +118,11 @@ func receiveExecutableService(t *testing.T) (*Service, string, *bytes.Buffer) {
 }
 
 func receiveStream(data []byte) *memoryStream {
-	frames := []*repowolfv1.GitFrame{openFrame("git.example", "trusted-owner", "trusted-repo", 2222)}
+	return receiveStreamAtPort(data, 2222)
+}
+
+func receiveStreamAtPort(data []byte, port uint32) *memoryStream {
+	frames := []*repowolfv1.GitFrame{openFrame("git.example", "trusted-owner", "trusted-repo", port)}
 	for len(data) > 0 {
 		size := len(data)
 		if size > 17 {

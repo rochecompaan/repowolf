@@ -69,7 +69,7 @@ func (service *Service) command(ctx context.Context, open *repowolfv1.GitOpen, c
 		return runner.Command{}, policy.ResolvedRepository{}, rpcstatus.ErrInvalidArgument
 	}
 	selector := open.Repository
-	if selector.Host == "" || selector.Owner == "" || selector.Name == "" || selector.SshPort == 0 || selector.SshPort > 65535 {
+	if selector.Host == "" || selector.Owner == "" || selector.Name == "" || selector.SshPort > 65535 {
 		return runner.Command{}, policy.ResolvedRepository{}, rpcstatus.ErrInvalidArgument
 	}
 	principal, ok := auth.Principal(ctx)

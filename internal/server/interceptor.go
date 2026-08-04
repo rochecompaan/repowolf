@@ -11,7 +11,7 @@ import (
 
 func (service *Server) unaryInterceptors() []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		auth.UnaryServerInterceptor(service.tokens), service.statusUnaryInterceptor(),
+		service.globalConcurrencyUnaryInterceptor(), auth.UnaryServerInterceptor(service.tokens), service.statusUnaryInterceptor(),
 		service.admissionUnaryInterceptor(), service.concurrencyUnaryInterceptor(),
 		service.deadlineUnaryInterceptor(), service.auditUnaryInterceptor(),
 	}
@@ -19,7 +19,7 @@ func (service *Server) unaryInterceptors() []grpc.UnaryServerInterceptor {
 
 func (service *Server) streamInterceptors() []grpc.StreamServerInterceptor {
 	return []grpc.StreamServerInterceptor{
-		auth.StreamServerInterceptor(service.tokens), service.statusStreamInterceptor(),
+		service.globalConcurrencyStreamInterceptor(), auth.StreamServerInterceptor(service.tokens), service.statusStreamInterceptor(),
 		service.admissionStreamInterceptor(), service.concurrencyStreamInterceptor(),
 		service.deadlineStreamInterceptor(), service.auditStreamInterceptor(),
 	}
@@ -40,23 +40,23 @@ func (service *Server) statusStreamInterceptor() grpc.StreamServerInterceptor {
 
 func (service *Server) admissionUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		ctx, done, err := service.admit(ctx)
+		admitted, done, err := service.admit(ctx)
 		if err != nil {
-			return nil, err
+			return nil, service.auditRejection(ctx, info.FullMethod, err)
 		}
 		defer done()
-		return handler(ctx, request)
+		return handler(admitted, request)
 	}
 }
 
 func (service *Server) admissionStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(implementation any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		ctx, done, err := service.admit(stream.Context())
+		admitted, done, err := service.admit(stream.Context())
 		if err != nil {
-			return err
+			return service.auditRejection(stream.Context(), info.FullMethod, err)
 		}
 		defer done()
-		return handler(implementation, &serverStreamContext{ServerStream: stream, ctx: ctx})
+		return handler(implementation, &serverStreamContext{ServerStream: stream, ctx: admitted})
 	}
 }
 

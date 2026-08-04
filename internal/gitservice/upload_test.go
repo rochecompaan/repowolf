@@ -63,6 +63,7 @@ func TestUploadCommandRejectsInexactOrUnauthorizedRepository(t *testing.T) {
 		"wrong host":   {authorized, &repowolfv1.RepositorySelector{Host: "evil.example", Owner: "trusted-owner", Name: "trusted-repo", SshPort: 2222}},
 		"wrong owner":  {authorized, &repowolfv1.RepositorySelector{Host: "git.example", Owner: "other", Name: "trusted-repo", SshPort: 2222}},
 		"wrong port":   {authorized, &repowolfv1.RepositorySelector{Host: "git.example", Owner: "trusted-owner", Name: "trusted-repo", SshPort: 22}},
+		"invalid port": {authorized, &repowolfv1.RepositorySelector{Host: "git.example", Owner: "trusted-owner", Name: "trusted-repo", SshPort: 65536}},
 		"no grant":     {unauthorized, &repowolfv1.RepositorySelector{Host: "git.example", Owner: "trusted-owner", Name: "trusted-repo", SshPort: 2222}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -74,12 +75,12 @@ func TestUploadCommandRejectsInexactOrUnauthorizedRepository(t *testing.T) {
 	}
 }
 
-func TestUploadPackStreamsDataAndOneTerminal(t *testing.T) {
+func TestUploadPackAcceptsOmittedPortAndStreamsData(t *testing.T) {
 	service, auditOutput := executableTestService(t, config.GitRead)
 	stream := &memoryStream{
 		ctx: auth.WithPrincipal(context.Background(), "agent"),
 		received: []*repowolfv1.GitFrame{
-			openFrame("git.example", "trusted-owner", "trusted-repo", 2222),
+			openFrame("git.example", "trusted-owner", "trusted-repo", 0),
 			dataFrame([]byte("client-request")),
 		},
 	}
