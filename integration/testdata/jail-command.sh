@@ -5,11 +5,11 @@ client_root=$1
 git_root=$2
 shift 2
 
-# Bubblewrap injects only the four client contract variables. Bash and the
-# runtime may also export their bookkeeping variables after startup.
+# Bubblewrap injects only the four client contract variables. Bash itself may
+# export its process bookkeeping variables after startup.
 for name in $(compgen -e); do
   case "$name" in
-    REPOWOLF_ENDPOINT|REPOWOLF_TOKEN|REPOWOLF_CA_FILE|GIT_SSH_COMMAND|OLDPWD|PWD|SHLVL|TMPDIR|_)
+    REPOWOLF_ENDPOINT|REPOWOLF_TOKEN|REPOWOLF_CA_FILE|GIT_SSH_COMMAND|PWD|SHLVL|_)
       ;;
     *)
       printf 'unexpected jail environment variable: %s\n' "$name" >&2
