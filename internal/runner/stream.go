@@ -14,10 +14,11 @@ import (
 type Runner struct {
 	tempRoot string
 
-	mu        sync.Mutex
-	closing   bool
-	starting  sync.WaitGroup
-	processes map[*Process]struct{}
+	mu                sync.Mutex
+	closing           bool
+	starting          sync.WaitGroup
+	processes         map[*Process]struct{}
+	afterCommandStart func()
 }
 
 // Cleanup synchronously terminates, reaps, and removes the private working
@@ -52,7 +53,7 @@ func (runner *Runner) Cleanup() error {
 	close(errorsByProcess)
 	var result error
 	for err := range errorsByProcess {
-		if err != nil && !errors.Is(err, context.Canceled) {
+		if err != nil && (!errors.Is(err, context.Canceled) || errors.Is(err, ErrCleanupFailed)) {
 			result = errors.Join(result, err)
 		}
 	}
@@ -69,17 +70,16 @@ func (runner *Runner) beginStart() bool {
 	return true
 }
 
-func (runner *Runner) register(process *Process) bool {
+// register records a start already admitted by beginStart. Cleanup waits for
+// that admission barrier before snapshotting, so it must remain visible even
+// if cleanup has begun meanwhile.
+func (runner *Runner) register(process *Process) {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
-	if runner.closing {
-		return false
-	}
 	if runner.processes == nil {
 		runner.processes = make(map[*Process]struct{})
 	}
 	runner.processes[process] = struct{}{}
-	return true
 }
 
 func (runner *Runner) forget(process *Process) {
@@ -182,14 +182,13 @@ func (runner *Runner) Start(parent context.Context, requested Command) (*Process
 		cleanup()
 		return nil, ErrStartFailed
 	}
+	if runner.afterCommandStart != nil {
+		runner.afterCommandStart()
+	}
 
 	process := newProcess(command, workingDirectory, cmd, stdin, stdout, stderr, cancel)
 	process.owner = runner
-	if !runner.register(process) {
-		process.stop()
-		_, _ = process.Wait()
-		return nil, context.Canceled
-	}
+	runner.register(process)
 	process.monitor(operation)
 	return process, nil
 }

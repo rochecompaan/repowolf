@@ -98,15 +98,38 @@ func TestGlobalLimitRejectsInvalidBearerBeforeAuthenticationForUnaryAndStream(t 
 	var output bytes.Buffer
 	service, connection, _, stop := reviewTestServer(t, &output, 1, 1, reviewEcho{started: make(chan struct{}), release: make(chan struct{})})
 	defer stop()
+	invalid := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer rw1_invalid"))
+
+	if err := connection.Invoke(invalid, echoMethod, &wrapperspb.BytesValue{Value: []byte("untrusted")}, &wrapperspb.BytesValue{}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("invalid unary with available capacity = %v", err)
+	}
+	if !service.acquireGlobal() {
+		t.Fatal("invalid unary leaked its global lease")
+	}
+	service.releaseGlobal()
+	stream, err := connection.NewStream(invalid, &echoStreamDesc.Streams[0], echoStreamMethod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.SendMsg(&wrapperspb.BytesValue{Value: []byte("untrusted")}); err != nil {
+		t.Fatalf("invalid stream send = %v", err)
+	}
+	if err := stream.RecvMsg(&wrapperspb.BytesValue{}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("invalid stream with available capacity = %v", err)
+	}
+	if !service.acquireGlobal() {
+		t.Fatal("invalid stream leaked its global lease")
+	}
+	service.releaseGlobal()
+
 	if !service.acquireGlobal() {
 		t.Fatal("failed to reserve global lease")
 	}
 	defer service.releaseGlobal()
-	invalid := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer rw1_invalid"))
 	if err := connection.Invoke(invalid, echoMethod, &wrapperspb.BytesValue{Value: []byte("untrusted")}, &wrapperspb.BytesValue{}); status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("invalid unary at global capacity = %v", err)
 	}
-	stream, err := connection.NewStream(invalid, &echoStreamDesc.Streams[0], echoStreamMethod)
+	stream, err = connection.NewStream(invalid, &echoStreamDesc.Streams[0], echoStreamMethod)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +140,7 @@ func TestGlobalLimitRejectsInvalidBearerBeforeAuthenticationForUnaryAndStream(t 
 		t.Fatalf("invalid stream at global capacity = %v", err)
 	}
 	if output.Len() != 0 {
-		t.Fatalf("pre-auth rejections emitted audit metadata: %q", output.String())
+		t.Fatalf("pre-auth requests emitted audit metadata: %q", output.String())
 	}
 }
 
@@ -176,7 +199,14 @@ func TestAuthenticatedAdmissionAndPrincipalCapacityRejectionsWriteSafeTerminalAu
 				t.Fatalf("rejection code = %v, want %v", callErr, want)
 			}
 			events := reviewAuditEvents(t, output.Bytes())
-			if len(events) != 1 || events[0].Principal != "agent" || events[0].RequestID == "" || events[0].Operation == "" || events[0].Reason != want.String() {
+			operation := echoMethod
+			if test.stream {
+				operation = echoStreamMethod
+			}
+			if len(events) != 1 || events[0].Principal != "agent" || events[0].RequestID == "" ||
+				events[0].Operation != operation || events[0].Outcome != audit.OutcomeFailed || events[0].Reason != want.String() ||
+				events[0].Provider != "" || events[0].Repository != "" || events[0].InputBytes != 0 || events[0].OutputBytes != 0 ||
+				len(events[0].Refs) != 0 || events[0].UpdateCount != 0 {
 				t.Fatalf("rejection audit events = %#v", events)
 			}
 			if strings.Contains(output.String(), "secret") || strings.Contains(output.String(), token) {
@@ -187,6 +217,57 @@ func TestAuthenticatedAdmissionAndPrincipalCapacityRejectionsWriteSafeTerminalAu
 			}
 		})
 	}
+}
+
+func TestEarlyRejectionAuditFailureIsSanitized(t *testing.T) {
+	tlsConfig, roots := testTLS(t)
+	token, index := serverTestIndex(t)
+	sink := &failingEarlyAuditSink{err: errors.New("sensitive audit sink detail")}
+	service, err := New(Options{
+		TLSConfig: tlsConfig, Tokens: index, AuditWriter: sink,
+		MaxConcurrentRequests: 1, MaxConcurrentRequestsPerPrincipal: 1,
+		OperationTimeout: time.Second, GracePeriod: time.Second,
+		Register: func(registrar grpc.ServiceRegistrar) {
+			registrar.RegisterService(&echoServiceDesc, echoImplementation{})
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.MarkReady()
+	serveContext, cancel := context.WithCancel(context.Background())
+	listener, address := listenLocal(t)
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- service.Serve(serveContext, listener) }()
+	connection := dialTLS(t, address, roots)
+	service.markStopping()
+	callErr := connection.Invoke(metadataContext(context.Background(), token), echoMethod, &wrapperspb.BytesValue{Value: []byte("secret rejected payload")}, &wrapperspb.BytesValue{})
+	if status.Code(callErr) != codes.Unavailable || status.Convert(callErr).Message() != "service unavailable" || strings.Contains(callErr.Error(), "sensitive") {
+		t.Fatalf("early audit failure = %v", callErr)
+	}
+	if sink.calls != 1 {
+		t.Fatalf("audit writes = %d, want 1", sink.calls)
+	}
+	_ = connection.Close()
+	cancel()
+	select {
+	case err := <-serveDone:
+		if err != nil {
+			t.Fatalf("Serve() = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("server did not stop")
+	}
+}
+
+type failingEarlyAuditSink struct {
+	err   error
+	calls int
+}
+
+func (sink *failingEarlyAuditSink) Write(audit.Event) error {
+	sink.calls++
+	return sink.err
 }
 
 type providerIgnoringEcho struct {
