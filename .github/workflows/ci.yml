@@ -29,6 +29,11 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -race ./...
+      - name: Permit Bubblewrap user namespaces
+        run: |
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Check Nix flake
         run: nix flake check --accept-flake-config --print-build-logs
       - name: Smoke-test OCI image
