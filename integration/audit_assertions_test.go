@@ -158,7 +158,7 @@ func gitAuditExpectations(allowedRef, deniedRef string) [][]auditExpectation {
 	providerFields := append(append([]string(nil), acceptedFields...), "reason")
 	streamFields := []string{"timestamp", "request_id", "principal", "operation", "outcome", "reason"}
 	accepted := func(operation string) auditExpectation {
-		return auditExpectation{operation: operation, outcome: "accepted", principal: "agent", provider: "github", repository: "alpha", required: acceptedFields}
+		return auditExpectation{operation: operation, outcome: "accepted", principal: "agent", provider: "github", repository: "alpha", required: acceptedFields, optional: []string{"duration_ms"}}
 	}
 	stream := func(operation string) auditExpectation {
 		return auditExpectation{operation: operation, outcome: "completed", principal: "agent", reason: "OK", required: streamFields, optional: []string{"duration_ms"}}
@@ -202,5 +202,17 @@ func TestParseAuditRecordsRejectsUnsafeJSONL(t *testing.T) {
 				t.Fatalf("parseAuditRecords accepted %s input", test.name)
 			}
 		})
+	}
+}
+
+func TestGitAcceptedAuditDurationMSIsOptional(t *testing.T) {
+	const accepted = `{"timestamp":"2026-08-01T00:00:00Z","request_id":"request-1","principal":"agent","provider":"github","repository":"alpha","operation":"git.upload-pack","outcome":"accepted","duration_ms":1}`
+
+	assertAuditInvocations(t, accepted, [][]auditExpectation{{
+		gitAuditExpectations("refs/heads/allowed", "refs/heads/denied")[0][0],
+	}}, nil)
+	unexpected := strings.Replace(accepted, `"duration_ms":1`, `"duration_ms":1,"secret":"unsafe"`, 1)
+	if _, err := parseAuditRecords([]byte(unexpected), nil); err == nil {
+		t.Fatal("parseAuditRecords accepted an unexpected field")
 	}
 }
