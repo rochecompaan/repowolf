@@ -1,0 +1,58 @@
+apiVersion: repowolf.dev/v1alpha1
+listen: __LISTEN__
+tls:
+  certificate: __CERTIFICATE__
+  privateKey: __PRIVATE_KEY__
+tools:
+  gh: __GH__
+  ssh: __SSH__
+providers:
+  github:
+    kind: github
+    apiHost: task13-api-argv-marker.invalid
+    gitHost: github.com
+    sshUser: git
+    sshPort: 22
+repositories:
+  alpha:
+    provider: github
+    owner: alpha
+    name: repo
+    git:
+      denyRefs:
+        - refs/heads/main
+      denyDeletes: true
+      maxRefUpdates: 16
+  unauthorized:
+    provider: github
+    owner: beta
+    name: repo
+    git:
+      denyDeletes: true
+      maxRefUpdates: 16
+principals:
+  agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_AGENT
+    grants:
+      - repository: alpha
+        capabilities:
+          - repository:read
+          - issues:read
+          - issues:write
+          - pull_requests:read
+          - pull_requests:write
+          - actions:read
+          - statuses:read
+          - git:read
+          - git:write
+limits:
+  maxConcurrentRequests: 16
+  maxConcurrentRequestsPerPrincipal: 8
+  maxMessageBytes: 1048576
+  maxStreamChunkBytes: 65536
+  maxPushPrefixBytes: 1048576
+  maxGitBytesPerDirection: 1073741824
+  initialStreamTimeout: 5s
+  operationTimeout: 30s
+  idleStreamTimeout: 5s
