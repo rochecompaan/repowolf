@@ -4,7 +4,7 @@
 
 Local evidence was collected on 2026-08-04 on Linux amd64. The initial Task 15 evidence came from the staged tree over `b99695c64c5ea0b8d54cb2b9eb59b6a02c495b71`; it is not archive evidence for a later commit. The Release archives section records the exact clean source revision and tree that produced its archives. GoReleaser snapshot archives embed the source short commit in their version, so a later documentation-only commit is not represented as the producer of those archive checksums.
 
-This document does not invent external evidence. No run exists on GitHub for branch `docs/mvp-design`, no release tag was published, and no GHCR publication was attempted. Native arm64 execution and successful amd64/arm64 release-smoke job URLs therefore remain external residuals, explicitly recorded below.
+This document does not invent external evidence. PR #1 on `rochecompaan/repowolf` has successful GitHub CI evidence on head `fb61ce6163831cc8a7e9ffad8b15da712e49eb9b` at `https://github.com/rochecompaan/repowolf/actions/runs/30902122443`; no release tag or GHCR publication was attempted and PR #1 includes successful native amd64 and arm64 release-smoke jobs recorded below.
 
 ## Real Bubblewrap jail
 
@@ -168,9 +168,8 @@ Task 14 residuals remain accurate:
 
 - The local host is Linux amd64. Arm64 archives were built, checksummed, structurally inspected, and identified as AArch64 ELF, but not executed natively.
 - `nix flake check` omitted incompatible aarch64-linux outputs on this x86_64 host.
-- There is no GitHub release tag or GHCR publication evidence.
-- Querying `gh run list --repo rochecompaan/repowolf --branch docs/mvp-design ...` returned `[]`. Therefore no successful native amd64 or arm64 release-smoke CI job URL exists to record, and none is fabricated here.
-
-A fresh adversarial review against `docs/specs/2026-08-01-repowolf-mvp-design.md` is still required before declaring migration or publication readiness. The review must include the final commit, this evidence, and the retained external residuals; findings require focused regressions plus affected and full-suite reruns.
-
-The current embedded broker was read only at its pinned source baseline and remains untouched and available for rollback.
+- There is no GitHub release tag or GHCR publication.
+- PR-level run evidence is available for `docs/mvp-design`: `https://github.com/rochecompaan/repowolf/actions/runs/30902122443` with head `fb61ce6163831cc8a7e9ffad8b15da712e49eb9b`, conclusion `success`; `test` job (`https://github.com/rochecompaan/repowolf/actions/runs/30902122443/job/91968618792`, conclusion `success`) includes lint/generated/format/vet, race tests, Bubblewrap user-namespace bootstrap, full Nix flake, and OCI smoke. Native `release-smoke (ubuntu-24.04-arm, arm64)` success is at `https://github.com/rochecompaan/repowolf/actions/runs/30902122443/job/91969748639` and native `release-smoke (ubuntu-24.04, amd64)` success is at `https://github.com/rochecompaan/repowolf/actions/runs/30902122443/job/91969748672`.
+- Local host is Linux amd64; native aarch64 archive execution remains unavailable and aarch64 Linux checks are omitted by local `nix flake check` as incompatible.
+- A fresh adversarial review against `docs/specs/2026-08-01-repowolf-mvp-design.md` is still required before declaring migration/publication readiness.
+- The current embedded broker was read only at its pinned source baseline and remains untouched and available for rollback.
