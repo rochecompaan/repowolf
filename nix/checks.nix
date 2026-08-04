@@ -9,6 +9,7 @@ in
   server-package = repowolf;
   client-package = repowolf-client;
   oci-image = ociImage;
+  bubblewrap = pkgs.callPackage ./bubblewrap-check.nix { inherit repowolf-client; };
 
   client-closure = pkgs.runCommand "repowolf-client-closure-check" { } ''
     set -eu
