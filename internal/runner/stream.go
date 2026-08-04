@@ -171,10 +171,12 @@ func (process *Process) Wait() (Result, error) {
 
 func (process *Process) wait() {
 	observationErr := <-process.exitObserved
-	waitErr, groupErr := process.authority.retireAndReap()
 	_ = process.input.raw.Close()
 	<-process.input.prefixDone
+	// Cmd.Wait closes StderrPipe. Drain it before reaping so an overflow
+	// observed after the provider exits cannot be truncated into success.
 	stderrErr := <-process.stderrDone
+	waitErr, groupErr := process.authority.retireAndReap()
 	process.stderr.data = nil // discard raw provider diagnostics before returning
 	process.cancel()
 	close(process.lifecycleDone)
