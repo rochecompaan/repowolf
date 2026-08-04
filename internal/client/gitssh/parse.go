@@ -122,6 +122,7 @@ func parseCommand(command string) (Operation, string, string, error) {
 			continue
 		}
 		slug := command[len(candidate.prefix) : len(command)-len(".git'")]
+		slug = strings.TrimPrefix(slug, "/")
 		parts := strings.Split(slug, "/")
 		if len(parts) == 2 && validSlug(parts[0], parts[1]) {
 			return candidate.operation, parts[0], parts[1], nil

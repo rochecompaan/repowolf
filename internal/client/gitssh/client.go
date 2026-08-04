@@ -14,6 +14,14 @@ const fixedDiagnostic = "repowolf git transport failed\n"
 // Run parses one Git-generated SSH invocation and relays it over the shared
 // TLS and bearer-authenticated RepoWolf client transport.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "-G" {
+		if err := validateVariantProbe(args); err != nil {
+			writeDiagnostic(stderr)
+			return 2
+		}
+		return 0
+	}
+
 	request, err := Parse(args)
 	if err != nil {
 		writeDiagnostic(stderr)
