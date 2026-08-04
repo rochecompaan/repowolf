@@ -11,6 +11,112 @@ import (
 	"time"
 )
 
+func TestCleanupWaitsForPreCleanupStartAndReapsIt(t *testing.T) {
+	tempRoot := t.TempDir()
+	pidFile := filepath.Join(t.TempDir(), "cleanup-race.pid")
+	entered := make(chan struct{})
+	releaseStart := make(chan struct{})
+	runner := &Runner{tempRoot: tempRoot, afterCommandStart: func() {
+		close(entered)
+		<-releaseStart
+	}}
+	started := make(chan struct {
+		process *Process
+		err     error
+	}, 1)
+	go func() {
+		process, err := runner.Start(context.Background(), testCommand("spawn", pidFile))
+		started <- struct {
+			process *Process
+			err     error
+		}{process, err}
+	}()
+	<-entered
+	waitForFile(t, pidFile)
+	cleanupDone := make(chan error, 1)
+	go func() { cleanupDone <- runner.Cleanup() }()
+	waitForRunnerClosing(t, runner)
+	close(releaseStart)
+
+	var process *Process
+	select {
+	case result := <-started:
+		if result.err != nil || result.process == nil {
+			t.Fatalf("Start() = (%v, %v), want tracked process", result.process, result.err)
+		}
+		process = result.process
+	case <-time.After(time.Second):
+		t.Fatal("Start did not complete after cleanup began")
+	}
+	select {
+	case err := <-cleanupDone:
+		if err != nil {
+			t.Fatalf("Cleanup() = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Cleanup deadlocked with pre-cleanup Start")
+	}
+	if _, err := process.Wait(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("tracked process wait error = %v, want canceled", err)
+	}
+	assertProcessGone(t, readPID(t, pidFile))
+	if _, err := os.Stat(process.workingDirectory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("private cwd remains after Cleanup: %v", err)
+	}
+	assertEmptyDirectory(t, tempRoot)
+}
+
+func TestCleanupPreservesJoinedCleanupFailure(t *testing.T) {
+	inputReader, inputWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inputReader.Close()
+	prefixDone := make(chan struct{})
+	close(prefixDone)
+	runner := &Runner{}
+	process := &Process{
+		authority: &processAuthority{
+			pgid:      42,
+			kill:      func(int, syscall.Signal) error { return nil },
+			reap:      func() error { return nil },
+			reapGroup: func(int) error { return errors.New("reap failed") },
+		},
+		owner:            runner,
+		input:            &inputPipe{raw: inputWriter, prefixDone: prefixDone},
+		stdout:           &limitedReader{},
+		stderr:           &stderrCapture{},
+		stderrDone:       make(chan error, 1),
+		exitObserved:     make(chan error, 1),
+		lifecycleDone:    make(chan struct{}),
+		cancel:           func() {},
+		workingDirectory: t.TempDir(),
+	}
+	process.exitObserved <- nil
+	process.stderrDone <- nil
+	runner.processes = map[*Process]struct{}{process: {}}
+
+	err = runner.Cleanup()
+	if !errors.Is(err, ErrCleanupFailed) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("Cleanup() = %v, want joined cancellation and cleanup failure", err)
+	}
+}
+
+func waitForRunnerClosing(t *testing.T, runner *Runner) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		runner.mu.Lock()
+		closing := runner.closing
+		runner.mu.Unlock()
+		if closing {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("Cleanup did not begin")
+}
+
 func TestStartStreamsInputAndOutputWithBoundedStderr(t *testing.T) {
 	command := testCommand("stream-echo")
 	command.Stdin = []byte("prefix-")
