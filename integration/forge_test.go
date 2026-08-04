@@ -209,16 +209,9 @@ func recordedBlocks(contents string) [][]string {
 	return blocks
 }
 
-func assertSafeAudit(t *testing.T, audit string) {
+func assertSafeAudit(t *testing.T, contents string) {
 	t.Helper()
-	for _, safe := range []string{"github.issue_list", "github.pull_checks", "github.issue_create", "github.issue_comment", `"principal":"agent"`, `"repository":"alpha"`} {
-		if !strings.Contains(audit, safe) {
-			t.Errorf("audit missing safe metadata %q: %s", safe, audit)
-		}
-	}
-	for _, secret := range []string{agentToken, providerCredential, providerStderr, environmentMarker, issueBodyMarker, commentMarker, argvMarker} {
-		if strings.Contains(audit, secret) {
-			t.Errorf("audit leaked marker %q", secret)
-		}
-	}
+	assertAuditInvocations(t, contents, forgeAuditExpectations(
+		"github.issue_list", "github.pull_checks", "github.issue_create", "github.issue_comment",
+	), auditLeakMarkers())
 }
