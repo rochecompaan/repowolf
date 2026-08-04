@@ -143,6 +143,55 @@ func TestStartBlockedPrefixUnblocksOnCancellationAndTimeout(t *testing.T) {
 	}
 }
 
+func TestProcessWaitDrainsStderrBeforeReaping(t *testing.T) {
+	inputReader, inputWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inputReader.Close()
+	defer inputWriter.Close()
+	prefixDone := make(chan struct{})
+	close(prefixDone)
+	reaped := make(chan struct{})
+	process := &Process{
+		authority: &processAuthority{
+			pgid:      42,
+			kill:      func(int, syscall.Signal) error { return nil },
+			reap:      func() error { close(reaped); return nil },
+			reapGroup: func(int) error { return nil },
+		},
+		input:            &inputPipe{raw: inputWriter, prefixDone: prefixDone},
+		stdout:           &limitedReader{},
+		stderr:           &stderrCapture{},
+		stderrDone:       make(chan error, 1),
+		exitObserved:     make(chan error, 1),
+		lifecycleDone:    make(chan struct{}),
+		cancel:           func() {},
+		workingDirectory: t.TempDir(),
+	}
+	process.exitObserved <- nil
+	waitDone := make(chan error, 1)
+	go func() {
+		_, err := process.Wait()
+		waitDone <- err
+	}()
+
+	select {
+	case <-reaped:
+		t.Fatal("reaped before stderr drain completed")
+	case <-time.After(100 * time.Millisecond):
+	}
+	process.stderrDone <- nil
+	select {
+	case <-reaped:
+	case <-time.After(time.Second):
+		t.Fatal("did not reap after stderr drain completed")
+	}
+	if err := <-waitDone; err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+}
+
 func TestStartFailureRemovesPrivateCWD(t *testing.T) {
 	tempRoot := t.TempDir()
 	command := testCommand("stdin")
