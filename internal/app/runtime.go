@@ -58,9 +58,10 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 		return nil, fmt.Errorf("build policy: %w", err)
 	}
 	providerEnvironment := runner.ProviderEnvironment(os.Environ(), tokenEnvironmentNames(cfg))
+	providerRunner := &runner.Runner{}
 	githubAdapter, err := providergithub.New(providergithub.AdapterOptions{
 		Path: tools.GH, Environment: providerEnvironment,
-		Timeout: cfg.Limits.OperationTimeout, Caller: &runner.Runner{},
+		Timeout: cfg.Limits.OperationTimeout, Caller: providerRunner,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create GitHub adapter: %w", err)
@@ -68,7 +69,7 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 	auditWriter := audit.NewWriter(auditOutput)
 	git, err := gitservice.New(gitservice.Options{
 		Policy: policySnapshot, SSHPath: tools.SSH, Environment: providerEnvironment,
-		Limits: cfg.Limits, Runner: &runner.Runner{}, Audit: auditWriter,
+		Limits: cfg.Limits, Runner: providerRunner, Audit: auditWriter,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create Git service: %w", err)
@@ -78,7 +79,7 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 		MaxConcurrentRequests:             cfg.Limits.MaxConcurrentRequests,
 		MaxConcurrentRequestsPerPrincipal: cfg.Limits.MaxConcurrentRequestsPerPrincipal,
 		OperationTimeout:                  cfg.Limits.OperationTimeout, GracePeriod: shutdownGracePeriod,
-		Policy: policySnapshot, GitHub: githubAdapter, Git: git,
+		Policy: policySnapshot, GitHub: githubAdapter, Git: git, Cleanup: providerRunner.Cleanup,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create server: %w", err)

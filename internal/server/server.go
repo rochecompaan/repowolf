@@ -33,6 +33,7 @@ type Server struct {
 	activeMu sync.Mutex
 	active   map[uint64]context.CancelFunc
 	nextID   uint64
+	global   chan struct{}
 	limits   concurrencyLimits
 	timeout  time.Duration
 }
@@ -46,6 +47,7 @@ func New(options Options) (*Server, error) {
 		audit: options.AuditWriter, tokens: options.Tokens, gracePeriod: options.GracePeriod,
 		cleanup: options.Cleanup, active: make(map[uint64]context.CancelFunc),
 		timeout: options.OperationTimeout,
+		global:  make(chan struct{}, options.MaxConcurrentRequests),
 		limits:  newConcurrencyLimits(options.MaxConcurrentRequests, options.MaxConcurrentRequestsPerPrincipal),
 	}
 	service.health = health.NewServer()

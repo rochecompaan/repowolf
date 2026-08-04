@@ -34,6 +34,18 @@ func (service *Server) auditStreamInterceptor() grpc.StreamServerInterceptor {
 	}
 }
 
+// auditRejection writes the only terminal event for authenticated calls that
+// are rejected before the terminal audit interceptor is entered.
+func (service *Server) auditRejection(ctx context.Context, operation string, err error) error {
+	if _, ok := auth.Principal(ctx); !ok {
+		return rpcstatus.Error(err)
+	}
+	if writeErr := service.writeTerminal(ctx, operation, time.Now(), err); writeErr != nil {
+		return status.Error(codes.Unavailable, "audit unavailable")
+	}
+	return rpcstatus.Error(err)
+}
+
 func (service *Server) writeTerminal(ctx context.Context, operation string, started time.Time, err error) error {
 	principal, _ := auth.Principal(ctx)
 	requestID, _ := auth.RequestID(ctx)

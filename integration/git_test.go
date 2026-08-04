@@ -44,10 +44,10 @@ func TestGitFixtureIgnoresHostConfigurationInjection(t *testing.T) {
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
 }
 
-func TestRealGitStreamsOfflineAndDeniesDefaultMainBeforeProviderInput(t *testing.T) {
+func TestRealGitDefaultPortStreamsOfflineAndDeniesDefaultMainBeforeProviderInput(t *testing.T) {
 	fixture := newGitFixture(t)
 	checkout := filepath.Join(fixture.root, "checkout")
-	clone := fixture.git(t, fixture.root, "clone", "ssh://git@github.com:22/alpha/repo.git", checkout)
+	clone := fixture.git(t, fixture.root, "clone", "git@github.com:alpha/repo.git", checkout)
 	if clone.err != nil {
 		t.Fatalf("git clone: %v; stdout=%q stderr=%q", clone.err, clone.stdout, clone.stderr)
 	}

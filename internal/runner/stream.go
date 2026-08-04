@@ -13,6 +13,79 @@ import (
 // Runner owns provider process creation. Its zero value is ready for use.
 type Runner struct {
 	tempRoot string
+
+	mu        sync.Mutex
+	closing   bool
+	starting  sync.WaitGroup
+	processes map[*Process]struct{}
+}
+
+// Cleanup synchronously terminates, reaps, and removes the private working
+// directories of every process started by this runner. Once cleanup begins,
+// the runner cannot start another provider process.
+func (runner *Runner) Cleanup() error {
+	runner.mu.Lock()
+	runner.closing = true
+	runner.mu.Unlock()
+	runner.starting.Wait()
+
+	runner.mu.Lock()
+	processes := make([]*Process, 0, len(runner.processes))
+	for process := range runner.processes {
+		processes = append(processes, process)
+	}
+	runner.mu.Unlock()
+	for _, process := range processes {
+		process.stop()
+	}
+	var waits sync.WaitGroup
+	errorsByProcess := make(chan error, len(processes))
+	for _, process := range processes {
+		waits.Add(1)
+		go func(process *Process) {
+			defer waits.Done()
+			_, err := process.Wait()
+			errorsByProcess <- err
+		}(process)
+	}
+	waits.Wait()
+	close(errorsByProcess)
+	var result error
+	for err := range errorsByProcess {
+		if err != nil && !errors.Is(err, context.Canceled) {
+			result = errors.Join(result, err)
+		}
+	}
+	return result
+}
+
+func (runner *Runner) beginStart() bool {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.closing {
+		return false
+	}
+	runner.starting.Add(1)
+	return true
+}
+
+func (runner *Runner) register(process *Process) bool {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.closing {
+		return false
+	}
+	if runner.processes == nil {
+		runner.processes = make(map[*Process]struct{})
+	}
+	runner.processes[process] = struct{}{}
+	return true
+}
+
+func (runner *Runner) forget(process *Process) {
+	runner.mu.Lock()
+	delete(runner.processes, process)
+	runner.mu.Unlock()
 }
 
 // Process is a started provider stream. Callers must close Stdin, drain Stdout,
@@ -23,6 +96,7 @@ type Process struct {
 
 	workingDirectory string
 	authority        *processAuthority
+	owner            *Runner
 	input            *inputPipe
 	stdout           *limitedReader
 	stderr           *stderrCapture
@@ -40,6 +114,10 @@ type Process struct {
 // Start launches a generated command in a private working directory and
 // process group. It never searches PATH or invokes a shell.
 func (runner *Runner) Start(parent context.Context, requested Command) (*Process, error) {
+	if !runner.beginStart() {
+		return nil, context.Canceled
+	}
+	defer runner.starting.Done()
 	command, err := cloneAndValidate(requested)
 	if err != nil {
 		return nil, err
@@ -106,6 +184,12 @@ func (runner *Runner) Start(parent context.Context, requested Command) (*Process
 	}
 
 	process := newProcess(command, workingDirectory, cmd, stdin, stdout, stderr, cancel)
+	process.owner = runner
+	if !runner.register(process) {
+		process.stop()
+		_, _ = process.Wait()
+		return nil, context.Canceled
+	}
 	process.monitor(operation)
 	return process, nil
 }
@@ -161,6 +245,13 @@ func (process *Process) inputLimitExceeded() {
 	}
 }
 
+func (process *Process) stop() {
+	process.cancel()
+	if process.authority.terminate(context.Canceled) {
+		_ = process.input.raw.Close()
+	}
+}
+
 // Wait fully reaps the process group and removes its private directory.
 func (process *Process) Wait() (Result, error) {
 	process.waitOnce.Do(process.wait)
@@ -170,6 +261,9 @@ func (process *Process) Wait() (Result, error) {
 }
 
 func (process *Process) wait() {
+	if process.owner != nil {
+		defer process.owner.forget(process)
+	}
 	observationErr := <-process.exitObserved
 	_ = process.input.raw.Close()
 	<-process.input.prefixDone

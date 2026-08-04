@@ -71,7 +71,11 @@ func TestHealthReadinessTransitions(t *testing.T) {
 
 func TestConcurrencyLimitsAreGlobalAndPerPrincipal(t *testing.T) {
 	service := testServer(t, Options{MaxConcurrentRequests: 2, MaxConcurrentRequestsPerPrincipal: 1})
-	interceptor := service.concurrencyUnaryInterceptor()
+	interceptor := func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		return service.globalConcurrencyUnaryInterceptor()(ctx, request, info, func(ctx context.Context, request any) (any, error) {
+			return service.concurrencyUnaryInterceptor()(ctx, request, info, handler)
+		})
+	}
 	startedA := make(chan struct{})
 	releaseA := make(chan struct{})
 	firstDone := make(chan error, 1)
