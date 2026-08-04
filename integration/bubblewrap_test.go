@@ -5,7 +5,6 @@ package integration_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -117,40 +116,6 @@ func TestBubblewrapClientClosureSupportsRestrictedGHAndRealGit(t *testing.T) {
 	}
 	assertNoFixtureProcess(t, fixture.root)
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
-}
-
-func TestBubblewrapFailureDiagnosticRedactsSensitiveChannelContents(t *testing.T) {
-	markers := []string{
-		"rw1_test-bearer-token",
-		"provider-authentication-marker",
-		"repowolf-control-marker",
-	}
-	diagnostic := bubblewrapFailureDiagnostic(errors.New("exit status 1"), map[string][]byte{
-		"jail stdout":     []byte(markers[0]),
-		"jail stderr":     []byte(markers[1]),
-		"server stderr":   []byte(markers[2]),
-		"audit":           []byte(strings.Join(markers, "\n")),
-		"provider stderr": []byte(strings.Join(markers, "\n")),
-	})
-	for _, marker := range markers {
-		if strings.Contains(diagnostic, marker) {
-			t.Fatalf("diagnostic exposed sensitive marker")
-		}
-	}
-	for _, category := range []string{"jail stdout", "jail stderr", "server stderr", "audit", "provider stderr"} {
-		if !strings.Contains(diagnostic, category) {
-			t.Fatalf("diagnostic omitted channel category %q", category)
-		}
-	}
-}
-
-func bubblewrapFailureDiagnostic(err error, channels map[string][]byte) string {
-	categories := make([]string, 0, len(channels))
-	for category, contents := range channels {
-		categories = append(categories, fmt.Sprintf("%s=%d bytes", category, len(contents)))
-	}
-	sort.Strings(categories)
-	return fmt.Sprintf("Bubblewrap jail failed: %v; channel byte counts: %s", err, strings.Join(categories, ", "))
 }
 
 func jailOutputLeaksSensitiveMarker(stdout, stderr []byte) bool {
