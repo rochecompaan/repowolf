@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: cachix/install-nix-action@v31
+      - name: Lint Protobuf
+        run: go tool buf lint
+      - name: Check generated files
+        run: scripts/check-generated.sh
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test -race ./...
+      - name: Check Nix flake
+        run: nix flake check --accept-flake-config --print-build-logs
+      - name: Smoke-test OCI image
+        run: |
+          image="$(nix build .#ociImage --no-link --print-out-paths)"
+          docker load -i "$image"
+          docker run --rm repowolf:mvp --version
+
+  release-smoke:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: cachix/install-nix-action@v31
+      - name: Confirm native architecture
+        run: test "$(go env GOARCH)" = "${{ matrix.arch }}"
+      - name: Build and smoke-test release archives
+        run: scripts/check-release.sh
