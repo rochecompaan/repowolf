@@ -5,6 +5,7 @@ package integration_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -74,14 +75,16 @@ func TestBubblewrapClientClosureSupportsRestrictedGHAndRealGit(t *testing.T) {
 		t.Fatalf("forward Bubblewrap TTY stdin: %v", err)
 	}
 	if err := command.Wait(); err != nil {
-		t.Fatalf("Bubblewrap jail: %v\nstdout:\n%s\nstderr:\n%s\nserver stderr:\n%s\naudit:\n%s\nprovider stderr:\n%s",
-			err, stdout.String(), stderr.String(), readIfPresent(fixture.server.StderrPath),
-			readIfPresent(fixture.server.AuditPath), readIfPresent(fixture.providerStderr))
+		t.Fatal(bubblewrapFailureDiagnostic(err, map[string][]byte{
+			"jail stdout":     stdout.Bytes(),
+			"jail stderr":     stderr.Bytes(),
+			"server stderr":   readDiagnosticChannel(fixture.server.StderrPath),
+			"audit":           readDiagnosticChannel(fixture.server.AuditPath),
+			"provider stderr": readDiagnosticChannel(fixture.providerStderr),
+		}))
 	}
-	for _, leaked := range []string{agentToken, providerCredential, environmentMarker, providerStderr, sshStderrMarker} {
-		if strings.Contains(stdout.String()+stderr.String(), leaked) {
-			t.Fatalf("jail output leaked marker %q", leaked)
-		}
+	if jailOutputLeaksSensitiveMarker(stdout.Bytes(), stderr.Bytes()) {
+		t.Fatal("jail output contains a synthetic sensitive marker")
 	}
 
 	if after := checkoutState(t, fixture, fixture.checkout); after != before {
@@ -108,14 +111,62 @@ func TestBubblewrapClientClosureSupportsRestrictedGHAndRealGit(t *testing.T) {
 		"provider": string(mustRead(fixture.providerEnvironment)),
 		"ssh":      string(mustRead(fixture.sshEnvironment)),
 	} {
-		if !strings.Contains(environment, "GH_TOKEN="+providerCredential) ||
-			!strings.Contains(environment, "REPOWOLF_TOKEN_AGENT=unset") ||
-			!strings.Contains(environment, "REPOWOLF_ENDPOINT=unset") {
-			t.Errorf("%s environment contract mismatch: %q", name, environment)
+		if !providerEnvironmentContractMet(environment) {
+			t.Errorf("%s environment contract mismatch", name)
 		}
 	}
 	assertNoFixtureProcess(t, fixture.root)
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
+}
+
+func TestBubblewrapFailureDiagnosticRedactsSensitiveChannelContents(t *testing.T) {
+	markers := []string{
+		"rw1_test-bearer-token",
+		"provider-authentication-marker",
+		"repowolf-control-marker",
+	}
+	diagnostic := bubblewrapFailureDiagnostic(errors.New("exit status 1"), map[string][]byte{
+		"jail stdout":     []byte(markers[0]),
+		"jail stderr":     []byte(markers[1]),
+		"server stderr":   []byte(markers[2]),
+		"audit":           []byte(strings.Join(markers, "\n")),
+		"provider stderr": []byte(strings.Join(markers, "\n")),
+	})
+	for _, marker := range markers {
+		if strings.Contains(diagnostic, marker) {
+			t.Fatalf("diagnostic exposed sensitive marker")
+		}
+	}
+	for _, category := range []string{"jail stdout", "jail stderr", "server stderr", "audit", "provider stderr"} {
+		if !strings.Contains(diagnostic, category) {
+			t.Fatalf("diagnostic omitted channel category %q", category)
+		}
+	}
+}
+
+func bubblewrapFailureDiagnostic(err error, channels map[string][]byte) string {
+	categories := make([]string, 0, len(channels))
+	for category, contents := range channels {
+		categories = append(categories, fmt.Sprintf("%s=%d bytes", category, len(contents)))
+	}
+	sort.Strings(categories)
+	return fmt.Sprintf("Bubblewrap jail failed: %v; channel byte counts: %s", err, strings.Join(categories, ", "))
+}
+
+func jailOutputLeaksSensitiveMarker(stdout, stderr []byte) bool {
+	output := string(stdout) + string(stderr)
+	for _, marker := range []string{agentToken, providerCredential, environmentMarker, providerStderr, sshStderrMarker} {
+		if strings.Contains(output, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func providerEnvironmentContractMet(environment string) bool {
+	return strings.Contains(environment, "GH_TOKEN="+providerCredential) &&
+		strings.Contains(environment, "REPOWOLF_TOKEN_AGENT=unset") &&
+		strings.Contains(environment, "REPOWOLF_ENDPOINT=unset")
 }
 
 type jailFixture struct {
@@ -259,12 +310,9 @@ func containsPath(paths []string, target string) bool {
 	return index < len(paths) && paths[index] == target
 }
 
-func readIfPresent(path string) string {
-	contents, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Sprintf("<unavailable: %v>", err)
-	}
-	return string(contents)
+func readDiagnosticChannel(path string) []byte {
+	contents, _ := os.ReadFile(path)
+	return contents
 }
 
 func bubblewrapArguments(t *testing.T, config bubblewrapConfig, closure []string, fixture *jailFixture) []string {
