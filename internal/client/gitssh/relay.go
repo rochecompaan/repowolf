@@ -15,6 +15,8 @@ const (
 	maximumGitBytes   int64 = 8 << 30
 )
 
+var errRelayCompleted = errors.New("Git relay completed")
+
 type gitClientStream interface {
 	Send(*repowolfv1.GitFrame) error
 	Recv() (*repowolfv1.GitFrame, error)
@@ -68,20 +70,37 @@ func relayWithLimits(ctx context.Context, open streamOpener, request Request, st
 		})
 	}
 	stopOnCancel := context.AfterFunc(relayContext, stopSender)
-	go func() {
-		sendErr := sendInput(relayContext, stream, request, stdin, limits, opened, startInput, stopInput)
-		if sendErr != nil {
-			cancel(sendErr)
+	recordSenderFailure := func(err error) error {
+		if err == nil {
+			return nil
 		}
-		senderDone <- sendErr
+		select {
+		case <-stopInput:
+			return nil
+		default:
+			cancel(err)
+			return err
+		}
+	}
+	go func() {
+		senderDone <- sendInput(relayContext, stream, request, stdin, limits, opened, startInput, stopInput, recordSenderFailure)
 	}()
+	var senderErr error
+	senderJoined := false
+	joinSender := func() error {
+		if !senderJoined {
+			senderErr = <-senderDone
+			senderJoined = true
+		}
+		return senderErr
+	}
 	defer func() {
 		cancel(context.Canceled)
 		stopSender()
 		if !stopOnCancel() {
 			<-relayContext.Done()
 		}
-		<-senderDone
+		joinSender()
 	}()
 
 	select {
@@ -100,6 +119,15 @@ func relayWithLimits(ctx context.Context, open streamOpener, request Request, st
 		frame, receiveErr := stream.Recv()
 		if receiveErr != nil {
 			if errors.Is(receiveErr, io.EOF) && terminal != nil {
+				cancel(errRelayCompleted)
+				stopSender()
+				sendErr := joinSender()
+				if !errors.Is(context.Cause(relayContext), errRelayCompleted) {
+					if sendErr != nil {
+						return nil, sendErr
+					}
+					return nil, context.Cause(relayContext)
+				}
 				return terminal, nil
 			}
 			select {
@@ -133,8 +161,9 @@ func relayWithLimits(ctx context.Context, open streamOpener, request Request, st
 	}
 }
 
-func sendInput(ctx context.Context, stream gitClientStream, request Request, input io.Reader, limits relayLimits, opened chan<- error, start, stop <-chan struct{}) error {
+func sendInput(ctx context.Context, stream gitClientStream, request Request, input io.Reader, limits relayLimits, opened chan<- error, start, stop <-chan struct{}, recordFailure func(error) error) error {
 	err := stream.Send(&repowolfv1.GitFrame{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: request.Repository}}})
+	err = recordFailure(err)
 	opened <- err
 	if err != nil {
 		return err
@@ -153,7 +182,7 @@ func sendInput(ctx context.Context, stream gitClientStream, request Request, inp
 		count, readErr := input.Read(buffer)
 		if count > 0 {
 			if int64(count) > limits.maxBytes-total {
-				return fmt.Errorf("Git input exceeds local limit")
+				return recordFailure(fmt.Errorf("Git input exceeds local limit"))
 			}
 			select {
 			case <-stop:
@@ -164,18 +193,18 @@ func sendInput(ctx context.Context, stream gitClientStream, request Request, inp
 			}
 			frame := &repowolfv1.GitFrame{Payload: &repowolfv1.GitFrame_Data{Data: &repowolfv1.GitData{Data: buffer[:count]}}}
 			if err := stream.Send(frame); err != nil {
-				return err
+				return recordFailure(err)
 			}
 			total += int64(count)
 		}
 		if errors.Is(readErr, io.EOF) {
-			return stream.CloseSend()
+			return recordFailure(stream.CloseSend())
 		}
 		if readErr != nil {
-			return readErr
+			return recordFailure(readErr)
 		}
 		if count == 0 {
-			return io.ErrNoProgress
+			return recordFailure(io.ErrNoProgress)
 		}
 	}
 }
