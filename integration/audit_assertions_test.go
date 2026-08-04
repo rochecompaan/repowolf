@@ -35,7 +35,7 @@ var auditFields = map[string]bool{
 func parseAuditRecords(contents []byte, forbidden []string) ([]auditRecord, error) {
 	for _, marker := range forbidden {
 		if marker != "" && bytes.Contains(contents, []byte(marker)) {
-			return nil, fmt.Errorf("audit leaked marker %q", marker)
+			return nil, fmt.Errorf("audit contains a forbidden marker")
 		}
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(contents))
@@ -52,7 +52,7 @@ func parseAuditRecords(contents []byte, forbidden []string) ([]auditRecord, erro
 		}
 		for field := range fields {
 			if !auditFields[field] {
-				return nil, fmt.Errorf("unexpected audit field %q", field)
+				return nil, fmt.Errorf("unexpected audit field")
 			}
 		}
 		canonical, err := json.Marshal(fields)
@@ -95,21 +95,21 @@ func assertAuditInvocations(t *testing.T, contents string, expected [][]auditExp
 		count += len(invocation)
 	}
 	if len(records) != count {
-		t.Fatalf("audit record count = %d, want %d: %s", len(records), count, contents)
+		t.Fatalf("audit record count = %d, want %d", len(records), count)
 	}
 	index := 0
 	requestIDs := make(map[string]bool, len(expected))
 	for invocationIndex, invocation := range expected {
 		requestID := records[index].event.RequestID
 		if requestID == "" || requestIDs[requestID] {
-			t.Fatalf("invocation %d request ID = %q", invocationIndex, requestID)
+			t.Fatalf("invocation %d has an invalid request ID", invocationIndex)
 		}
 		requestIDs[requestID] = true
 		for recordIndex, want := range invocation {
 			record := records[index]
 			index++
 			if record.event.RequestID != requestID || record.event.Timestamp.IsZero() {
-				t.Fatalf("invocation %d record %d identity = %#v", invocationIndex, recordIndex, record.event)
+				t.Fatalf("invocation %d record %d has invalid identity", invocationIndex, recordIndex)
 			}
 			got := auditExpectation{
 				operation: record.event.Operation, outcome: string(record.event.Outcome), principal: record.event.Principal,
@@ -120,7 +120,7 @@ func assertAuditInvocations(t *testing.T, contents string, expected [][]auditExp
 			comparison := want
 			comparison.required, comparison.optional = nil, nil
 			if !reflect.DeepEqual(got, comparison) {
-				t.Fatalf("invocation %d record %d = %#v, want %#v", invocationIndex, recordIndex, got, comparison)
+				t.Fatalf("invocation %d record %d does not match the expected safe audit metadata", invocationIndex, recordIndex)
 			}
 			allowed := make(map[string]bool, len(want.required)+len(want.optional))
 			for _, field := range append(append([]string(nil), want.required...), want.optional...) {
