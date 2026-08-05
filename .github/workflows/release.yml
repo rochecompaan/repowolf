@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
+      - name: Confirm native architecture
+        run: test "$(go env GOARCH)" = "${{ matrix.arch }}"
+      - name: Build and smoke-test release archives
+        run: scripts/check-release.sh
+
+  publish:
+    needs: release-smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
+      - name: Publish binary archives and checksums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nix develop -c goreleaser release --clean
+      - name: Build and publish OCI image
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="$(nix build .#ociImage --no-link --print-out-paths)"
+          tag="$GITHUB_REF_NAME"
+          printf '%s' "$GHCR_TOKEN" | nix develop -c skopeo login --username "$GITHUB_ACTOR" --password-stdin ghcr.io
+          nix develop -c skopeo copy docker-archive:"$image" docker://ghcr.io/rochecompaan/repowolf:"$tag"

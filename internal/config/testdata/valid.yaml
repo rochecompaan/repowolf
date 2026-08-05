@@ -1,0 +1,32 @@
+apiVersion: repowolf.dev/v1alpha1
+listen: :8443
+tls:
+  certificate: /run/repowolf/tls.crt
+  privateKey: /run/repowolf/tls.key
+tools:
+  gh: null
+  ssh: null
+providers:
+  github:
+    kind: github
+    apiHost: github.com
+    gitHost: github.com
+    sshUser: git
+repositories:
+  clubhouse:
+    provider: github
+    owner: alpha
+    name: clubhouse
+    git:
+      denyDeletes: true
+      maxRefUpdates: 16
+principals:
+  agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_AGENT
+    grants:
+      - repository: clubhouse
+        capabilities:
+          - repository:read
+          - git:read
+          - git:write
