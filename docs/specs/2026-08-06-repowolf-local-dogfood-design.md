@@ -128,7 +128,7 @@ Pinning `tools.gh`/`tools.ssh` is required because the devenv `PATH` deliberatel
 `devenv shell` does not start processes by itself. The `enterShell` hook therefore:
 
 1. Probes `127.0.0.1:9443` with bash `/dev/tcp`.
-2. If unreachable, launches `nohup devenv up -d repowolf` in the background (log under `.devenv`). This mechanism was prototyped on devenv 2.1.2: the launch is deduplicated ("Already running or waiting"), does not recurse, and a warm-cache service is healthy within about 10 seconds. The first-ever activation additionally builds the process manager closure and can take minutes; the hook prints a notice that the broker is starting in the background.
+2. If unreachable, launches `nohup repowolf-dogfood.sh autostart` in the background (log under `.devenv`). The `autostart` subcommand first closes every inherited fd ≥ 3 and redirects stdin from `/dev/null` before running `devenv up -d repowolf`; redirecting only stdout/stderr leaks caller pipes (for example direnv's `.envrc` capture pipe, inherited as an ExtraFile on fd 3) into the long-lived process daemon, which deadlocks the caller's `Wait()` forever. This mechanism was prototyped on devenv 2.1.2: the launch is deduplicated ("Already running or waiting"), does not recurse, and a warm-cache service is healthy within about 10 seconds. The first-ever activation additionally builds the process manager closure and can take minutes; the hook prints a notice that the broker is starting in the background.
 3. Exports the client environment:
    - `REPOWOLF_ENDPOINT=https://localhost:9443`
    - `REPOWOLF_TOKEN` read from `.devenv/repowolf/token` (file is 0600; value exists only in the shell environment)

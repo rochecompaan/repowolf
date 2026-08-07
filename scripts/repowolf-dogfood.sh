@@ -138,14 +138,28 @@ probe() {
   (exec 3<>"/dev/tcp/${LISTEN_HOST}/${LISTEN_PORT}") 2>/dev/null
 }
 
+autostart() {
+  local state n
+  state=$(state_dir)
+  # Fully detach from the caller: drop every inherited fd >= 3 so a caller
+  # that captures our output (e.g. direnv's .envrc capture pipe, inherited as
+  # an ExtraFile) sees EOF even though the daemon spawned by 'devenv up'
+  # outlives this shell. Only redirecting stdout/stderr is not enough.
+  for n in $(seq 3 254); do
+    eval "exec $n>&-" 2>/dev/null || true
+  done
+  exec devenv up -d repowolf >>"$state/autostart.log" 2>&1 </dev/null
+}
+
 case "${1:-}" in
   bootstrap) bootstrap ;;
   status) status ;;
   serve) serve ;;
   reset) reset ;;
   probe) probe ;;
+  autostart) autostart ;;
   *)
-    echo "usage: repowolf-dogfood <bootstrap|status|serve|reset|probe>" >&2
+    echo "usage: repowolf-dogfood <bootstrap|status|serve|reset|probe|autostart>" >&2
     exit 2
     ;;
 esac
