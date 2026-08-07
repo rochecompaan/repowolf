@@ -39,7 +39,7 @@ in
     fi
     if ! (exec 3<>/dev/tcp/127.0.0.1/9443) 2>/dev/null; then
       echo "repowolf-dogfood: starting broker in the background (first activation may take a few minutes)"
-      nohup devenv up -d repowolf >"$DEVENV_ROOT/.devenv/repowolf/autostart.log" 2>&1 &
+      nohup ${pkgs.bash}/bin/bash ${./scripts/repowolf-dogfood.sh} autostart >/dev/null 2>&1 &
     fi
   '';
 }
