@@ -10,15 +10,11 @@ REPOWOLF_REPO=${REPOWOLF_REPO:?set REPOWOLF_REPO to one owner/name repository}
 REPOWOLF_SSH_KEY=${REPOWOLF_SSH_KEY:-}
 REPOWOLF_KNOWN_HOSTS=${REPOWOLF_KNOWN_HOSTS:-}
 
-if [[ $REPOWOLF_REPO =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/([A-Za-z0-9._-]{1,100})$ ]]; then
+if [[ $REPOWOLF_REPO =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/([A-Za-z0-9][A-Za-z0-9._-]{0,99})$ ]]; then
   owner=${BASH_REMATCH[1]}
   name=${BASH_REMATCH[3]}
 else
-  echo "bootstrap: REPOWOLF_REPO must match owner/name using GitHub-safe characters" >&2
-  exit 2
-fi
-if [ "$name" = "." ] || [ "$name" = ".." ]; then
-  echo "bootstrap: repository name cannot be . or .." >&2
+  echo "bootstrap: REPOWOLF_REPO must match owner/name with alphanumeric first characters" >&2
   exit 2
 fi
 if { [ -n "$REPOWOLF_SSH_KEY" ] && [ -z "$REPOWOLF_KNOWN_HOSTS" ]; } || \
@@ -30,17 +26,20 @@ if [ -n "$REPOWOLF_SSH_KEY" ] && { [ ! -f "$REPOWOLF_SSH_KEY" ] || [ ! -f "$REPO
   echo "bootstrap: SSH key and known-hosts inputs must be readable files" >&2
   exit 2
 fi
-if [ -e "$STATE_DIR" ]; then
-  echo "bootstrap: $STATE_DIR already exists; back it up before resetting" >&2
+if { [ -e "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; } && \
+   { [ ! -f "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; }; then
+  echo "bootstrap: $ENV_FILE must be a regular file when it exists" >&2
   exit 1
 fi
 
 created_state=0
-env_tmp="${ENV_FILE}.tmp.$$"
+env_tmp=
 cleanup_failed_bootstrap() {
   status=$?
   trap - EXIT INT TERM
-  rm -f "$env_tmp"
+  if [ -n "$env_tmp" ]; then
+    rm -f -- "$env_tmp"
+  fi
   if [ "$status" -ne 0 ] && [ "$created_state" -eq 1 ]; then
     rm -rf "$STATE_DIR" # only partial state created by this invocation
   fi
@@ -50,9 +49,16 @@ trap cleanup_failed_bootstrap EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-mkdir -p "$STATE_DIR"
-chmod 0700 "$STATE_DIR"
+if ! mkdir "$STATE_DIR"; then
+  if [ -e "$STATE_DIR" ]; then
+    echo "bootstrap: $STATE_DIR already exists; back it up before resetting" >&2
+  else
+    echo "bootstrap: could not create $STATE_DIR" >&2
+  fi
+  exit 1
+fi
 created_state=1
+chmod 0700 "$STATE_DIR"
 
 rw_as_host() {
   docker run --rm --user "$(id -u):$(id -g)" \
@@ -104,9 +110,21 @@ docker run --rm --user 0:0 \
     fi
   '
 
-rw_as_host config validate --config /state/config.yaml >/dev/null
+docker run --rm --user 65532:65532 \
+  -v "$STATE_DIR/config.yaml:/config.yaml:ro" \
+  "$REPOWOLF_IMAGE" config validate --config /config.yaml >/dev/null
 
-: > "$env_tmp"
+if [ -n "$REPOWOLF_SSH_KEY" ]; then
+  ssh_effective=$(docker run --rm \
+    -v "$STATE_DIR/ssh:/tmp/.ssh:ro" \
+    --entrypoint ssh "$REPOWOLF_IMAGE" -G github.com)
+  grep -Eq '^identityagent[[:space:]]+none$' <<< "$ssh_effective"
+  grep -Eq '^identityfile[[:space:]]+/tmp/.ssh/id_ed25519$' <<< "$ssh_effective"
+  grep -Eq '^userknownhostsfile[[:space:]]+/tmp/.ssh/known_hosts$' <<< "$ssh_effective"
+fi
+
+env_tmp=$(mktemp "${ENV_FILE}.tmp.XXXXXX")
+chmod 0600 "$env_tmp"
 found_token=0
 if [ -f "$ENV_FILE" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
@@ -122,8 +140,20 @@ fi
 if [ "$found_token" -eq 0 ]; then
   printf 'REPOWOLF_TOKEN_AGENT=%s\n' "$(cat "$STATE_DIR/token")" >> "$env_tmp"
 fi
-chmod 0600 "$env_tmp"
+if { [ -e "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; } && \
+   { [ ! -f "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; }; then
+  echo "bootstrap: $ENV_FILE must be a regular file when it exists" >&2
+  exit 1
+fi
 mv "$env_tmp" "$ENV_FILE"
+if { [ ! -f "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; }; then
+  if [ -d "$ENV_FILE" ]; then
+    rm -f -- "$ENV_FILE/${env_tmp##*/}"
+  fi
+  echo "bootstrap: $ENV_FILE must be a regular file when it exists" >&2
+  exit 1
+fi
+env_tmp=
 
 trap - EXIT INT TERM
 cat <<EOF

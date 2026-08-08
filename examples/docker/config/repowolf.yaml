@@ -20,8 +20,8 @@ providers:
 repositories:
   example:
     provider: github-public
-    owner: __OWNER__
-    name: __NAME__
+    owner: "__OWNER__"
+    name: "__NAME__"
     git:
       denyRefs:
         - refs/heads/main
