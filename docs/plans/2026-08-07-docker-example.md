@@ -89,8 +89,8 @@ providers:
 repositories:
   example:
     provider: github-public
-    owner: __OWNER__
-    name: __NAME__
+    owner: "__OWNER__"
+    name: "__NAME__"
     git:
       denyRefs:
         - refs/heads/main
@@ -290,6 +290,7 @@ git commit -m "feat(examples): add checksum-verified sandbox image"
 **Files:**
 - Create: `examples/docker/bootstrap.sh`
 - Create: `examples/docker/wait-for-broker.sh`
+- Create: `examples/docker/test-wait-for-broker.sh`
 
 **Interfaces:**
 - Inputs: required `REPOWOLF_REPO`; optional `REPOWOLF_IMAGE`; optional pair `REPOWOLF_SSH_KEY`/`REPOWOLF_KNOWN_HOSTS`.
@@ -311,15 +312,11 @@ REPOWOLF_REPO=${REPOWOLF_REPO:?set REPOWOLF_REPO to one owner/name repository}
 REPOWOLF_SSH_KEY=${REPOWOLF_SSH_KEY:-}
 REPOWOLF_KNOWN_HOSTS=${REPOWOLF_KNOWN_HOSTS:-}
 
-if [[ $REPOWOLF_REPO =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/([A-Za-z0-9._-]{1,100})$ ]]; then
+if [[ $REPOWOLF_REPO =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/([A-Za-z0-9][A-Za-z0-9._-]{0,99})$ ]]; then
   owner=${BASH_REMATCH[1]}
   name=${BASH_REMATCH[3]}
 else
-  echo "bootstrap: REPOWOLF_REPO must match owner/name using GitHub-safe characters" >&2
-  exit 2
-fi
-if [ "$name" = "." ] || [ "$name" = ".." ]; then
-  echo "bootstrap: repository name cannot be . or .." >&2
+  echo "bootstrap: REPOWOLF_REPO must match owner/name with alphanumeric first characters" >&2
   exit 2
 fi
 if { [ -n "$REPOWOLF_SSH_KEY" ] && [ -z "$REPOWOLF_KNOWN_HOSTS" ]; } || \
@@ -331,17 +328,20 @@ if [ -n "$REPOWOLF_SSH_KEY" ] && { [ ! -f "$REPOWOLF_SSH_KEY" ] || [ ! -f "$REPO
   echo "bootstrap: SSH key and known-hosts inputs must be readable files" >&2
   exit 2
 fi
-if [ -e "$STATE_DIR" ]; then
-  echo "bootstrap: $STATE_DIR already exists; back it up before resetting" >&2
+if { [ -e "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; } && \
+   { [ ! -f "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; }; then
+  echo "bootstrap: $ENV_FILE must be a regular file when it exists" >&2
   exit 1
 fi
 
 created_state=0
-env_tmp="${ENV_FILE}.tmp.$$"
+env_tmp=
 cleanup_failed_bootstrap() {
   status=$?
   trap - EXIT INT TERM
-  rm -f "$env_tmp"
+  if [ -n "$env_tmp" ]; then
+    rm -f -- "$env_tmp"
+  fi
   if [ "$status" -ne 0 ] && [ "$created_state" -eq 1 ]; then
     rm -rf "$STATE_DIR" # only partial state created by this invocation
   fi
@@ -351,9 +351,16 @@ trap cleanup_failed_bootstrap EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-mkdir -p "$STATE_DIR"
-chmod 0700 "$STATE_DIR"
+if ! mkdir "$STATE_DIR"; then
+  if [ -e "$STATE_DIR" ]; then
+    echo "bootstrap: $STATE_DIR already exists; back it up before resetting" >&2
+  else
+    echo "bootstrap: could not create $STATE_DIR" >&2
+  fi
+  exit 1
+fi
 created_state=1
+chmod 0700 "$STATE_DIR"
 
 rw_as_host() {
   docker run --rm --user "$(id -u):$(id -g)" \
@@ -405,9 +412,21 @@ docker run --rm --user 0:0 \
     fi
   '
 
-rw_as_host config validate --config /state/config.yaml >/dev/null
+docker run --rm --user 65532:65532 \
+  -v "$STATE_DIR/config.yaml:/config.yaml:ro" \
+  "$REPOWOLF_IMAGE" config validate --config /config.yaml >/dev/null
 
-: > "$env_tmp"
+if [ -n "$REPOWOLF_SSH_KEY" ]; then
+  ssh_effective=$(docker run --rm \
+    -v "$STATE_DIR/ssh:/tmp/.ssh:ro" \
+    --entrypoint ssh "$REPOWOLF_IMAGE" -G github.com)
+  grep -Eq '^identityagent[[:space:]]+none$' <<< "$ssh_effective"
+  grep -Eq '^identityfile[[:space:]]+/tmp/.ssh/id_ed25519$' <<< "$ssh_effective"
+  grep -Eq '^userknownhostsfile[[:space:]]+/tmp/.ssh/known_hosts$' <<< "$ssh_effective"
+fi
+
+env_tmp=$(mktemp "${ENV_FILE}.tmp.XXXXXX")
+chmod 0600 "$env_tmp"
 found_token=0
 if [ -f "$ENV_FILE" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
@@ -423,8 +442,20 @@ fi
 if [ "$found_token" -eq 0 ]; then
   printf 'REPOWOLF_TOKEN_AGENT=%s\n' "$(cat "$STATE_DIR/token")" >> "$env_tmp"
 fi
-chmod 0600 "$env_tmp"
+if { [ -e "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; } && \
+   { [ ! -f "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; }; then
+  echo "bootstrap: $ENV_FILE must be a regular file when it exists" >&2
+  exit 1
+fi
 mv "$env_tmp" "$ENV_FILE"
+if { [ ! -f "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; }; then
+  if [ -d "$ENV_FILE" ]; then
+    rm -f -- "$ENV_FILE/${env_tmp##*/}"
+  fi
+  echo "bootstrap: $ENV_FILE must be a regular file when it exists" >&2
+  exit 1
+fi
+env_tmp=
 
 trap - EXIT INT TERM
 cat <<EOF
@@ -446,8 +477,8 @@ set -euo pipefail
 host=${1:-127.0.0.1}
 port=${2:-8443}
 attempts=${3:-30}
-if [[ ! $port =~ ^[0-9]+$ ]] || [ "$port" -eq 0 ] || [ "$port" -gt 65535 ] || \
-   [[ ! $attempts =~ ^[1-9][0-9]*$ ]] || [ "$attempts" -gt 300 ]; then
+if [[ ! $port =~ ^[1-9][0-9]{0,4}$ ]] || [ "$port" -gt 65535 ] || \
+   [[ ! $attempts =~ ^[1-9][0-9]{0,2}$ ]] || [ "$attempts" -gt 300 ]; then
   echo "usage: wait-for-broker.sh [host] [port] [attempts]" >&2
   exit 2
 fi
@@ -470,15 +501,16 @@ chmod +x examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh
 - [ ] **Step 3: Run shell checks without masking findings**
 
 ```bash
-bash -n examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh
+bash -n examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh examples/docker/test-wait-for-broker.sh
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh
+  shellcheck examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh examples/docker/test-wait-for-broker.sh
 else
   echo "shellcheck not installed; skipped"
 fi
+examples/docker/test-wait-for-broker.sh
 ```
 
-Expected: `bash -n` exit 0. If shellcheck exists, findings fail the step; only absence prints `skipped`.
+Expected: `bash -n` and the oversized numeric-argument regression test exit 0. If shellcheck exists, findings fail the step; only absence prints `skipped`.
 
 - [ ] **Step 4: Build/load current broker image**
 
@@ -512,10 +544,29 @@ if REPOWOLF_IMAGE=repowolf:mvp REPOWOLF_REPO="$newline_repo" ./bootstrap.sh; the
   exit 1
 fi
 test ! -e state
+for edge in 'foo/null' 'foo/Null'; do
+  REPOWOLF_IMAGE=repowolf:mvp REPOWOLF_REPO="$edge" ./bootstrap.sh
+  docker run --rm --user 65532:65532 \
+    -v "$PWD/state/config.yaml:/config.yaml:ro" \
+    repowolf:mvp config validate --config /config.yaml
+  rm -rf -- state .env
+done
+if REPOWOLF_IMAGE=repowolf:mvp REPOWOLF_REPO='foo/-' ./bootstrap.sh; then
+  echo "accepted repository name with non-alphanumeric first character" >&2
+  exit 1
+fi
+test ! -e state
+mkdir .env
+if REPOWOLF_IMAGE=repowolf:mvp REPOWOLF_REPO='foo/repo' ./bootstrap.sh; then
+  echo "accepted a non-regular .env destination" >&2
+  exit 1
+fi
+test ! -e state
+rm -rf -- .env
 cd ../..
 ```
 
-Expected: each call exits 2; no `state/` created and no injected command output.
+Expected: invalid repository input exits 2 with no `state/` and no injected command output. `null` and `Null` render as YAML strings and validate as OCI UID/GID 65532; `-` is rejected because RepoWolf repository names must start alphanumeric. A directory `.env` is rejected before state creation.
 
 - [ ] **Step 6: Functional bootstrap and permissions**
 
@@ -544,7 +595,7 @@ test "$(stat -c %a state/ssh/config)" = "640"
 test "$(stat -c %u state/ssh/id_ed25519)" = "65532"
 test "$(stat -c %a state/ssh/id_ed25519)" = "600"
 docker run --rm --user 65532:65532 -v "$PWD/state/tls/tls.key:/key:ro" alpine:3 test -r /key
-docker run --rm -v "$PWD/state/config.yaml:/config.yaml:ro" repowolf:mvp config validate --config /config.yaml
+docker run --rm --user 65532:65532 -v "$PWD/state/config.yaml:/config.yaml:ro" repowolf:mvp config validate --config /config.yaml
 ssh_effective=$(mktemp /tmp/repowolf-ssh-effective.XXXXXX)
 docker run --rm -v "$PWD/state/ssh:/tmp/.ssh:ro" --entrypoint ssh repowolf:mvp -G github.com > "$ssh_effective"
 grep -E '^identityagent[[:space:]]+none$' "$ssh_effective"
@@ -552,10 +603,10 @@ grep -E '^identityfile[[:space:]]+/tmp/.ssh/id_ed25519$' "$ssh_effective"
 grep -E '^userknownhostsfile[[:space:]]+/tmp/.ssh/known_hosts$' "$ssh_effective"
 rm "$ssh_effective"
 grep -q '^REPOWOLF_TOKEN_AGENT=.\+' .env
-git check-ignore -q state .env
+git check-ignore -q state && git check-ignore -q .env
 ```
 
-Expected: all checks pass; the actual OCI user validates `config.yaml`, can read `tls.key`, and accepts the root-owned OpenSSH config with the intended effective values. `ca.key` remains host-private.
+Expected: all checks pass; bootstrap itself validates `config.yaml` as OCI UID/GID 65532 and validates the effective OpenSSH values before committing `.env`. The actual OCI user can read `tls.key` and validate `config.yaml`; it accepts the root-owned OpenSSH config with the intended values. `ca.key` remains host-private.
 
 Verify duplicate refusal, then remove only the disposable dummy state from this test:
 
@@ -572,7 +623,7 @@ cd ../..
 - [ ] **Step 7: Commit**
 
 ```bash
-git add examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh
+git add examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh examples/docker/test-wait-for-broker.sh
 git commit -m "feat(examples): add safe docker bootstrap and readiness wait"
 ```
 
@@ -707,7 +758,7 @@ docker run --rm --user 0:0 \
     chmod 0550 /test/fake-ssh
     chmod 0660 /test/ssh-argv
   '
-docker run --rm -v "$PWD/state/config.yaml:/config.yaml:ro" repowolf:mvp config validate --config /config.yaml
+docker run --rm --user 65532:65532 -v "$PWD/state/config.yaml:/config.yaml:ro" repowolf:mvp config validate --config /config.yaml
 ```
 
 Expected: config validates as broker UID 65532; fake executable and pre-created argv log are accessible to broker GID 65532. The `awk` replacement is fixed test data and consumes no untrusted input.
@@ -893,7 +944,7 @@ git commit -m "feat(examples): add compose broker and observable SSH smoke"
           REPOWOLF_KNOWN_HOSTS="$ssh_test/known_hosts" \
           ./bootstrap.sh
           rm -rf "$ssh_test"
-          docker run --rm -v "$PWD/state/config.yaml:/config.yaml:ro" \
+          docker run --rm --user 65532:65532 -v "$PWD/state/config.yaml:/config.yaml:ro" \
             repowolf:mvp config validate --config /config.yaml
           docker run --rm -v "$PWD/state/ssh:/tmp/.ssh:ro" \
             --entrypoint ssh repowolf:mvp -G github.com > /tmp/ssh-effective
@@ -952,7 +1003,7 @@ git commit -m "feat(examples): add compose broker and observable SSH smoke"
               chmod 0550 /test/fake-ssh
               chmod 0660 /test/ssh-argv
             '
-          docker run --rm -v "$PWD/examples/docker/state/config.yaml:/config.yaml:ro" \
+          docker run --rm --user 65532:65532 -v "$PWD/examples/docker/state/config.yaml:/config.yaml:ro" \
             repowolf:mvp config validate --config /config.yaml
       - name: Start broker and wait for readiness
         run: |
