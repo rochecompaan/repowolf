@@ -13,7 +13,8 @@ Two run modes share the same sandbox image:
 
 - Docker with the Compose v2 plugin.
 - Bash (the scripts are Bash 3.2-compatible).
-- Linux is tested. On macOS run from a Unix shell. On Windows run from WSL2;
+- Linux is tested. The sandbox release build supports `linux/amd64` and
+  `linux/arm64`. On macOS run from a Unix shell. On Windows run from WSL2;
   native PowerShell/cmd is not supported by this example.
 
 ## Build the sandbox
@@ -32,15 +33,85 @@ no real `gh`, OpenSSH, provider token, key, or agent socket.
 
 ## Path A: host broker + sandbox
 
-Install/bootstrap RepoWolf on the Linux host per the top-level README. Bind
-it to the Docker bridge gateway (usually `172.17.0.1`), not `0.0.0.0`:
+Install RepoWolf on the Linux host per the top-level README. The following
+creates the matching certificate state and complete service configuration. It
+binds only the Docker bridge gateway (usually `172.17.0.1`), not `0.0.0.0`,
+and resolves the service-side tools to absolute paths:
 
-```yaml
-listen: 172.17.0.1:9443
+```sh
+GH_PATH="$(command -v gh)"
+SSH_PATH="$(command -v ssh)"
+case "$GH_PATH:$SSH_PATH" in
+  /*:/*) ;;
+  *) echo "gh and ssh must resolve to absolute paths" >&2; exit 1 ;;
+esac
+
+sudo install -d -o root -g repowolf -m 0750 /var/lib/repowolf /etc/repowolf
+sudo repowolf cert init --output /var/lib/repowolf/tls \
+  --dns repowolf.internal --ip 127.0.0.1
+# The broker identity must traverse these directories and read the certificate
+# and server key. The private key remains restricted to root:repowolf.
+sudo chown root:repowolf /var/lib/repowolf /var/lib/repowolf/tls \
+  /var/lib/repowolf/tls/tls.crt /var/lib/repowolf/tls/tls.key
+sudo chmod 0750 /var/lib/repowolf /var/lib/repowolf/tls
+sudo chmod 0640 /var/lib/repowolf/tls/tls.crt /var/lib/repowolf/tls/tls.key
+sudo chown root:root /var/lib/repowolf/tls/ca.key
+sudo chmod 0600 /var/lib/repowolf/tls/ca.key
+
+sudo tee /etc/repowolf/repowolf.yaml >/dev/null <<EOF
+apiVersion: repowolf.dev/v1alpha1
+listen: "172.17.0.1:9443"
+
+tls:
+  certificate: /var/lib/repowolf/tls/tls.crt
+  privateKey: /var/lib/repowolf/tls/tls.key
+
 tools:
-  gh: /absolute/path/from/command-v-gh
-  ssh: /absolute/path/from/command-v-ssh
+  gh: $GH_PATH
+  ssh: $SSH_PATH
+
+providers:
+  github-public:
+    kind: github
+    apiHost: github.com
+    gitHost: github.com
+    sshUser: git
+
+repositories:
+  example:
+    provider: github-public
+    owner: rochecompaan
+    name: repowolf
+    git:
+      denyRefs:
+        - refs/heads/main
+      denyDeletes: true
+      maxRefUpdates: 16
+
+principals:
+  example-agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_EXAMPLE_AGENT
+    grants:
+      - repository: example
+        capabilities:
+          - repository:read
+          - issues:read
+          - issues:write
+          - pull_requests:read
+          - pull_requests:write
+          - actions:read
+          - statuses:read
+          - git:read
+          - git:write
+EOF
+sudo chown root:repowolf /etc/repowolf/repowolf.yaml
+sudo chmod 0640 /etc/repowolf/repowolf.yaml
+sudo -u repowolf repowolf config validate --config /etc/repowolf/repowolf.yaml
 ```
+
+This assumes the broker runs as `repowolf` (or an identity in group
+`repowolf`). Do not loosen the private-key mode or give the sandbox the key.
 
 The example policy principal is `example-agent`, so the broker must load
 `REPOWOLF_TOKEN_EXAMPLE_AGENT` from a dedicated principal environment file,
@@ -49,8 +120,8 @@ store it once in a protected file:
 
 ```sh
 umask 077
-mkdir -p /var/lib/repowolf /run/repowolf
-chmod 0700 /var/lib/repowolf /run/repowolf
+mkdir -p /run/repowolf
+chmod 0700 /run/repowolf
 BROKER_TOKEN="$(repowolf token generate)"
 printf '%s\n' "$BROKER_TOKEN" > /var/lib/repowolf/token
 printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$BROKER_TOKEN" > /run/repowolf/example-agent.env

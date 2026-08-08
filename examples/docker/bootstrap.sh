@@ -22,7 +22,7 @@ if { [ -n "$REPOWOLF_SSH_KEY" ] && [ -z "$REPOWOLF_KNOWN_HOSTS" ]; } || \
   echo "bootstrap: set both REPOWOLF_SSH_KEY and REPOWOLF_KNOWN_HOSTS, or neither" >&2
   exit 2
 fi
-if [ -n "$REPOWOLF_SSH_KEY" ] && { [ ! -f "$REPOWOLF_SSH_KEY" ] || [ ! -f "$REPOWOLF_KNOWN_HOSTS" ]; }; then
+if [ -n "$REPOWOLF_SSH_KEY" ] && { [ ! -f "$REPOWOLF_SSH_KEY" ] || [ ! -r "$REPOWOLF_SSH_KEY" ] || [ ! -f "$REPOWOLF_KNOWN_HOSTS" ] || [ ! -r "$REPOWOLF_KNOWN_HOSTS" ]; }; then
   echo "bootstrap: SSH key and known-hosts inputs must be readable files" >&2
   exit 2
 fi

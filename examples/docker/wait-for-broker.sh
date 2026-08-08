@@ -17,5 +17,5 @@ for ((attempt = 1; attempt <= attempts; attempt++)); do
   sleep 1
 done
 
-echo "wait-for-broker: $host:$port not ready after $attempts attempts" >&2
+echo "wait-for-broker: $host:$port not ready after $attempts attempts; run docker compose logs repowolf" >&2
 exit 1

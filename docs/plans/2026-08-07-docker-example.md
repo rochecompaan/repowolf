@@ -291,6 +291,7 @@ git commit -m "feat(examples): add checksum-verified sandbox image"
 - Create: `examples/docker/bootstrap.sh`
 - Create: `examples/docker/wait-for-broker.sh`
 - Create: `examples/docker/test-wait-for-broker.sh`
+- Create: `examples/docker/test-bootstrap-unreadable-ssh.sh`
 
 **Interfaces:**
 - Inputs: required `REPOWOLF_REPO`; optional `REPOWOLF_IMAGE`; optional pair `REPOWOLF_SSH_KEY`/`REPOWOLF_KNOWN_HOSTS`.
@@ -324,7 +325,7 @@ if { [ -n "$REPOWOLF_SSH_KEY" ] && [ -z "$REPOWOLF_KNOWN_HOSTS" ]; } || \
   echo "bootstrap: set both REPOWOLF_SSH_KEY and REPOWOLF_KNOWN_HOSTS, or neither" >&2
   exit 2
 fi
-if [ -n "$REPOWOLF_SSH_KEY" ] && { [ ! -f "$REPOWOLF_SSH_KEY" ] || [ ! -f "$REPOWOLF_KNOWN_HOSTS" ]; }; then
+if [ -n "$REPOWOLF_SSH_KEY" ] && { [ ! -f "$REPOWOLF_SSH_KEY" ] || [ ! -r "$REPOWOLF_SSH_KEY" ] || [ ! -f "$REPOWOLF_KNOWN_HOSTS" ] || [ ! -r "$REPOWOLF_KNOWN_HOSTS" ]; }; then
   echo "bootstrap: SSH key and known-hosts inputs must be readable files" >&2
   exit 2
 fi
@@ -490,27 +491,31 @@ for ((attempt = 1; attempt <= attempts; attempt++)); do
   sleep 1
 done
 
-echo "wait-for-broker: $host:$port not ready after $attempts attempts" >&2
+echo "wait-for-broker: $host:$port not ready after $attempts attempts; run docker compose logs repowolf" >&2
 exit 1
 ```
 
 ```bash
-chmod +x examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh
+chmod +x examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh \
+  examples/docker/test-wait-for-broker.sh examples/docker/test-bootstrap-unreadable-ssh.sh
 ```
 
 - [ ] **Step 3: Run shell checks without masking findings**
 
 ```bash
-bash -n examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh examples/docker/test-wait-for-broker.sh
+bash -n examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh \
+  examples/docker/test-wait-for-broker.sh examples/docker/test-bootstrap-unreadable-ssh.sh
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh examples/docker/test-wait-for-broker.sh
+  shellcheck examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh \
+    examples/docker/test-wait-for-broker.sh examples/docker/test-bootstrap-unreadable-ssh.sh
 else
   echo "shellcheck not installed; skipped"
 fi
 examples/docker/test-wait-for-broker.sh
+examples/docker/test-bootstrap-unreadable-ssh.sh
 ```
 
-Expected: `bash -n` and the oversized numeric-argument regression test exit 0. If shellcheck exists, findings fail the step; only absence prints `skipped`.
+Expected: `bash -n`, the readiness timeout/argument regression test, and the unreadable SSH-input preflight regression test exit 0. If shellcheck exists, findings fail the step; only absence prints `skipped`.
 
 - [ ] **Step 4: Build/load current broker image**
 
@@ -623,7 +628,7 @@ cd ../..
 - [ ] **Step 7: Commit**
 
 ```bash
-git add examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh examples/docker/test-wait-for-broker.sh
+git add examples/docker/bootstrap.sh examples/docker/wait-for-broker.sh examples/docker/test-wait-for-broker.sh examples/docker/test-bootstrap-unreadable-ssh.sh
 git commit -m "feat(examples): add safe docker bootstrap and readiness wait"
 ```
 
@@ -878,8 +883,11 @@ git commit -m "feat(examples): add compose broker and observable SSH smoke"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
-      - name: Check example shell syntax
-        run: bash -n bootstrap.sh wait-for-broker.sh
+      - name: Check example shell syntax and behavior
+        run: |
+          bash -n bootstrap.sh wait-for-broker.sh test-wait-for-broker.sh test-bootstrap-unreadable-ssh.sh
+          ./test-wait-for-broker.sh
+          ./test-bootstrap-unreadable-ssh.sh
       - name: Build and load broker image from this commit
         working-directory: .
         run: |
@@ -1143,7 +1151,8 @@ Two run modes share the same sandbox image:
 
 - Docker with the Compose v2 plugin.
 - Bash (the scripts are Bash 3.2-compatible).
-- Linux is tested. On macOS run from a Unix shell. On Windows run from WSL2;
+- Linux is tested. The sandbox release build supports `linux/amd64` and
+  `linux/arm64`. On macOS run from a Unix shell. On Windows run from WSL2;
   native PowerShell/cmd is not supported by this example.
 
 ## Build the sandbox
@@ -1162,15 +1171,85 @@ no real `gh`, OpenSSH, provider token, key, or agent socket.
 
 ## Path A: host broker + sandbox
 
-Install/bootstrap RepoWolf on the Linux host per the top-level README. Bind
-it to the Docker bridge gateway (usually `172.17.0.1`), not `0.0.0.0`:
+Install RepoWolf on the Linux host per the top-level README. The following
+creates the matching certificate state and complete service configuration. It
+binds only the Docker bridge gateway (usually `172.17.0.1`), not `0.0.0.0`,
+and resolves the service-side tools to absolute paths:
 
-```yaml
-listen: 172.17.0.1:9443
+```sh
+GH_PATH="$(command -v gh)"
+SSH_PATH="$(command -v ssh)"
+case "$GH_PATH:$SSH_PATH" in
+  /*:/*) ;;
+  *) echo "gh and ssh must resolve to absolute paths" >&2; exit 1 ;;
+esac
+
+sudo install -d -o root -g repowolf -m 0750 /var/lib/repowolf /etc/repowolf
+sudo repowolf cert init --output /var/lib/repowolf/tls \
+  --dns repowolf.internal --ip 127.0.0.1
+# The broker identity must traverse these directories and read the certificate
+# and server key. The private key remains restricted to root:repowolf.
+sudo chown root:repowolf /var/lib/repowolf /var/lib/repowolf/tls \
+  /var/lib/repowolf/tls/tls.crt /var/lib/repowolf/tls/tls.key
+sudo chmod 0750 /var/lib/repowolf /var/lib/repowolf/tls
+sudo chmod 0640 /var/lib/repowolf/tls/tls.crt /var/lib/repowolf/tls/tls.key
+sudo chown root:root /var/lib/repowolf/tls/ca.key
+sudo chmod 0600 /var/lib/repowolf/tls/ca.key
+
+sudo tee /etc/repowolf/repowolf.yaml >/dev/null <<EOF
+apiVersion: repowolf.dev/v1alpha1
+listen: "172.17.0.1:9443"
+
+tls:
+  certificate: /var/lib/repowolf/tls/tls.crt
+  privateKey: /var/lib/repowolf/tls/tls.key
+
 tools:
-  gh: /absolute/path/from/command-v-gh
-  ssh: /absolute/path/from/command-v-ssh
+  gh: $GH_PATH
+  ssh: $SSH_PATH
+
+providers:
+  github-public:
+    kind: github
+    apiHost: github.com
+    gitHost: github.com
+    sshUser: git
+
+repositories:
+  example:
+    provider: github-public
+    owner: rochecompaan
+    name: repowolf
+    git:
+      denyRefs:
+        - refs/heads/main
+      denyDeletes: true
+      maxRefUpdates: 16
+
+principals:
+  example-agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_EXAMPLE_AGENT
+    grants:
+      - repository: example
+        capabilities:
+          - repository:read
+          - issues:read
+          - issues:write
+          - pull_requests:read
+          - pull_requests:write
+          - actions:read
+          - statuses:read
+          - git:read
+          - git:write
+EOF
+sudo chown root:repowolf /etc/repowolf/repowolf.yaml
+sudo chmod 0640 /etc/repowolf/repowolf.yaml
+sudo -u repowolf repowolf config validate --config /etc/repowolf/repowolf.yaml
 ```
+
+This assumes the broker runs as `repowolf` (or an identity in group
+`repowolf`). Do not loosen the private-key mode or give the sandbox the key.
 
 The example policy principal is `example-agent`, so the broker must load
 `REPOWOLF_TOKEN_EXAMPLE_AGENT` from a dedicated principal environment file,
@@ -1179,8 +1258,8 @@ store it once in a protected file:
 
 ```sh
 umask 077
-mkdir -p /var/lib/repowolf /run/repowolf
-chmod 0700 /var/lib/repowolf /run/repowolf
+mkdir -p /run/repowolf
+chmod 0700 /run/repowolf
 BROKER_TOKEN="$(repowolf token generate)"
 printf '%s\n' "$BROKER_TOKEN" > /var/lib/repowolf/token
 printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$BROKER_TOKEN" > /run/repowolf/example-agent.env
