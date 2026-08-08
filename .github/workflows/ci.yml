@@ -47,6 +47,7 @@ jobs:
     runs-on: ubuntu-24.04
     defaults:
       run:
+        shell: bash -euo pipefail {0}
         working-directory: examples/docker
     env:
       REPOWOLF_IMAGE: repowolf:mvp
@@ -196,13 +197,15 @@ jobs:
             echo "expected upstream failure with dummy GH_TOKEN" >&2
             exit 1
           fi
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep 'github.repository_view' | grep -E '"outcome":[[:space:]]*"accepted"'
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+          grep 'github.repository_view' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"accepted"'
           if docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox gh run list --repo rochecompaan/repowolf; then
             echo "expected policy denial" >&2
             exit 1
           fi
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
-          if docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep 'github.run_list' | grep -qE '"outcome":[[:space:]]*"accepted"'; then
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+          grep 'github.run_list' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
+          if grep 'github.run_list' /tmp/repowolf-broker.log | grep -qE '"outcome":[[:space:]]*"accepted"'; then
             echo "github.run_list must not be accepted" >&2
             exit 1
           fi
@@ -213,9 +216,9 @@ jobs:
             echo "fake SSH unexpectedly succeeded" >&2
             exit 1
           fi
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf \
-            | grep 'git.upload-pack' | grep -E '"outcome":[[:space:]]*"accepted"'
-          expected_argv=$(cat <<'EOF'
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+          grep 'git.upload-pack' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"accepted"'
+          diff -u <(cat <<'EOF'
           -T
           -p
           22
@@ -223,16 +226,14 @@ jobs:
           git@github.com
           git-upload-pack 'rochecompaan/repowolf.git'
           EOF
-          )
-          test "$(cat state/test/ssh-argv)" = "$expected_argv"
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf \
-            | grep 'git.upload-pack' | grep -E '"outcome":[[:space:]]*"failed"' \
+          ) state/test/ssh-argv
+          grep 'git.upload-pack' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"failed"' \
             | grep 'GIT_TERMINAL_CATEGORY_PROVIDER_FAILURE'
       - name: Assert sandbox boundary
         run: |
           docker compose -f compose.yaml -f compose.smoke.yaml run --rm --entrypoint sh sandbox -c '
             set -e
-            ! env | grep -q "^GH_TOKEN="
+            test -z "${GH_TOKEN+x}"
             test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
             test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
             ! command -v ssh >/dev/null
