@@ -35,9 +35,9 @@ After the example merges, an owner may explicitly tag `v0.1.0`. The release work
 - **Artifacts are checksum-verified, not signed.** The release workflow has no signature mechanism; documentation does not claim otherwise.
 - **Fixed state paths.** Bootstrap always writes `examples/docker/state` and `examples/docker/.env`, which are exactly the paths Compose reads. Unsupported `STATE_DIR`/`ENV_FILE` overrides are removed.
 - **Repository input is data, never program text.** `REPOWOLF_REPO` must match a conservative GitHub `owner/name` grammar (one slash; owner `[A-Za-z0-9-]`, repository `[A-Za-z0-9._-]`, bounded lengths). Rendering and `.env` updates use Bash string operations/line loops, not dynamically built `sed` programs or GNU `sed -i`.
-- **Broker-readable TLS without broad permissions.** Cert generation runs as the host user. A root `alpine:3` helper changes only the TLS directory/certificate/server-key group to GID 65532 and modes to directory `0750`, public/server files `0640`; `ca.key` stays host-owned `0600` and is never mounted into the broker or sandbox. Compose mounts `tls.crt` and `tls.key` individually into the broker, and only `ca.crt` into the sandbox.
-- **Git always needs service-side SSH setup.** Public GitHub SSH clones still require authentication and host verification. Compose supports optional `REPOWOLF_SSH_KEY` plus `REPOWOLF_KNOWN_HOSTS` inputs at bootstrap. Both must be supplied together. The private key becomes UID/GID 65532 mode `0600`; known-hosts/config are readable only by the broker group. No SSH material enters the sandbox.
-- **CI tests the Git contract without real credentials.** It generates a disposable unregistered key and keyscans GitHub, starts `git ls-remote`, expects provider authentication failure, and asserts a `git.upload-pack` audit event with `outcome: accepted`. This proves the sandbox shim, TLS/token transport, policy, service-side SSH launch, and host-key path. Successful cloning is manually verified with real service-side SSH credentials.
+- **Broker-readable configuration/TLS without broad permissions.** Cert generation and config rendering run as the host user. A root `alpine:3` helper sets `config.yaml`, the TLS directory, and the public/server TLS files to host owner + GID 65532 with modes `0640`/`0750`; `ca.key` stays host-owned `0600` and is never mounted into the broker or sandbox. Compose mounts `config.yaml`, `tls.crt`, and `tls.key` individually into the broker, and only `ca.crt` into the sandbox. Verification runs `config validate` as UID/GID 65532.
+- **Git always needs service-side SSH setup.** Public GitHub SSH clones still require authentication and host verification. Compose supports optional `REPOWOLF_SSH_KEY` plus `REPOWOLF_KNOWN_HOSTS` inputs at bootstrap. Both must be supplied together. The private key becomes UID/GID 65532 mode `0600`; OpenSSH user config becomes root:GID-65532 mode `0640` (an ownership pattern accepted by OpenSSH), and known-hosts is broker-group readable. An `ssh -G` check under the actual OCI user verifies the effective identity/agent/known-hosts settings. No SSH material enters the sandbox.
+- **CI proves the Git provider process actually starts.** Audit `git.upload-pack`/`accepted` is emitted before `Runner.Start`, so it is insufficient alone. CI builds a small static fake-SSH fixture, mounts it only into the broker, points `tools.ssh` at it in the disposable rendered config, runs `git ls-remote`, and asserts the fixture's host-visible argv log contains `-T`, port `22`, `git@github.com`, and `git-upload-pack 'owner/name.git'`. The audit event remains a secondary policy assertion. Real OpenSSH key/known-host handling is verified separately with `ssh -G`; successful cloning is manually verified with real service-side credentials.
 - **Audit events are the stable assertion surface.** The client intentionally reports both policy denials and provider failures as `gh: GitHub operation failed`; CI distinguishes them with broker audit events (`accepted`, `denied`/`PermissionDenied`, `git.upload-pack`).
 - **Readiness is explicit.** A bounded `wait-for-broker.sh` TCP probe is shared by the README and CI. `depends_on` is not treated as a readiness signal.
 - **CI runs unconditionally.** Broker/client changes outside `examples/docker/**` can break the example.
@@ -51,6 +51,7 @@ examples/docker/
 ├── sandbox/
 │   └── Dockerfile
 ├── compose.yaml
+├── compose.smoke.yaml  # CI/local test-only fake-SSH mount
 ├── bootstrap.sh
 ├── wait-for-broker.sh
 ├── config/
@@ -101,9 +102,9 @@ It uses fixed script-relative `state/` and `.env` paths, sets `umask 077`, refus
 1. Validate the repository grammar before creating state.
 2. Generate certs and token through the broker image.
 3. Render config with a Bash line loop and update `.env` with a portable temporary-file loop.
-4. Use an `alpine:3` helper to assign the narrow group/permission set described above.
-5. If both SSH inputs are supplied, copy them into broker-only state, add a deterministic OpenSSH config (`IdentityAgent none`, `IdentitiesOnly yes`), and apply owner/mode restrictions.
-6. Validate rendered policy through the broker image.
+4. Use an `alpine:3` helper to assign the narrow config/TLS group/permission set described above.
+5. If both SSH inputs are supplied, copy them into broker-only state, add a deterministic OpenSSH config (`IdentityAgent none`, `IdentitiesOnly yes`), and apply OpenSSH-valid owner/mode restrictions (config owner root, key owner 65532).
+6. Validate rendered policy through the broker image as UID/GID 65532 and validate effective SSH settings with the image's real `ssh -G` when SSH inputs exist.
 
 The script never prints token/key contents. It runs under Bash 3.2-compatible syntax. Linux is the verified target; macOS requires Bash, and Windows requires WSL2.
 
@@ -123,14 +124,15 @@ One GitHub provider/repository and principal. Grants repository/issues/pull-requ
 A new `docker-example-smoke` job:
 
 1. Builds/loads the current broker OCI image (`repowolf:mvp`).
-2. Builds current-commit goreleaser snapshot archives, serves them from a temporary Go HTTP fixture with an exit trap, and builds the sandbox with `REPOWOLF_VERSION=snapshot` plus a local `REPOWOLF_RELEASE_ROOT`.
-3. Generates a disposable SSH key and GitHub known-hosts test file; bootstraps state using those inputs and a dummy `GH_TOKEN`.
-4. Starts the broker and waits with `wait-for-broker.sh`.
-5. Asserts `gh repo view --repo ...` reaches an audit `github.repository_view`/`accepted` event before failing upstream on the dummy token.
-6. Asserts `gh run list --repo ...` yields audit `denied`/`PermissionDenied` and no accepted `github.run_list` event.
-7. Starts `git ls-remote git@github.com:owner/name.git`, expects dummy-key authentication failure, and asserts audit `git.upload-pack`/`accepted` (and no completed upload-pack).
-8. Asserts the sandbox has no `GH_TOKEN` or `ssh`, runs as UID 65532, and resolves both shims to `repowolf-client`.
-9. Tears down in an `if: always()` step.
+2. Builds current-commit goreleaser snapshot archives, serves them from a temporary Go HTTP fixture with an immediate exit trap plus bounded readiness probe, and builds the sandbox with `REPOWOLF_VERSION=snapshot` plus a local `REPOWOLF_RELEASE_ROOT`.
+3. Bootstraps state with a dummy `GH_TOKEN`; validates broker-UID access to config/TLS and the real image's effective OpenSSH configuration.
+4. Builds a static fake-SSH fixture into disposable broker-only state, rewrites only the fixed `ssh: null` test field to its mounted path, and pre-creates a host-readable argv log.
+5. Starts the broker and waits with `wait-for-broker.sh`.
+6. Asserts `gh repo view --repo ...` reaches an audit `github.repository_view`/`accepted` event before failing upstream on the dummy token.
+7. Asserts `gh run list --repo ...` yields audit `denied`/`PermissionDenied` and no accepted `github.run_list` event.
+8. Starts `git ls-remote git@github.com:owner/name.git`, expects fixture exit, and asserts both audit `git.upload-pack`/`accepted` and the exact fake-SSH argv log. The side effect proves `Runner.Start` occurred.
+9. Asserts the sandbox has no `GH_TOKEN` or `ssh`, runs as UID 65532, and resolves both shims to `repowolf-client`.
+10. Tears down in an `if: always()` step.
 
 Workflow syntax is checked with a temporary Go program using the repository's existing `gopkg.in/yaml.v3`; no undeclared PyYAML dependency.
 
@@ -170,7 +172,8 @@ Workflow syntax is checked with a temporary Go program using the repository's ex
 2. A developer with a host broker can build the sandbox and connect using only the documented client variables.
 3. The sandbox contains no provider credentials, real `gh`, or `ssh`; both restricted shims point to `repowolf-client`.
 4. Audit events distinguish a granted provider request from a denied capability.
-5. CI starts a real brokered Git upload-pack path through service-side SSH and asserts policy acceptance without using a real SSH credential.
-6. Successful Git clone documentation requires both broker-side authentication and verified known-hosts state.
-7. Gitignore protects against ordinary accidental adds; documentation does not claim forced adds are impossible.
-8. CI exercises compose startup/readiness, `gh` policy outcomes, the Git path, and the sandbox boundary on every PR and `main` push.
+5. CI starts the broker's configured SSH executable and proves it received the exact `git-upload-pack 'owner/name.git'` argv; audit acceptance alone does not satisfy this criterion.
+6. The actual OCI user can read its config/TLS files and `ssh -G` accepts the planned SSH ownership/modes and effective settings.
+7. Successful Git clone documentation requires both broker-side authentication and verified known-hosts state.
+8. Gitignore protects against ordinary accidental adds; documentation does not claim forced adds are impossible.
+9. CI exercises compose startup/readiness, `gh` policy outcomes, the Git process-launch path, and the sandbox boundary on every PR and `main` push.
