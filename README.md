@@ -58,6 +58,9 @@ docker run --rm -p 8443:8443 \
 
 The mounted paths must be readable by UID 65532. Mount provider authentication only into the service container, never into an agent container.
 
+For a complete sandbox-image example with host-broker and compose
+walkthroughs, see [examples/docker](examples/docker/README.md).
+
 ## Bootstrap tokens and TLS
 
 Generate a distinct token for each sandbox or project role:
