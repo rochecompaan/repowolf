@@ -1,172 +1,176 @@
 # RepoWolf Docker Example Design
 
-Status: approved design (2026-08-07). Audience: developers evaluating or adopting RepoWolf who want a copy-pasteable Docker setup.
+Status: approved design, revised after review (2026-08-08). Audience: developers evaluating or adopting RepoWolf who want a copy-pasteable Docker setup.
 
 ## Goal
 
-Provide `examples/docker/`, a self-contained, copy-pasteable example that demonstrates RepoWolf's security boundary in Docker, in two run modes that share one sandbox image:
+Provide `examples/docker/`, a copy-pasteable example that demonstrates RepoWolf's security boundary in two run modes sharing one sandbox image:
 
-1. **Host broker (primary path).** RepoWolf runs on the developer's Linux host exactly as the README already documents; a sandbox container built from the example connects to it. This is the production topology: the broker and all credentials stay on the trusted host, the agent runs untrusted in a container.
-2. **Compose variant (self-contained path).** `docker compose up` runs the broker from the published `ghcr.io/rochecompaan/repowolf` image alongside the sandbox container. For evaluation, demos, and CI — no host installation required.
+1. **Host broker (primary path).** RepoWolf runs on the developer's Linux host; a sandbox container connects to it. Provider credentials and real provider tools stay on the trusted host.
+2. **Compose variant (self-contained broker path).** Docker Compose runs the published broker image next to the sandbox. This removes the need to install RepoWolf on the host, but still requires Docker and Bash. The documented/tested host is Linux; macOS requires a Unix shell, and Windows users must run the commands from WSL2. Native PowerShell/cmd portability is not promised.
 
-The example is documented in `examples/docker/README.md` and guarded by a behavioral CI smoke test so it cannot silently rot.
+The canonical walkthrough lives in `examples/docker/README.md`. A behavioral CI smoke job guards image construction, `gh` policy outcomes, the brokered Git upload-pack path, and the sandbox boundary.
 
 ## Non-goals
 
-- Publishing a sandbox/client image to a registry. Developers build the sandbox image locally; only the service image is published.
+- Publishing a sandbox/client image. Developers build it locally.
 - Kubernetes manifests (the top-level README already covers Kubernetes).
-- Running the broker on macOS/Windows hosts (RepoWolf is Linux-only; the compose variant still works there because everything runs in Docker's Linux VM).
+- Native Windows shell support or a portability guarantee outside Linux.
 - Rootless Docker, Podman, or alternative-runtime specifics.
-- Multi-principal or multi-repository policy showcases beyond the single example principal.
-- Changes to RepoWolf itself: no Go code changes, no new subcommands, no configuration schema changes.
+- Multi-principal or multi-repository examples.
+- RepoWolf Go-code or configuration-schema changes.
+- Automating release tags. Publishing `v0.1.0` remains a separate, explicit owner action after merge.
 
-## Prerequisite: first release
+## Release rollout
 
-The example pins release artifacts that do not exist yet: no git tag, no GitHub release, and no `ghcr.io` image have been published so far. Before the example can work (and before its CI smoke test can pass), tag `v0.1.0` on `main`. The existing release workflow then publishes:
+The example defaults pin `v0.1.0`, but that release does not exist yet. Implementation and CI do **not** require publishing it: CI builds current-commit archives with goreleaser, serves them from a temporary local fixture, and overrides `REPOWOLF_VERSION`/`REPOWOLF_RELEASE_ROOT`; it also overrides the broker image with the current Nix-built `repowolf:mvp` image.
 
-- `repowolf_linux_amd64.tar.gz`, `repowolf_linux_arm64.tar.gz`, and `checksums.txt` on the GitHub release (consumed by the sandbox Dockerfile);
-- `ghcr.io/rochecompaan/repowolf:v0.1.0` (consumed by the compose variant and `bootstrap.sh`).
-
-Rollout order: tag `v0.1.0` first, then merge the example. Tagging is a release decision and remains an owner action.
+After the example merges, an owner may explicitly tag `v0.1.0`. The release workflow then publishes the archives/checksum file and `ghcr.io/rochecompaan/repowolf:v0.1.0`, activating the documented defaults. No plan step pushes a tag autonomously.
 
 ## Decisions
 
-- **Two run modes, one sandbox image.** The sandbox image — the artifact developers actually need to copy — is identical in both modes; only broker placement differs. Weighed a broker-only example and a compose-only example against this split; the split teaches the real topology (host broker) while keeping a zero-install evaluation path (compose).
-- **Sandbox image installs `repowolf-client` from the pinned GitHub release** and verifies it against `checksums.txt`. It does not build from source: copy-pasters get the same signed release bits as every other install path.
-- **Pinned versions, overridable.** The Dockerfile pins `ARG REPOWOLF_VERSION=v0.1.0`; the compose file defaults `REPOWOLF_IMAGE` to `ghcr.io/rochecompaan/repowolf:v0.1.0`. Both are environment/build-arg overridable, which the CI smoke test uses to test the current commit instead of the release.
-- **Bootstrap through the published image.** `bootstrap.sh` runs `repowolf cert init`, `token generate`, and `config validate` via `docker run` against the service image, so the compose path needs nothing installed but Docker. Bootstrap containers run with `--user $(id -u):$(id -g)` so generated state files are owned by the invoking user.
-- **TLS via `REPOWOLF_SERVER_NAME`, not cert reissue.** The host-broker path reuses the operator's existing `localhost` certificate; the sandbox connects to the bridge-gateway IP and overrides the TLS server name. No SAN surgery, dogfood-compatible.
-- **The example policy omits `actions:read` on purpose.** The supported client surface (`repo view`, `issue *`, `pr *`, `run list/view`, `status view`, git) is otherwise fully granted, so `gh run list` becomes a deterministic, credential-free demonstration of policy denial. The README uses it to teach policy editing ("grant `actions:read` to enable workflow runs").
-- **CI smoke test runs unconditionally, not path-filtered.** A broker protocol or policy change in `internal/` can break the example without touching `examples/docker/**`; filtering would skip exactly the runs that matter. The job is cheap because the Nix-built OCI image is already produced in the `test` job's dependency chain.
-- **Assertions are behavioral, not YAML-content checks** (repo testing policy): the smoke test drives the real stack and distinguishes policy outcomes from provider outcomes using only a dummy `GH_TOKEN`.
+- **Two run modes, one sandbox image.** The client artifact is identical in both modes; only broker placement differs.
+- **Release archive verification works on Alpine BusyBox.** The Dockerfile downloads `checksums.txt`, extracts exactly the line for `repowolf_linux_${TARGETARCH}.tar.gz`, requires exactly one match, and runs BusyBox `sha256sum -c` on that filtered file. It does not use unsupported GNU-only `--ignore-missing`.
+- **Public build-argument contract is `REPOWOLF_VERSION`.** It defaults to `v0.1.0`. `REPOWOLF_RELEASE_ROOT` defaults to GitHub's release-download root and exists only for mirrors/local CI fixtures.
+- **Artifacts are checksum-verified, not signed.** The release workflow has no signature mechanism; documentation does not claim otherwise.
+- **Fixed state paths.** Bootstrap always writes `examples/docker/state` and `examples/docker/.env`, which are exactly the paths Compose reads. Unsupported `STATE_DIR`/`ENV_FILE` overrides are removed.
+- **Repository input is data, never program text.** `REPOWOLF_REPO` must match a conservative GitHub `owner/name` grammar (one slash; owner `[A-Za-z0-9-]`, repository `[A-Za-z0-9._-]`, bounded lengths). Rendering and `.env` updates use Bash string operations/line loops, not dynamically built `sed` programs or GNU `sed -i`.
+- **Broker-readable TLS without broad permissions.** Cert generation runs as the host user. A root `alpine:3` helper changes only the TLS directory/certificate/server-key group to GID 65532 and modes to directory `0750`, public/server files `0640`; `ca.key` stays host-owned `0600` and is never mounted into the broker or sandbox. Compose mounts `tls.crt` and `tls.key` individually into the broker, and only `ca.crt` into the sandbox.
+- **Git always needs service-side SSH setup.** Public GitHub SSH clones still require authentication and host verification. Compose supports optional `REPOWOLF_SSH_KEY` plus `REPOWOLF_KNOWN_HOSTS` inputs at bootstrap. Both must be supplied together. The private key becomes UID/GID 65532 mode `0600`; known-hosts/config are readable only by the broker group. No SSH material enters the sandbox.
+- **CI tests the Git contract without real credentials.** It generates a disposable unregistered key and keyscans GitHub, starts `git ls-remote`, expects provider authentication failure, and asserts a `git.upload-pack` audit event with `outcome: accepted`. This proves the sandbox shim, TLS/token transport, policy, service-side SSH launch, and host-key path. Successful cloning is manually verified with real service-side SSH credentials.
+- **Audit events are the stable assertion surface.** The client intentionally reports both policy denials and provider failures as `gh: GitHub operation failed`; CI distinguishes them with broker audit events (`accepted`, `denied`/`PermissionDenied`, `git.upload-pack`).
+- **Readiness is explicit.** A bounded `wait-for-broker.sh` TCP probe is shared by the README and CI. `depends_on` is not treated as a readiness signal.
+- **CI runs unconditionally.** Broker/client changes outside `examples/docker/**` can break the example.
+- **Gitignore is accidental-commit protection only.** `.gitignore` cannot prevent `git add -f`; docs state that limitation rather than promising secrets can never be committed.
 
 ## Directory layout
 
 ```
 examples/docker/
-├── README.md            # canonical walkthrough for both paths
+├── README.md
 ├── sandbox/
-│   └── Dockerfile       # the shared core developers copy
-├── compose.yaml         # compose variant: repowolf + sandbox services
-├── bootstrap.sh         # generates state/ using the service image
+│   └── Dockerfile
+├── compose.yaml
+├── bootstrap.sh
+├── wait-for-broker.sh
 ├── config/
-│   └── repowolf.yaml    # sample strict policy, parameterized by bootstrap.sh
-├── .env.example         # GH_TOKEN for the compose broker
-└── .gitignore           # state/, .env
+│   └── repowolf.yaml
+├── .env.example
+└── .gitignore
 ```
 
-`state/` is generated, mode `0700`, and never committed: it holds `tls/` (CA, server cert/key), `token` (mode `0600`), and the rendered `config.yaml`.
+Generated `state/` holds TLS material, the principal token, rendered config, and optional service-side SSH material. `.env` holds the provider and principal environment values. Both are gitignored.
 
 ## Sandbox image
 
-Multi-stage `Dockerfile` (`examples/docker/sandbox/Dockerfile`):
+The multi-stage Dockerfile:
 
-1. **Fetch stage** (`alpine:3`): downloads `repowolf_linux_${TARGETARCH}.tar.gz` and `checksums.txt` from `https://github.com/rochecompaan/repowolf/releases/download/${REPOWOLF_VERSION}`, verifies with `sha256sum -c --ignore-missing`, extracts only `repowolf-client`. `TARGETARCH` is the buildx built-in (`amd64`/`arm64`), which matches the goreleaser archive names directly.
-2. **Runtime stage** (`alpine:3`): adds `git` and `ca-certificates`, creates non-root user `65532:65532` (matching the service image), installs `repowolf-client` to `/usr/local/bin`, symlinks `gh` and `repowolf-git-ssh` to it, sets `ENV GIT_SSH_COMMAND=repowolf-git-ssh`, and runs as the non-root user.
+1. Fetch stage (`alpine:3`): accepts `REPOWOLF_VERSION` and `REPOWOLF_RELEASE_ROOT`, downloads the selected Linux archive and co-hosted checksum file, filters one exact checksum line, verifies it with BusyBox `sha256sum -c`, and extracts only `repowolf-client`.
+2. Runtime stage (`alpine:3`): adds `git` and CA roots, creates UID/GID `65532:65532`, installs `repowolf-client`, symlinks `gh` and `repowolf-git-ssh`, and sets `GIT_SSH_COMMAND=repowolf-git-ssh`.
 
-Deliberately absent: the real `gh`, OpenSSH, provider tokens, SSH keys, `SSH_AUTH_SOCK`. The sandbox trusts only its broker endpoint, token, and CA certificate, supplied at `docker run` time via the documented client contract: `REPOWOLF_ENDPOINT` (must be an `https` origin), `REPOWOLF_TOKEN`, `REPOWOLF_CA_FILE`, and optionally `REPOWOLF_SERVER_NAME`.
+Deliberately absent: the real `gh`, OpenSSH, provider tokens, SSH keys, and `SSH_AUTH_SOCK`.
 
-## Host-broker path (primary)
+## Host-broker path
 
-README walkthrough:
+The README instructs operators to bind the broker to the Docker bridge gateway (for example `172.17.0.1:9443`), not `0.0.0.0`; pin service-side `tools.gh`/`tools.ssh` to absolute paths; and set `REPOWOLF_SERVER_NAME` to the host certificate's DNS SAN.
 
-1. Install and bootstrap RepoWolf on the host per the top-level README (or use this repository's devenv, which auto-starts a dogfood broker).
-2. Configure the broker to listen on the default bridge gateway, e.g. `listen: 172.17.0.1:9443` — reachable from containers but not from the LAN. The README shows how to confirm the address with `ip -4 addr show docker0` and warns against `0.0.0.0`. No certificate reissue is needed when the host certificate already carries a stable DNS SAN (the dogfood setup uses `localhost`); the walkthrough's bootstrap command includes `--dns localhost` for fresh host installs.
-3. Build and run the sandbox:
+The canonical client command uses the supported repository syntax:
 
-   ```sh
-   docker build -t repowolf-sandbox examples/docker/sandbox
-   docker run --rm -it \
-     -e REPOWOLF_ENDPOINT=https://172.17.0.1:9443 \
-     -e REPOWOLF_SERVER_NAME=localhost \
-     -e REPOWOLF_TOKEN="$(cat /var/lib/repowolf/token)" \
-     -e REPOWOLF_CA_FILE=/run/repowolf/ca.crt \
-     -v /var/lib/repowolf/tls/ca.crt:/run/repowolf/ca.crt:ro \
-     repowolf-sandbox gh repo view rochecompaan/repowolf
-   ```
+```sh
+docker run --rm -it \
+  -e REPOWOLF_ENDPOINT=https://172.17.0.1:9443 \
+  -e REPOWOLF_SERVER_NAME=localhost \
+  -e REPOWOLF_TOKEN="$(cat /var/lib/repowolf/token)" \
+  -e REPOWOLF_CA_FILE=/run/repowolf/ca.crt \
+  -v /var/lib/repowolf/tls/ca.crt:/run/repowolf/ca.crt:ro \
+  repowolf-sandbox:local gh repo view --repo rochecompaan/repowolf
+```
 
-   `REPOWOLF_SERVER_NAME` must match the host certificate's DNS SAN (`localhost` above, matching the walkthrough's `cert init` flags; operators with a different SAN, such as the `repowolf.internal` example in the top-level README, set it accordingly).
+The boundary proof checks that `GH_TOKEN` and `ssh` are absent, `gh` resolves to `repowolf-client`, and brokered `gh` works. Git clone is demonstrated only after confirming the host broker has an SSH identity and verified known-hosts state.
 
-4. Document the `--add-host=host.docker.internal:host-gateway` alternative (`REPOWOLF_ENDPOINT=https://host.docker.internal:9443`, same `REPOWOLF_SERVER_NAME=localhost`).
-5. **Boundary proof**, run inside the container: `env | grep GH_TOKEN` finds nothing, `command -v ssh` finds nothing, `readlink "$(command -v gh)"` points at `repowolf-client`, yet `gh repo view` and `git clone` work through the broker.
+## Compose bootstrap
 
-The token stays out of the image and out of shell history in the walkthrough: it is read from the host's protected state file at run time.
+`bootstrap.sh` accepts:
 
-## Compose variant
+- required `REPOWOLF_REPO=owner/name`;
+- optional `REPOWOLF_IMAGE` (default `ghcr.io/rochecompaan/repowolf:v0.1.0`);
+- optional pair `REPOWOLF_SSH_KEY` and `REPOWOLF_KNOWN_HOSTS` for Git operations.
 
-`bootstrap.sh` (env-overridable: `REPOWOLF_IMAGE`, `REPOWOLF_REPO` as `owner/name`, `STATE_DIR`):
+It uses fixed script-relative `state/` and `.env` paths, sets `umask 077`, refuses existing state, and performs these steps:
 
-1. Refuses to run if `state/` already exists (mirrors `cert init`'s refusal to clobber).
-2. Generates certificates with SANs covering both access routes: `cert init --output state/tls --dns repowolf --dns localhost --ip 127.0.0.1` (`repowolf` is the compose service name; `localhost` covers the published port from the host).
-3. Generates the principal token into `state/token` (`umask 077`, never printed).
-4. Renders `state/config.yaml` from `config/repowolf.yaml` with the requested `owner/name`, then validates it with `config validate` before any container starts.
-5. Creates or updates only the `REPOWOLF_TOKEN_AGENT` line in `.env` (never clobbering the user's `GH_TOKEN` line) and prints next steps.
+1. Validate the repository grammar before creating state.
+2. Generate certs and token through the broker image.
+3. Render config with a Bash line loop and update `.env` with a portable temporary-file loop.
+4. Use an `alpine:3` helper to assign the narrow group/permission set described above.
+5. If both SSH inputs are supplied, copy them into broker-only state, add a deterministic OpenSSH config (`IdentityAgent none`, `IdentitiesOnly yes`), and apply owner/mode restrictions.
+6. Validate rendered policy through the broker image.
 
-`compose.yaml` services:
+The script never prints token/key contents. It runs under Bash 3.2-compatible syntax. Linux is the verified target; macOS requires Bash, and Windows requires WSL2.
 
-- `repowolf`: `${REPOWOLF_IMAGE:-ghcr.io/rochecompaan/repowolf:v0.1.0}`, command `serve --config /etc/repowolf/repowolf.yaml`, `state/config.yaml` and `state/tls` mounted read-only at the config's paths, `GH_TOKEN` and `REPOWOLF_TOKEN_AGENT` from `.env` with `${VAR:?}` guards so a missing secret fails fast at startup, port published as `127.0.0.1:8443:8443` (loopback only).
-- `sandbox`: `build: ./sandbox`, environment `REPOWOLF_ENDPOINT=https://repowolf:8443`, `REPOWOLF_TOKEN` from `.env`, `REPOWOLF_CA_FILE=/run/repowolf/ca.crt`, the CA mounted read-only from `state/tls/ca.crt`, `depends_on: repowolf`. Not a long-running service; used via `docker compose run --rm sandbox gh repo view …`. No published ports.
+## Compose services
 
-Git-write operations through the compose broker need the host's SSH agent available to the **broker** service (it holds the service-side OpenSSH). The README documents the optional Linux-only step (mount `SSH_AUTH_SOCK` into the broker service) and notes read-only flows need nothing.
+- `repowolf`: published/current broker image, rendered policy mounted read-only, server certificate/key mounted individually, optional `state/ssh` mounted at `/tmp/.ssh`, `GH_TOKEN` and `REPOWOLF_TOKEN_AGENT` from `.env`, loopback-only host port `127.0.0.1:8443`.
+- `sandbox`: locally built image, endpoint `https://repowolf:8443`, principal token and public CA only, no provider credentials or SSH material.
+
+`wait-for-broker.sh 127.0.0.1 8443 30` gates the first client command.
 
 ## Sample policy
 
-`config/repowolf.yaml` mirrors the repository's own dogfood policy, with the repository `owner`/`name` rendered by `bootstrap.sh`:
-
-- `listen: "0.0.0.0:8443"` (container-internal; the compose service publishes it on loopback only);
-- provider `github-public` (`apiHost`/`gitHost` `github.com`, `sshUser git`);
-- git guardrails: `denyRefs: [refs/heads/main]`, `denyDeletes: true`, `maxRefUpdates: 16`;
-- principal `agent` with `tokenEnvs: [REPOWOLF_TOKEN_AGENT]`, granted: `repository:read`, `issues:read`, `issues:write`, `pull_requests:read`, `pull_requests:write`, `statuses:read`, `git:read`, `git:write` — **`actions:read` deliberately omitted** (see Decisions);
-- the same `limits` block as the dogfood policy.
+One GitHub provider/repository and principal. Grants repository/issues/pull-requests/statuses/git read/write; deliberately omits `actions:read` so `gh run list --repo owner/name` is a deterministic policy-denial demonstration. Git guardrails deny writes to `refs/heads/main`, deny deletes, and cap ref updates.
 
 ## CI smoke test
 
-New `docker-example-smoke` job in `.github/workflows/ci.yml` (`needs: test`, same runner, pinned-action style consistent with the existing workflow):
+A new `docker-example-smoke` job:
 
-1. Build the broker image from the current commit: `nix build .#ociImage` + `docker load` (yields `repowolf:mvp`).
-2. Build the sandbox image from `examples/docker/sandbox/Dockerfile` with its pinned release default — deliberately mixing a release client against a current-commit broker to catch protocol drift.
-3. Run `bootstrap.sh` with `REPOWOLF_IMAGE=repowolf:mvp`, `REPOWOLF_REPO=rochecompaan/repowolf`, and dummy `GH_TOKEN` in `.env`.
-4. `docker compose up -d repowolf`; wait for TLS on `127.0.0.1:8443`.
-5. Assert, driving the real stack with no real credentials:
-   - **Granted capability passes policy:** `docker compose run --rm sandbox gh repo view rochecompaan/repowolf` fails, and its output shows an upstream authentication failure (GitHub rejects the dummy token — "Bad credentials"), proving the request passed policy and reached the provider. A policy denial at this step fails the job.
-   - **Denied capability stops at policy:** `docker compose run --rm sandbox gh run list` fails with a RepoWolf `permission denied` error, and no provider call is attempted.
-   - **Boundary holds:** `docker compose run --rm sandbox env` contains no `GH_TOKEN`; `gh` inside the sandbox resolves to `repowolf-client`; `ssh` is absent.
-6. `docker compose down -v` teardown on success or failure.
+1. Builds/loads the current broker OCI image (`repowolf:mvp`).
+2. Builds current-commit goreleaser snapshot archives, serves them from a temporary Go HTTP fixture with an exit trap, and builds the sandbox with `REPOWOLF_VERSION=snapshot` plus a local `REPOWOLF_RELEASE_ROOT`.
+3. Generates a disposable SSH key and GitHub known-hosts test file; bootstraps state using those inputs and a dummy `GH_TOKEN`.
+4. Starts the broker and waits with `wait-for-broker.sh`.
+5. Asserts `gh repo view --repo ...` reaches an audit `github.repository_view`/`accepted` event before failing upstream on the dummy token.
+6. Asserts `gh run list --repo ...` yields audit `denied`/`PermissionDenied` and no accepted `github.run_list` event.
+7. Starts `git ls-remote git@github.com:owner/name.git`, expects dummy-key authentication failure, and asserts audit `git.upload-pack`/`accepted` (and no completed upload-pack).
+8. Asserts the sandbox has no `GH_TOKEN` or `ssh`, runs as UID 65532, and resolves both shims to `repowolf-client`.
+9. Tears down in an `if: always()` step.
 
-Exact assertion strings are pinned in the implementation plan after one observed run; the two outcomes are distinguishable today (`PermissionDenied` mapped to `permission denied` in `internal/rpcstatus/status.go`).
+Workflow syntax is checked with a temporary Go program using the repository's existing `gopkg.in/yaml.v3`; no undeclared PyYAML dependency.
 
 ## Failure behavior
 
-- `bootstrap.sh` uses `set -euo pipefail`, refuses to overwrite an existing `state/`, validates the rendered config before returning, and never echoes the token (prints its path).
-- Compose services fail fast on missing `.env` values via `${VAR:?}` expansion.
-- A sandbox run against an unreachable or misnamed broker surfaces the client's existing, clear configuration errors (e.g. `REPOWOLF_ENDPOINT must be an https origin`, TLS name mismatch).
-- The README's troubleshooting section covers: TLS server-name mismatch (use `REPOWOLF_SERVER_NAME`), broker not reachable from the container (wrong listen address), and `state/` ownership (regenerate via `bootstrap.sh`).
+- Strict repository validation rejects newlines, whitespace, extra slashes, shell/sed metacharacters, and overlong names before state creation.
+- Bootstrap refuses existing `state/`; reset documentation warns that deleting it destroys CA/private keys/tokens and recommends backing it up first.
+- Missing only one SSH input is an error; omitting both keeps `gh` flows working but Git operations fail clearly at service-side SSH setup/authentication.
+- Compose `${VAR:?}` guards fail fast on absent provider/principal env values.
+- `wait-for-broker.sh` times out with a non-zero status and directs users to broker logs.
 
 ## Security boundaries
 
-- Provider credentials (`GH_TOKEN`, SSH keys, `SSH_AUTH_SOCK`) exist only on the host or inside the broker container — never in the sandbox image, its environment, or its filesystem.
-- `state/` and `.env` are gitignored; the example README repeats the rule that tokens never go into git, remotes, or logs.
-- The compose broker publishes its port on loopback only; the host-broker walkthrough binds the Docker bridge gateway, not `0.0.0.0`.
-- The token is passed at run time from protected state; it is never baked into an image layer.
-- The sample policy ships least-privilege-by-demonstration: full read/write for the one example repository except the deliberately omitted `actions:read`.
+- Provider credentials and SSH private material exist only on the host or broker side.
+- The CA private key remains host-owned mode `0600` and is not container-mounted.
+- Broker TLS/SSH files use narrow UID/GID modes; no world-readable private key workaround.
+- `.env`/`state/` ignores reduce accidental commits but are not an enforcement boundary; users can override ignores and remain responsible for secret handling.
+- Compose publishes the broker only on loopback; the host path binds only the Docker bridge gateway.
 
 ## Documentation updates
 
-- `examples/docker/README.md`: what the example shows; prerequisites (Docker with compose v2); quick start via the compose variant; building the sandbox image; the host-broker walkthrough (primary); the boundary proof; editing the policy (grant `actions:read`); git clone/push including the broker-side SSH agent note; troubleshooting; security notes.
-- Top-level `README.md`: the OCI section gains one pointer line to `examples/docker/` for a complete walkthrough. No content moves.
+- `examples/docker/README.md`: prerequisites and platform scope; sandbox contract; host path; compose quick start with readiness wait; audit-based policy demo; full service-side SSH prerequisites for all Git operations; destructive reset warning; troubleshooting/security notes.
+- Top-level README OCI section: one pointer to `examples/docker/README.md`.
 
 ## Verification
 
-- New CI job `docker-example-smoke` green on the PR and on `main` after tagging `v0.1.0`.
-- Existing CI (`go test -race ./...`, `nix flake check`, OCI smoke, release smoke) unaffected — no Go changes.
-- Manual runbook executed once per path and recorded in the PR description: compose variant end-to-end with a real token (read-only flow), and the host-broker path against this repository's devenv dogfood broker.
-- Shell lint of `bootstrap.sh` via `bash -n` (and `shellcheck` where available); YAML sanity via `repowolf config validate` inside CI.
+- BusyBox checksum path tested directly (`sha256sum -c` filtered file); no GNU-only option.
+- Bootstrap `bash -n`, shellcheck via an explicit availability branch, strict-input rejection cases, state ownership/mode checks, duplicate-run refusal, and config validation.
+- Full local compose smoke for granted/denied `gh`, Git upload-pack acceptance, readiness, and sandbox boundary.
+- Workflow YAML parsed with the temporary Go/yaml checker.
+- Host-broker path manually succeeds with real `GH_TOKEN` and SSH credentials.
+- Final `go test -race ./...` runs directly (no pipeline that can mask its exit status).
 
 ## Acceptance criteria
 
-1. A developer with only Docker can clone the repo, run `bootstrap.sh` and `docker compose up`, and complete a brokered `gh repo view` against their chosen repository.
-2. A developer with RepoWolf on their host can build the sandbox image and reach their broker from a container using only the four documented client environment variables.
-3. Inside the sandbox container, no provider credentials, real `gh`, or `ssh` exist; `gh` and git SSH are brokered.
-4. A denied capability (`gh run list` under the sample policy) fails with a policy error without contacting GitHub; a granted capability with a bad provider token fails upstream, not at policy.
-5. `examples/docker/state/`, `.env`, and token material can never be committed (gitignored, verified by `git check-ignore`).
-6. The CI smoke test exercises all of 1–4 on every PR and `main` push.
+1. A Linux developer with Docker and Bash can bootstrap and run the compose example without installing RepoWolf on the host.
+2. A developer with a host broker can build the sandbox and connect using only the documented client variables.
+3. The sandbox contains no provider credentials, real `gh`, or `ssh`; both restricted shims point to `repowolf-client`.
+4. Audit events distinguish a granted provider request from a denied capability.
+5. CI starts a real brokered Git upload-pack path through service-side SSH and asserts policy acceptance without using a real SSH credential.
+6. Successful Git clone documentation requires both broker-side authentication and verified known-hosts state.
+7. Gitignore protects against ordinary accidental adds; documentation does not claim forced adds are impossible.
+8. CI exercises compose startup/readiness, `gh` policy outcomes, the Git path, and the sandbox boundary on every PR and `main` push.
