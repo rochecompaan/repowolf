@@ -270,7 +270,7 @@ docker run --rm repowolf-sandbox:local sh -c '
   test "$(id -u)" = "65532"
   test "$(id -g)" = "65532"
   test "$GIT_SSH_COMMAND" = "repowolf-git-ssh"
-  ! env | grep -q "^GH_TOKEN="
+  test -z "${GH_TOKEN+x}"
 '
 ```
 
@@ -777,18 +777,21 @@ Expected: wait exits 0. On timeout, print `docker compose logs repowolf` before 
 
 ```bash
 cd /home/roche/projects/pi/repowolf/.worktrees/docker-example/examples/docker
+set -euo pipefail
 if REPOWOLF_IMAGE=repowolf:mvp docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox gh repo view --repo rochecompaan/repowolf; then
   echo "expected upstream failure with dummy GH_TOKEN" >&2
   exit 1
 fi
-docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep 'github.repository_view' | grep -E '"outcome":[[:space:]]*"accepted"'
+docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+grep 'github.repository_view' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"accepted"'
 
 if REPOWOLF_IMAGE=repowolf:mvp docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox gh run list --repo rochecompaan/repowolf; then
   echo "expected policy denial" >&2
   exit 1
 fi
-docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
-if docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep 'github.run_list' | grep -qE '"outcome":[[:space:]]*"accepted"'; then
+docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+grep 'github.run_list' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
+if grep 'github.run_list' /tmp/repowolf-broker.log | grep -qE '"outcome":[[:space:]]*"accepted"'; then
   echo "github.run_list must not be accepted" >&2
   exit 1
 fi
@@ -798,14 +801,15 @@ fi
 
 ```bash
 cd /home/roche/projects/pi/repowolf/.worktrees/docker-example/examples/docker
+set -euo pipefail
 if REPOWOLF_IMAGE=repowolf:mvp docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox \
   git ls-remote git@github.com:rochecompaan/repowolf.git; then
   echo "fake SSH unexpectedly succeeded" >&2
   exit 1
 fi
-docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf \
-  | grep 'git.upload-pack' | grep -E '"outcome":[[:space:]]*"accepted"'
-expected_argv=$(cat <<'EOF'
+docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+grep 'git.upload-pack' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"accepted"'
+diff -u <(cat <<'EOF'
 -T
 -p
 22
@@ -813,10 +817,8 @@ expected_argv=$(cat <<'EOF'
 git@github.com
 git-upload-pack 'rochecompaan/repowolf.git'
 EOF
-)
-test "$(cat state/test/ssh-argv)" = "$expected_argv"
-docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf \
-  | grep 'git.upload-pack' | grep -E '"outcome":[[:space:]]*"failed"' \
+) state/test/ssh-argv
+grep 'git.upload-pack' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"failed"' \
   | grep 'GIT_TERMINAL_CATEGORY_PROVIDER_FAILURE'
 ```
 
@@ -828,7 +830,7 @@ Expected: fake SSH exits 42; its host-visible log exactly proves `Runner.Start` 
 cd /home/roche/projects/pi/repowolf/.worktrees/docker-example/examples/docker
 REPOWOLF_IMAGE=repowolf:mvp docker compose -f compose.yaml -f compose.smoke.yaml run --rm --entrypoint sh sandbox -c '
   set -e
-  ! env | grep -q "^GH_TOKEN="
+  test -z "${GH_TOKEN+x}"
   test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
   test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
   ! command -v ssh >/dev/null
@@ -869,6 +871,7 @@ git commit -m "feat(examples): add compose broker and observable SSH smoke"
     runs-on: ubuntu-24.04
     defaults:
       run:
+        shell: bash -euo pipefail {0}
         working-directory: examples/docker
     env:
       REPOWOLF_IMAGE: repowolf:mvp
@@ -1018,13 +1021,15 @@ git commit -m "feat(examples): add compose broker and observable SSH smoke"
             echo "expected upstream failure with dummy GH_TOKEN" >&2
             exit 1
           fi
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep 'github.repository_view' | grep -E '"outcome":[[:space:]]*"accepted"'
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+          grep 'github.repository_view' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"accepted"'
           if docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox gh run list --repo rochecompaan/repowolf; then
             echo "expected policy denial" >&2
             exit 1
           fi
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
-          if docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep 'github.run_list' | grep -qE '"outcome":[[:space:]]*"accepted"'; then
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+          grep 'github.run_list' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
+          if grep 'github.run_list' /tmp/repowolf-broker.log | grep -qE '"outcome":[[:space:]]*"accepted"'; then
             echo "github.run_list must not be accepted" >&2
             exit 1
           fi
@@ -1035,9 +1040,9 @@ git commit -m "feat(examples): add compose broker and observable SSH smoke"
             echo "fake SSH unexpectedly succeeded" >&2
             exit 1
           fi
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf \
-            | grep 'git.upload-pack' | grep -E '"outcome":[[:space:]]*"accepted"'
-          expected_argv=$(cat <<'EOF'
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
+          grep 'git.upload-pack' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"accepted"'
+          diff -u <(cat <<'EOF'
           -T
           -p
           22
@@ -1045,16 +1050,14 @@ git commit -m "feat(examples): add compose broker and observable SSH smoke"
           git@github.com
           git-upload-pack 'rochecompaan/repowolf.git'
           EOF
-          )
-          test "$(cat state/test/ssh-argv)" = "$expected_argv"
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf \
-            | grep 'git.upload-pack' | grep -E '"outcome":[[:space:]]*"failed"' \
+          ) state/test/ssh-argv
+          grep 'git.upload-pack' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"failed"' \
             | grep 'GIT_TERMINAL_CATEGORY_PROVIDER_FAILURE'
       - name: Assert sandbox boundary
         run: |
           docker compose -f compose.yaml -f compose.smoke.yaml run --rm --entrypoint sh sandbox -c '
             set -e
-            ! env | grep -q "^GH_TOKEN="
+            test -z "${GH_TOKEN+x}"
             test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
             test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
             ! command -v ssh >/dev/null
@@ -1213,7 +1216,8 @@ The sample policy deliberately omits `actions:read`:
 ```sh
 docker compose run --rm sandbox gh run list --repo rochecompaan/repowolf
 # gh: GitHub operation failed
-docker compose logs repowolf | grep -E '"outcome":[[:space:]]*"denied"'
+docker compose logs repowolf > /tmp/repowolf-broker.log
+grep -E '"outcome":[[:space:]]*"denied"' /tmp/repowolf-broker.log
 ```
 
 Client diagnostics are intentionally identical for policy/provider failures;
@@ -1251,7 +1255,7 @@ sandbox still contains no SSH identity or OpenSSH client.
 
 ```sh
 docker compose run --rm --entrypoint sh sandbox -c '
-  ! env | grep -q "^GH_TOKEN="
+  test -z "${GH_TOKEN+x}"
   test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
   test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
   ! command -v ssh
