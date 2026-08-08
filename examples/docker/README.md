@@ -42,13 +42,27 @@ tools:
   ssh: /absolute/path/from/command-v-ssh
 ```
 
+The example policy principal is `example-agent`, so the broker must load
+`REPOWOLF_TOKEN_EXAMPLE_AGENT` in its supervisor environment. Generate and store
+it once in a protected file:
+
+```sh
+repowolf token generate > /var/lib/repowolf/token
+chmod 0600 /var/lib/repowolf/token
+printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$(cat /var/lib/repowolf/token)" > /run/repowolf/service.env
+```
+
+`/run/repowolf/service.env` must be loaded by the broker before restart (for
+example with systemd `EnvironmentFile=/run/repowolf/service.env`). Do not print
+its contents.
+
 The absolute paths avoid startup failures from ambiguous/empty PATH entries.
 Restart the broker, then:
 
 ```sh
 docker run --rm -it \
   -e REPOWOLF_ENDPOINT=https://172.17.0.1:9443 \
-  -e REPOWOLF_SERVER_NAME=localhost \
+  -e REPOWOLF_SERVER_NAME=repowolf.internal \
   -e REPOWOLF_TOKEN="$(cat /var/lib/repowolf/token)" \
   -e REPOWOLF_CA_FILE=/run/repowolf/ca.crt \
   -v /var/lib/repowolf/tls/ca.crt:/run/repowolf/ca.crt:ro \
