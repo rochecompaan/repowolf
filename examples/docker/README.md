@@ -43,18 +43,24 @@ tools:
 ```
 
 The example policy principal is `example-agent`, so the broker must load
-`REPOWOLF_TOKEN_EXAMPLE_AGENT` in its supervisor environment. Generate and store
-it once in a protected file:
+`REPOWOLF_TOKEN_EXAMPLE_AGENT` from a dedicated principal environment file,
+without overwriting provider settings in `/run/repowolf/service.env`. Generate and
+store it once in a protected file:
 
 ```sh
-repowolf token generate > /var/lib/repowolf/token
-chmod 0600 /var/lib/repowolf/token
-printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$(cat /var/lib/repowolf/token)" > /run/repowolf/service.env
+umask 077
+mkdir -p /var/lib/repowolf /run/repowolf
+chmod 0700 /var/lib/repowolf /run/repowolf
+BROKER_TOKEN="$(repowolf token generate)"
+printf '%s\n' "$BROKER_TOKEN" > /var/lib/repowolf/token
+printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$BROKER_TOKEN" > /run/repowolf/example-agent.env
+chmod 0600 /var/lib/repowolf/token /run/repowolf/example-agent.env
 ```
 
-`/run/repowolf/service.env` must be loaded by the broker before restart (for
-example with systemd `EnvironmentFile=/run/repowolf/service.env`). Do not print
-its contents.
+Both `/run/repowolf/service.env` and `/run/repowolf/example-agent.env` must be
+loaded by the broker before restart (for example with systemd
+`EnvironmentFile=/run/repowolf/service.env` and
+`EnvironmentFile=/run/repowolf/example-agent.env`). Do not print its contents.
 
 The absolute paths avoid startup failures from ambiguous/empty PATH entries.
 Restart the broker, then:
