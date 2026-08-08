@@ -1,0 +1,163 @@
+# RepoWolf Docker example
+
+This example keeps provider credentials and real provider tools on the broker
+side. The sandbox gets only `repowolf-client` (as `gh` and
+`repowolf-git-ssh`), its RepoWolf token, endpoint, and public CA.
+
+Two run modes share the same sandbox image:
+
+- **Host broker + sandbox container** — the production topology.
+- **Compose broker + sandbox container** — no host RepoWolf install.
+
+## Requirements and platform scope
+
+- Docker with the Compose v2 plugin.
+- Bash (the scripts are Bash 3.2-compatible).
+- Linux is tested. On macOS run from a Unix shell. On Windows run from WSL2;
+  native PowerShell/cmd is not supported by this example.
+
+## Build the sandbox
+
+```sh
+docker build -t repowolf-sandbox:local examples/docker/sandbox
+```
+
+The build downloads `v0.1.0` by default and verifies the selected archive
+against the published checksum file. Override with
+`--build-arg REPOWOLF_VERSION=<tag>` when upgrading. Release archives are
+checksum-verified; they are not signed.
+
+The runtime image has git and CA roots, runs as UID/GID 65532, and contains
+no real `gh`, OpenSSH, provider token, key, or agent socket.
+
+## Path A: host broker + sandbox
+
+Install/bootstrap RepoWolf on the Linux host per the top-level README. Bind
+it to the Docker bridge gateway (usually `172.17.0.1`), not `0.0.0.0`:
+
+```yaml
+listen: 172.17.0.1:9443
+tools:
+  gh: /absolute/path/from/command-v-gh
+  ssh: /absolute/path/from/command-v-ssh
+```
+
+The absolute paths avoid startup failures from ambiguous/empty PATH entries.
+Restart the broker, then:
+
+```sh
+docker run --rm -it \
+  -e REPOWOLF_ENDPOINT=https://172.17.0.1:9443 \
+  -e REPOWOLF_SERVER_NAME=localhost \
+  -e REPOWOLF_TOKEN="$(cat /var/lib/repowolf/token)" \
+  -e REPOWOLF_CA_FILE=/run/repowolf/ca.crt \
+  -v /var/lib/repowolf/tls/ca.crt:/run/repowolf/ca.crt:ro \
+  repowolf-sandbox:local gh repo view --repo rochecompaan/repowolf
+```
+
+`REPOWOLF_SERVER_NAME` must match the host certificate's DNS SAN. Use
+`--add-host=host.docker.internal:host-gateway` and endpoint
+`https://host.docker.internal:9443` as an alternative to the numeric gateway.
+
+Git operations additionally require the **host broker** to have an SSH
+identity/agent and verified known-hosts state. GitHub requires authentication
+even for public SSH clones.
+
+## Path B: compose broker + sandbox
+
+```sh
+cd examples/docker
+cp .env.example .env
+# Set GH_TOKEN in .env (obtain on the host with: gh auth token)
+REPOWOLF_REPO=rochecompaan/repowolf ./bootstrap.sh
+docker compose up -d repowolf
+./wait-for-broker.sh 127.0.0.1 8443 30
+docker compose run --rm sandbox gh repo view --repo rochecompaan/repowolf
+```
+
+`bootstrap.sh` writes fixed paths `state/` and `.env`, because those are the
+paths Compose reads. It refuses existing state. The wait is required:
+`docker compose up -d` and `depends_on` do not signal TLS readiness.
+
+### Policy-denial demonstration
+
+The sample policy deliberately omits `actions:read`:
+
+```sh
+docker compose run --rm sandbox gh run list --repo rochecompaan/repowolf
+# gh: GitHub operation failed
+docker compose logs repowolf > /tmp/repowolf-broker.log
+grep -E '"outcome":[[:space:]]*"denied"' /tmp/repowolf-broker.log
+```
+
+Client diagnostics are intentionally identical for policy/provider failures;
+the broker audit log is the stable source of the outcome. Add
+`- actions:read` to `state/config.yaml` and restart the broker to allow the
+operation.
+
+### Enable Git in compose
+
+Every Git read/write requires broker-side authentication and host
+verification. Prepare a repository-scoped deploy key and a verified
+known-hosts file. Verify GitHub's published SSH fingerprints before trusting
+`ssh-keyscan` output:
+
+<https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints>
+
+Bootstrap from a fresh state directory:
+
+```sh
+ssh-keyscan -t ed25519 github.com > /tmp/github-known-hosts
+REPOWOLF_REPO=rochecompaan/repowolf \
+REPOWOLF_SSH_KEY=/secure/path/to/deploy-key \
+REPOWOLF_KNOWN_HOSTS=/tmp/github-known-hosts \
+./bootstrap.sh
+docker compose up -d repowolf
+./wait-for-broker.sh 127.0.0.1 8443 30
+docker compose run --rm sandbox \
+  git ls-remote git@github.com:rochecompaan/repowolf.git
+```
+
+The private key/known-hosts/config are mounted only into the broker. The
+sandbox still contains no SSH identity or OpenSSH client.
+
+## Boundary proof
+
+```sh
+docker compose run --rm --entrypoint sh sandbox -c '
+  test -z "${GH_TOKEN+x}"
+  test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
+  test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
+  ! command -v ssh
+'
+```
+
+## Reset and secret handling
+
+`.gitignore` prevents ordinary accidental adds of `.env` and `state/`, but
+`git add -f` bypasses it. Treat both paths as secret material.
+
+Deleting `state/` destroys the CA private key, server key, principal token,
+and optional SSH key; deleting `.env` may destroy the only local copy of the
+provider token. Back them up outside the repository before reset:
+
+```sh
+docker compose down
+backup="${HOME}/.local/state/repowolf-example/$(date +%Y%m%d%H%M%S)"
+mkdir -p "$backup"
+mv state .env "$backup/"
+```
+
+Only use `rm -rf state .env` when that destruction is intended.
+
+## Troubleshooting
+
+- **Connection refused after compose start:** run `./wait-for-broker.sh`; if it
+  times out, inspect `docker compose logs repowolf`.
+- **TLS name mismatch:** set `REPOWOLF_SERVER_NAME` to the cert DNS SAN.
+- **Host broker cannot be reached:** it is still bound to `127.0.0.1`; bind
+  the Docker bridge gateway instead.
+- **Broker `service failed`:** check TLS ownership/modes and pin absolute
+  `tools.gh`/`tools.ssh` paths.
+- **Git host-key/authentication failure:** supply both a verified known-hosts
+  file and a usable broker-side key/agent. Read-only Git is not anonymous.
