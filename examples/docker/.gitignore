@@ -1,0 +1,3 @@
+# Accidental-commit protection only; `git add -f` can bypass these rules.
+state/
+.env
