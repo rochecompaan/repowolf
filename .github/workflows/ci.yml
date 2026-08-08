@@ -42,6 +42,206 @@ jobs:
           docker load -i "$image"
           docker run --rm repowolf:mvp --version
 
+  docker-example-smoke:
+    needs: test
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: examples/docker
+    env:
+      REPOWOLF_IMAGE: repowolf:mvp
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
+      - name: Check example shell syntax
+        run: bash -n bootstrap.sh wait-for-broker.sh
+      - name: Build and load broker image from this commit
+        working-directory: .
+        run: |
+          image="$(nix build .#ociImage --no-link --print-out-paths)"
+          docker load -i "$image"
+      - name: Build sandbox image from current-commit archives
+        working-directory: .
+        run: |
+          set -euo pipefail
+          nix develop -c goreleaser release --snapshot --clean
+          fixture=$(mktemp -d /tmp/repowolf-release-fixture.XXXXXX)
+          mkdir -p "$fixture/snapshot"
+          cp dist/checksums.txt dist/repowolf_linux_*.tar.gz "$fixture/snapshot/"
+          cat > "$fixture/server.go" <<'EOF'
+          package main
+
+          import (
+            "log"
+            "net/http"
+            "os"
+          )
+
+          func main() {
+            if len(os.Args) != 2 {
+              log.Fatal("usage: release-server <directory>")
+            }
+            log.Fatal(http.ListenAndServe("127.0.0.1:8765", http.FileServer(http.Dir(os.Args[1]))))
+          }
+          EOF
+          nix develop -c go build -o "$fixture/release-server" "$fixture/server.go"
+          "$fixture/release-server" "$fixture" >/tmp/repowolf-release-server.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            rm -rf "$fixture" /tmp/repowolf-release-server.log
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          fixture_ready=0
+          for ((attempt = 1; attempt <= 30; attempt++)); do
+            if (exec 3<>/dev/tcp/127.0.0.1/8765) 2>/dev/null; then
+              fixture_ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$fixture_ready" -ne 1 ]; then
+            cat /tmp/repowolf-release-server.log >&2
+            exit 1
+          fi
+          docker build --network=host \
+            --build-arg REPOWOLF_VERSION=snapshot \
+            --build-arg REPOWOLF_RELEASE_ROOT=http://127.0.0.1:8765 \
+            -t repowolf-sandbox:local examples/docker/sandbox
+      - name: Bootstrap disposable state and verify broker ownership
+        run: |
+          ssh_test=$(mktemp -d /tmp/repowolf-ci-ssh.XXXXXX)
+          ssh-keygen -q -t ed25519 -N '' -f "$ssh_test/id_ed25519"
+          printf 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestOnly\n' > "$ssh_test/known_hosts"
+          printf 'GH_TOKEN=dummy-ci-token\n' > .env
+          REPOWOLF_REPO=rochecompaan/repowolf \
+          REPOWOLF_SSH_KEY="$ssh_test/id_ed25519" \
+          REPOWOLF_KNOWN_HOSTS="$ssh_test/known_hosts" \
+          ./bootstrap.sh
+          rm -rf "$ssh_test"
+          docker run --rm --user 65532:65532 -v "$PWD/state/config.yaml:/config.yaml:ro" \
+            repowolf:mvp config validate --config /config.yaml
+          docker run --rm -v "$PWD/state/ssh:/tmp/.ssh:ro" \
+            --entrypoint ssh repowolf:mvp -G github.com > /tmp/ssh-effective
+          grep -E '^identityagent[[:space:]]+none$' /tmp/ssh-effective
+          grep -E '^identityfile[[:space:]]+/tmp/.ssh/id_ed25519$' /tmp/ssh-effective
+          grep -E '^userknownhostsfile[[:space:]]+/tmp/.ssh/known_hosts$' /tmp/ssh-effective
+      - name: Install observable fake SSH fixture
+        working-directory: .
+        run: |
+          mkdir -p examples/docker/state/test
+          cat > /tmp/repowolf-fake-ssh.go <<'EOF'
+          package main
+
+          import (
+            "fmt"
+            "os"
+          )
+
+          func main() {
+            path := os.Getenv("FAKE_SSH_LOG")
+            if path == "" {
+              fmt.Fprintln(os.Stderr, "FAKE_SSH_LOG is unset")
+              os.Exit(90)
+            }
+            output, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0)
+            if err != nil {
+              fmt.Fprintln(os.Stderr, err)
+              os.Exit(91)
+            }
+            for _, argument := range os.Args[1:] {
+              fmt.Fprintln(output, argument)
+            }
+            if err := output.Close(); err != nil {
+              fmt.Fprintln(os.Stderr, err)
+              os.Exit(92)
+            }
+            os.Exit(42)
+          }
+          EOF
+          nix develop -c env CGO_ENABLED=0 go build -o examples/docker/state/test/fake-ssh /tmp/repowolf-fake-ssh.go
+          rm /tmp/repowolf-fake-ssh.go
+          : > examples/docker/state/test/ssh-argv
+          awk '
+            $0 == "  ssh: null" { print "  ssh: /run/repowolf/test/fake-ssh"; next }
+            { print }
+          ' examples/docker/state/config.yaml > examples/docker/state/config.smoke.yaml
+          mv examples/docker/state/config.smoke.yaml examples/docker/state/config.yaml
+          docker run --rm --user 0:0 \
+            -e HOST_UID="$(id -u)" \
+            -v "$PWD/examples/docker/state/config.yaml:/config.yaml" \
+            -v "$PWD/examples/docker/state/test:/test" \
+            alpine:3 sh -eu -c '
+              chown "$HOST_UID:65532" /config.yaml /test /test/fake-ssh /test/ssh-argv
+              chmod 0640 /config.yaml
+              chmod 0750 /test
+              chmod 0550 /test/fake-ssh
+              chmod 0660 /test/ssh-argv
+            '
+          docker run --rm --user 65532:65532 -v "$PWD/examples/docker/state/config.yaml:/config.yaml:ro" \
+            repowolf:mvp config validate --config /config.yaml
+      - name: Start broker and wait for readiness
+        run: |
+          docker compose -f compose.yaml -f compose.smoke.yaml up -d repowolf
+          if ! ./wait-for-broker.sh 127.0.0.1 8443 30; then
+            docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf
+            exit 1
+          fi
+      - name: Assert GitHub policy outcomes
+        run: |
+          if docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox gh repo view --repo rochecompaan/repowolf; then
+            echo "expected upstream failure with dummy GH_TOKEN" >&2
+            exit 1
+          fi
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep 'github.repository_view' | grep -E '"outcome":[[:space:]]*"accepted"'
+          if docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox gh run list --repo rochecompaan/repowolf; then
+            echo "expected policy denial" >&2
+            exit 1
+          fi
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
+          if docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf | grep 'github.run_list' | grep -qE '"outcome":[[:space:]]*"accepted"'; then
+            echo "github.run_list must not be accepted" >&2
+            exit 1
+          fi
+      - name: Assert broker launched fake SSH with upload-pack argv
+        run: |
+          if docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox \
+            git ls-remote git@github.com:rochecompaan/repowolf.git; then
+            echo "fake SSH unexpectedly succeeded" >&2
+            exit 1
+          fi
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf \
+            | grep 'git.upload-pack' | grep -E '"outcome":[[:space:]]*"accepted"'
+          expected_argv=$(cat <<'EOF'
+          -T
+          -p
+          22
+          --
+          git@github.com
+          git-upload-pack 'rochecompaan/repowolf.git'
+          EOF
+          )
+          test "$(cat state/test/ssh-argv)" = "$expected_argv"
+          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf \
+            | grep 'git.upload-pack' | grep -E '"outcome":[[:space:]]*"failed"' \
+            | grep 'GIT_TERMINAL_CATEGORY_PROVIDER_FAILURE'
+      - name: Assert sandbox boundary
+        run: |
+          docker compose -f compose.yaml -f compose.smoke.yaml run --rm --entrypoint sh sandbox -c '
+            set -e
+            ! env | grep -q "^GH_TOKEN="
+            test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
+            test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
+            ! command -v ssh >/dev/null
+            test "$(id -u)" = "65532"
+          '
+      - name: Tear down
+        if: always()
+        run: docker compose -f compose.yaml -f compose.smoke.yaml down -v
+
   release-smoke:
     needs: test
     strategy:
