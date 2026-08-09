@@ -43,8 +43,18 @@ set -euo pipefail
 case_root=${case_root:?}
 printf '%q ' "$@" >> "$case_root/sudo.log"
 printf '\n' >> "$case_root/sudo.log"
+if [ "${FAIL_CLOSED_SUDO:-}" = 1 ]; then
+  exit 99
+fi
 if [ "${1:-}" = -v ]; then
+  if [ -n "${RACE_DIRECTORY_LINK:-}" ]; then
+    rm -f -- "$RACE_DIRECTORY_LINK"
+    ln -s / "$RACE_DIRECTORY_LINK"
+  fi
   exit 0
+fi
+if [ "${FAIL_AFTER_SUDO_V:-}" = 1 ]; then
+  exit 99
 fi
 case "${1:-}" in
   test|mktemp|rm)
@@ -126,6 +136,8 @@ if grep -F 'rw1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' \
   echo 'principal token leaked to output' >&2
   exit 1
 fi
+grep -F "load $case_root/run/repowolf/service.env and $case_root/run/repowolf/example-agent.env before starting or restarting the broker" \
+  "$case_root/success.out"
 
 setup_case
 expect_status 2 relative-state run_principal REPOWOLF_STATE_DIR=var/lib/repowolf
@@ -134,6 +146,38 @@ test ! -s "$case_root/sudo.log"
 setup_case
 expect_status 2 relative-runtime run_principal REPOWOLF_RUNTIME_DIR=run/repowolf
 test ! -s "$case_root/sudo.log"
+
+root_case=0
+for variable in REPOWOLF_STATE_DIR REPOWOLF_RUNTIME_DIR; do
+  for root_value in /tmp/.. /. //; do
+    setup_case
+    root_case=$((root_case + 1))
+    expect_status 2 "root-$root_case" run_principal FAIL_CLOSED_SUDO=1 \
+      "$variable=$root_value"
+    grep -F "$variable must not resolve to /" "$case_root/root-$root_case.out"
+    test ! -s "$case_root/sudo.log"
+  done
+
+  setup_case
+  ln -s / "$case_root/root-link"
+  root_case=$((root_case + 1))
+  expect_status 2 "root-$root_case" run_principal FAIL_CLOSED_SUDO=1 \
+    "$variable=$case_root/root-link"
+  grep -F "$variable must not resolve to /" "$case_root/root-$root_case.out"
+  test ! -s "$case_root/sudo.log"
+done
+
+setup_case
+mkdir -p "$case_root/var/lib/repowolf"
+ln -s "$case_root/var/lib/repowolf" "$case_root/state-link"
+expect_status 2 directory-race run_principal \
+  REPOWOLF_STATE_DIR="$case_root/state-link" \
+  RACE_DIRECTORY_LINK="$case_root/state-link" FAIL_AFTER_SUDO_V=1
+grep -F 'configured directory changed during installation' "$case_root/directory-race.out"
+if grep -Eq '^(install|mktemp|ln|chmod|chown|rm)([[:space:]]|$)' "$case_root/sudo.log"; then
+  echo 'directory race reached a privileged mutation' >&2
+  exit 1
+fi
 
 setup_case
 expect_status 2 missing-broker-user run_principal REPOWOLF_BROKER_USER=missing-repowolf-user

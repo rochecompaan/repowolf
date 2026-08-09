@@ -91,8 +91,18 @@ set -euo pipefail
 case_root=${case_root:?}
 printf '%q ' "$@" >> "$case_root/sudo.log"
 printf '\n' >> "$case_root/sudo.log"
+if [ "${FAIL_CLOSED_SUDO:-}" = 1 ]; then
+  exit 99
+fi
 if [ "${1:-}" = -v ]; then
+  if [ -n "${RACE_DIRECTORY_LINK:-}" ]; then
+    rm -f -- "$RACE_DIRECTORY_LINK"
+    ln -s / "$RACE_DIRECTORY_LINK"
+  fi
   exit 0
+fi
+if [ "${FAIL_AFTER_SUDO_V:-}" = 1 ]; then
+  exit 99
 fi
 if [ "${1:-}" = -u ]; then
   shift 2
@@ -122,7 +132,16 @@ case "${1:-}" in
     done
     command "${args[@]}"
     ;;
-  "$case_root/bin/repowolf"|test|mktemp|ln|chmod|rm)
+  "$case_root/bin/repowolf"|test|mktemp|chmod|rm)
+    command "$@"
+    ;;
+  ln)
+    destination=${!#}
+    if [ "${FAIL_POLICY_PUBLISH:-}" = 1 ] && \
+       [ "$destination" = "$case_root/etc/repowolf/repowolf.yaml" ]; then
+      printf 'competing policy\n' > "$destination"
+      exit 1
+    fi
     command "$@"
     ;;
   chown)
@@ -200,10 +219,60 @@ setup_case
 expect_status 2 relative-config run_installer REPOWOLF_CONFIG_DIR=etc/repowolf
 test ! -s "$case_root/sudo.log"
 
+root_case=0
+for variable in REPOWOLF_CONFIG_DIR REPOWOLF_STATE_DIR REPOWOLF_RUNTIME_DIR; do
+  for root_value in /tmp/.. /. //; do
+    setup_case
+    root_case=$((root_case + 1))
+    expect_status 2 "root-$root_case" run_installer FAIL_CLOSED_SUDO=1 \
+      "$variable=$root_value"
+    grep -F "$variable must not resolve to /" "$case_root/root-$root_case.out"
+    test ! -s "$case_root/sudo.log"
+  done
+
+  setup_case
+  ln -s / "$case_root/root-link"
+  root_case=$((root_case + 1))
+  expect_status 2 "root-$root_case" run_installer FAIL_CLOSED_SUDO=1 \
+    "$variable=$case_root/root-link"
+  grep -F "$variable must not resolve to /" "$case_root/root-$root_case.out"
+  test ! -s "$case_root/sudo.log"
+done
+
 setup_case
-mkdir -p "$case_root/var/lib/repowolf/tls"
-expect_status 1 existing-tls run_installer
-test ! -e "$case_root/repowolf-cert-init-called"
+mkdir -p "$case_root/var/lib/repowolf"
+ln -s "$case_root/var/lib/repowolf" "$case_root/state-link"
+expect_status 2 directory-race run_installer \
+  REPOWOLF_STATE_DIR="$case_root/state-link" \
+  RACE_DIRECTORY_LINK="$case_root/state-link" FAIL_AFTER_SUDO_V=1
+grep -F 'configured directory changed during installation' "$case_root/directory-race.out"
+if grep -Eq '^(install|mktemp|ln|chmod|chown|rm)([[:space:]]|$)' "$case_root/sudo.log"; then
+  echo 'directory race reached a privileged mutation' >&2
+  exit 1
+fi
+
+for destination in tls tls-link policy policy-link; do
+  setup_case
+  mkdir -p "$case_root/var/lib/repowolf" "$case_root/etc/repowolf"
+  case "$destination" in
+    tls) mkdir "$case_root/var/lib/repowolf/tls" ;;
+    tls-link) ln -s missing "$case_root/var/lib/repowolf/tls" ;;
+    policy) touch "$case_root/etc/repowolf/repowolf.yaml" ;;
+    policy-link) ln -s missing "$case_root/etc/repowolf/repowolf.yaml" ;;
+  esac
+  expect_status 1 "existing-$destination" run_installer
+  test ! -e "$case_root/repowolf-cert-init-called"
+done
+
+setup_case
+expect_status 1 publication-race run_installer FAIL_POLICY_PUBLISH=1
+test "$(cat "$case_root/etc/repowolf/repowolf.yaml")" = 'competing policy'
+test ! -e "$case_root/var/lib/repowolf/tls"
+test ! -e "$case_root/var/lib/repowolf"
+if find "$case_root/etc/repowolf" -name '.repowolf.yaml.*' -print -quit | grep -q .; then
+  echo 'publication-race left a privileged staging file' >&2
+  exit 1
+fi
 
 setup_case
 rm -rf "$case_root/var/lib/repowolf/tls"

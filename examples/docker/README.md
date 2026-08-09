@@ -96,6 +96,7 @@ normal sudo-capable operator; the scripts invoke `sudo` only for protected
 filesystem changes and refuse existing state.
 
 ```sh
+cd examples/docker
 REPOWOLF_REPO=rochecompaan/repowolf ./install-host-broker.sh
 ./install-host-principal.sh
 ```

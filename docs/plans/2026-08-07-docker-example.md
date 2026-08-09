@@ -1555,7 +1555,7 @@ The test harness must provide these executable shims under `$case_root/bin`:
 
 - `docker`: for exactly `network inspect --format '{{(index .IPAM.Config 0).Gateway}}' bridge`, print `172.18.0.1`; reject every other argv.
 - `repowolf`: `cert init` creates `ca.crt`, `ca.key`, `tls.crt`, and `tls.key`; `config validate` rejects any remaining `__REPOWOLF_` token and records each invocation. When `REPOWOLF_TEST_VALIDATE_IMAGE` is set, invoke the real Docker binary captured before PATH replacement and mount the requested config at `/config.yaml` for `repowolf:mvp config validate --config /config.yaml`.
-- `sudo`: append shell-escaped argv to `$case_root/sudo.log`; remove `-u USER` before execution; for `install`, replace requested owner/group with the current test user/group while preserving modes; execute `test`, `mktemp`, `ln`, `chmod`, and `rm`; treat `chown` as a logged no-op. If `FAIL_INSTALLED_VALIDATE=1`, fail only the `config validate` call whose path ends in `/repowolf.yaml`.
+- `sudo`: append shell-escaped argv to `$case_root/sudo.log`; remove `-u USER` before execution; for `install`, replace requested owner/group with the current test user/group while preserving modes; execute `test`, `mktemp`, `ln`, `chmod`, and `rm`; treat `chown` as a logged no-op. `FAIL_CLOSED_SUDO=1` must refuse every sudo argv without executing it, so root-equivalent override regressions cannot touch the real root. If `FAIL_INSTALLED_VALIDATE=1`, fail only the `config validate` call whose path ends in `/repowolf.yaml`; `FAIL_POLICY_PUBLISH=1` must create a competing policy at the final destination then fail the hard-link publication.
 - `gh` and `ssh`: exit zero so their absolute shim paths are executable configuration values.
 
 Use helpers with these exact calling conventions:
@@ -1610,9 +1610,16 @@ expect_status 2 relative-config run_installer REPOWOLF_CONFIG_DIR=etc/repowolf
 
 test ! -s "$case_root/sudo.log"
 
-mkdir -p "$case_root/var/lib/repowolf/tls"
-expect_status 1 existing-tls run_installer
-test ! -e "$case_root/repowolf-cert-init-called"
+for directory in REPOWOLF_CONFIG_DIR REPOWOLF_STATE_DIR REPOWOLF_RUNTIME_DIR; do
+  # `/tmp/..`, `/.`, `//`, and a test-owned symlink to `/` return 2.
+  # Every case sets FAIL_CLOSED_SUDO=1 and leaves sudo.log empty.
+done
+
+# Existing regular and dangling TLS/policy destinations return 1 before cert init.
+# A failed policy hard-link race preserves the competing policy and removes the
+# invocation-owned TLS directory and staging file.
+# A test-owned directory symlink switched to `/` by the `sudo -v` shim returns
+# 2 before any subsequent privileged action.
 
 rm -rf "$case_root/var/lib/repowolf/tls"
 mkdir -p "$case_root/var/lib/repowolf" "$case_root/etc/repowolf"
@@ -1672,7 +1679,7 @@ reject_control() {
   fi
 }
 
-require_absolute() {
+require_absolute_path() {
   label=$1
   value=$2
   reject_control "$label" "$value"
@@ -1680,8 +1687,17 @@ require_absolute() {
     /*) ;;
     *) fail_usage "$label must be an absolute path" ;;
   esac
-  [ "$value" != / ] || fail_usage "$label must not be /"
 }
+
+# canonicalize_directory first requires an absolute, control-character-free
+# value. It walks existing components with Bash `cd -P` and `pwd -P`, keeps a
+# lexical suffix only after the first nonexistent component, processes `.` and
+# `..`, and rejects a final canonical `/`. This catches `/tmp/..`, `/.`, `//`,
+# and existing symlinks to `/` without an added external dependency. Store the
+# canonical config/state/runtime values, derive all final paths from them, and
+# re-resolve each original value before `sudo -v` and every mutating sudo call.
+# If a re-resolution differs, fail closed; the EXIT cleanup must likewise
+# refuse privileged cleanup when the configured directories changed.
 
 yaml_quote() {
   value=${1//\'/\'\'}
@@ -1870,7 +1886,7 @@ publish_root_file() {
 }
 ```
 
-Track the staged path and each published destination outside the helper so the EXIT trap can clean a failed two-file transaction. Publish the token first and environment second. On failure, remove only invocation-owned paths and newly created empty parents. On success, print only the installed paths and the requirement to load both `service.env` and `example-agent.env`; do not print or read `service.env`.
+Track the staged path and each published destination outside the helper so the EXIT trap can clean a failed two-file transaction. Publish the token first and environment second. On failure, remove only invocation-owned paths and newly created empty parents. On success, print only the installed paths and the requirement for the broker to load both `service.env` and `example-agent.env` before it starts or restarts; do not print or read `service.env`.
 
 - [ ] **Step 4: Run focused GREEN verification**
 
@@ -2037,6 +2053,7 @@ normal sudo-capable operator; the scripts invoke `sudo` only for protected
 filesystem changes and refuse existing state.
 
 ```sh
+cd examples/docker
 REPOWOLF_REPO=rochecompaan/repowolf ./install-host-broker.sh
 ./install-host-principal.sh
 ```

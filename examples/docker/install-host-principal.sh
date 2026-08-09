@@ -2,13 +2,10 @@
 set -euo pipefail
 umask 077
 
-STATE_DIR=${REPOWOLF_STATE_DIR:-/var/lib/repowolf}
-RUNTIME_DIR=${REPOWOLF_RUNTIME_DIR:-/run/repowolf}
+STATE_DIR_INPUT=${REPOWOLF_STATE_DIR:-/var/lib/repowolf}
+RUNTIME_DIR_INPUT=${REPOWOLF_RUNTIME_DIR:-/run/repowolf}
 BROKER_USER=${REPOWOLF_BROKER_USER:-repowolf}
 BROKER_GROUP=${REPOWOLF_BROKER_GROUP:-repowolf}
-TOKEN_FILE=$STATE_DIR/token
-ENV_FILE=$RUNTIME_DIR/example-agent.env
-
 fail_usage() {
   echo "install-host-principal: $*" >&2
   exit 2
@@ -22,7 +19,7 @@ reject_control() {
   fi
 }
 
-require_absolute() {
+require_absolute_path() {
   label=$1
   value=$2
   reject_control "$label" "$value"
@@ -30,13 +27,81 @@ require_absolute() {
     /*) ;;
     *) fail_usage "$label must be an absolute path" ;;
   esac
-  [ "$value" != / ] || fail_usage "$label must not be /"
+}
+
+canonicalize_directory() {
+  label=$1
+  value=$2
+  require_absolute_path "$label" "$value"
+  local base=/ candidate component canonical last_index
+  local -a suffix=() components=()
+  IFS=/ read -r -a components <<< "${value#/}" || true
+  for component in "${components[@]}"; do
+    case $component in
+      ''|.) ;;
+      ..)
+        if [ "${#suffix[@]}" -gt 0 ]; then
+          last_index=$((${#suffix[@]} - 1))
+          unset "suffix[$last_index]"
+        elif [ "$base" = / ]; then
+          base=/
+        else
+          base=$(cd -P -- "$base/.." && pwd -P) || \
+            fail_usage "$label must resolve to a directory"
+        fi
+        ;;
+      *)
+        if [ "${#suffix[@]}" -eq 0 ]; then
+          if [ "$base" = / ]; then
+            candidate=/$component
+          else
+            candidate=$base/$component
+          fi
+          if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+            base=$(cd -P -- "$candidate" && pwd -P) || \
+              fail_usage "$label must resolve to a directory"
+          else
+            suffix+=("$component")
+          fi
+        else
+          suffix+=("$component")
+        fi
+        ;;
+    esac
+  done
+  canonical=$base
+  for component in "${suffix[@]}"; do
+    if [ "$canonical" = / ]; then
+      canonical=/$component
+    else
+      canonical=$canonical/$component
+    fi
+  done
+  [ "$canonical" != / ] || fail_usage "$label must not resolve to /"
+  printf '%s\n' "$canonical"
+}
+
+directories_match() {
+  local current
+  current=$(canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT") || return 1
+  [ "$current" = "$STATE_DIR" ] || return 1
+  current=$(canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT") || return 1
+  [ "$current" = "$RUNTIME_DIR" ] || return 1
+}
+
+recheck_directories() {
+  directories_match || fail_usage 'configured directory changed during installation'
+}
+
+sudo_mutate() {
+  recheck_directories
+  "$SUDO_BIN" "$@"
 }
 
 require_executable() {
   label=$1
   value=$2
-  require_absolute "$label" "$value"
+  require_absolute_path "$label" "$value"
   [ -x "$value" ] || fail_usage "$label must be an executable path"
 }
 
@@ -51,8 +116,10 @@ path_exists() {
   return "$exists"
 }
 
-require_absolute REPOWOLF_STATE_DIR "$STATE_DIR"
-require_absolute REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR"
+STATE_DIR=$(canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
+RUNTIME_DIR=$(canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
+TOKEN_FILE=$STATE_DIR/token
+ENV_FILE=$RUNTIME_DIR/example-agent.env
 reject_control REPOWOLF_BROKER_USER "$BROKER_USER"
 reject_control REPOWOLF_BROKER_GROUP "$BROKER_GROUP"
 [ -n "$BROKER_USER" ] || fail_usage "REPOWOLF_BROKER_USER must not be empty"
@@ -89,11 +156,15 @@ cleanup() {
   [ -z "$token_temp" ] || rm -f -- "$token_temp"
   [ -z "$env_temp" ] || rm -f -- "$env_temp"
   if [ "$status" -ne 0 ]; then
-    [ -z "$privileged_temp" ] || "$SUDO_BIN" rm -f -- "$privileged_temp" || true
-    [ "$token_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$TOKEN_FILE" || true
-    [ "$env_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$ENV_FILE" || true
-    [ "$runtime_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$RUNTIME_DIR" || true
-    [ "$state_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$STATE_DIR" || true
+    if directories_match; then
+      [ -z "$privileged_temp" ] || "$SUDO_BIN" rm -f -- "$privileged_temp" || true
+      [ "$token_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$TOKEN_FILE" || true
+      [ "$env_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$ENV_FILE" || true
+      [ "$runtime_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$RUNTIME_DIR" || true
+      [ "$state_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$STATE_DIR" || true
+    else
+      echo 'install-host-principal: configured directory changed; refusing cleanup' >&2
+    fi
   fi
   exit "$status"
 }
@@ -101,6 +172,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+recheck_directories
 "$SUDO_BIN" -v
 if path_exists "$TOKEN_FILE"; then
   echo "install-host-principal: token already exists: $TOKEN_FILE" >&2
@@ -124,11 +196,11 @@ printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$token" > "$env_temp"
 unset token
 
 if ! path_exists "$STATE_DIR"; then
-  "$SUDO_BIN" install -o root -g root -m 0700 -d "$STATE_DIR"
+  sudo_mutate install -o root -g root -m 0700 -d "$STATE_DIR"
   state_dir_created=1
 fi
 if ! path_exists "$RUNTIME_DIR"; then
-  "$SUDO_BIN" install -o root -g root -m 0700 -d "$RUNTIME_DIR"
+  sudo_mutate install -o root -g root -m 0700 -d "$RUNTIME_DIR"
   runtime_dir_created=1
 fi
 
@@ -136,14 +208,14 @@ publish_root_file() {
   source_path=$1
   destination=$2
   destination_dir=${destination%/*}
-  privileged_temp=$("$SUDO_BIN" mktemp "$destination_dir/.repowolf-install.XXXXXX")
-  "$SUDO_BIN" install -o root -g root -m 0600 "$source_path" "$privileged_temp"
-  "$SUDO_BIN" ln "$privileged_temp" "$destination"
+  privileged_temp=$(sudo_mutate mktemp "$destination_dir/.repowolf-install.XXXXXX")
+  sudo_mutate install -o root -g root -m 0600 "$source_path" "$privileged_temp"
+  sudo_mutate ln "$privileged_temp" "$destination"
   case $destination in
     "$TOKEN_FILE") token_owned=1 ;;
     "$ENV_FILE") env_owned=1 ;;
   esac
-  "$SUDO_BIN" rm -f -- "$privileged_temp"
+  sudo_mutate rm -f -- "$privileged_temp"
   privileged_temp=
 }
 
@@ -155,5 +227,5 @@ rm -f -- "$token_temp" "$env_temp"
 token_temp=
 env_temp=
 printf 'install-host-principal: installed %s and %s\n' "$TOKEN_FILE" "$ENV_FILE"
-printf 'install-host-principal: load %s/service.env and %s before starting the example agent\n' \
+printf 'install-host-principal: load %s/service.env and %s before starting or restarting the broker\n' \
   "$RUNTIME_DIR" "$ENV_FILE"
