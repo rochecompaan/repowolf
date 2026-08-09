@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a safe, copy-pasteable Docker example with one restricted sandbox image, host-broker and compose run modes, readiness handling, service-side SSH support, documentation, and behavioral CI coverage.
+**Goal:** Maintain a safe, copy-pasteable Docker example with one restricted sandbox image, Compose-first documentation, focused host-broker/principal installers, readiness handling, service-side SSH support, and behavioral CI coverage.
 
-**Architecture:** The sandbox image downloads the pinned client archive, verifies one filtered checksum with Alpine BusyBox, and contains no provider tools or credentials. `bootstrap.sh` uses fixed paths, strict `owner/name` validation, portable Bash rendering, and an Alpine permission helper so the UID 65532 broker can read only the TLS/SSH files it needs. Compose and CI assert stable broker audit events for granted/denied GitHub calls and a brokered Git upload-pack attempt.
+**Architecture:** The sandbox image downloads the pinned client archive, verifies one filtered checksum with Alpine BusyBox, and contains no provider tools or credentials. `bootstrap.sh` retains fixed Compose paths, while `install-host-broker.sh` renders a dedicated host-policy template and `install-host-principal.sh` installs the principal token/environment without touching provider credentials. Compose and CI assert stable broker audit events, observable Git process launch, and the host installers' filesystem behavior.
 
 **Tech Stack:** Docker/buildx, Docker Compose v2+, Bash 3.2-compatible syntax, Nix, goreleaser, GitHub Actions, Go (temporary local HTTP/YAML validators only).
 
@@ -15,7 +15,9 @@
 - Linux is the verified target. The compose path requires Docker **and Bash**; macOS needs a Unix shell, Windows needs WSL2. Do not claim native PowerShell/cmd support or Docker-only host tooling.
 - Dockerfile public args: `REPOWOLF_VERSION` (default `v0.1.0`) and `REPOWOLF_RELEASE_ROOT` (default GitHub releases/download root).
 - Release artifacts are **checksum-verified**, not signed.
-- Fixed bootstrap paths only: `examples/docker/state` and `examples/docker/.env`; no disconnected `STATE_DIR`/`ENV_FILE` overrides.
+- Fixed Compose bootstrap paths only: `examples/docker/state` and `examples/docker/.env`; no disconnected `STATE_DIR`/`ENV_FILE` overrides.
+- Host installer defaults are `/etc/repowolf`, `/var/lib/repowolf`, `/run/repowolf`, `rochecompaan/repowolf`, and the detected Docker bridge gateway on port `9443`. The approved environment overrides are `REPOWOLF_REPO`, `REPOWOLF_LISTEN`, `REPOWOLF_GH_PATH`, `REPOWOLF_SSH_PATH`, `REPOWOLF_BROKER_USER`, `REPOWOLF_BROKER_GROUP`, `REPOWOLF_CONFIG_DIR`, `REPOWOLF_STATE_DIR`, and `REPOWOLF_RUNTIME_DIR`.
+- Host installers run as a normal operator and invoke `sudo` internally. They never start/restart the broker, overwrite existing TLS/config/token/environment state, print token/key contents, or remove paths not created by the current invocation.
 - Git provider operations (read and write) require broker-side SSH authentication **and** verified known-hosts state. No documentation may call public Git clone credential-free.
 - Client output is intentionally opaque (`gh: GitHub operation failed` for provider failures and denials). Assert broker audit events instead.
 - Testing Value Gate: no YAML-content tests. Use live compose behavior, `config validate`, `bash -n`, shellcheck when installed, a direct YAML syntax parser, and exact permission/ignore checks.
@@ -31,6 +33,10 @@
 - Granted GitHub request audit: `operation: github.repository_view`, `outcome: accepted`; dummy provider token then ends as RPC `failed`/`Unavailable`.
 - Denied run-list audit: RPC `outcome: denied`, `reason: PermissionDenied`, with no accepted `github.run_list` event.
 - Git read audit begins with `operation: git.upload-pack`, `outcome: accepted`, but that event is emitted before `Runner.Start`. Process launch must be proved by the fake-SSH argv side effect, not audit alone.
+
+## Review-follow-up execution scope
+
+Tasks 1–8 are the completed baseline through commit `ce94d61`. The approved host-installer refactor starts from spec commit `7c2f8b6`; execute Tasks 9–13 only. Preserve Tasks 1–8 as historical implementation context rather than repeating their commits or destructive verification steps.
 
 ---
 
@@ -1475,8 +1481,676 @@ Report implementation/CI/manual evidence. After merge, ask the owner whether to 
 
 ---
 
+### Task 9: Host broker policy template and installer
+
+**Files:**
+- Create: `examples/docker/config/repowolf-host.yaml`
+- Create: `examples/docker/test-install-host-broker.sh`
+- Create: `examples/docker/install-host-broker.sh`
+
+**Interfaces:**
+- Consumes: `repowolf`, `sudo`, `docker`, `gh`, `ssh`, `id`, `getent`, `install`, `mktemp`, `ln`, `chmod`, `chown`, `rm`, and the approved `REPOWOLF_*` overrides from Global Constraints.
+- Produces: `${REPOWOLF_STATE_DIR:-/var/lib/repowolf}/tls`, `${REPOWOLF_CONFIG_DIR:-/etc/repowolf}/repowolf.yaml`, and no token or provider environment file.
+- Template contract: `repowolf-host.yaml` contains the exact line tokens `__REPOWOLF_LISTEN__`, `__REPOWOLF_TLS_CERTIFICATE__`, `__REPOWOLF_TLS_PRIVATE_KEY__`, `__REPOWOLF_GH_PATH__`, `__REPOWOLF_SSH_PATH__`, `__REPOWOLF_OWNER__`, and `__REPOWOLF_NAME__`; the installer replaces each whole scalar line with YAML single-quoted output and doubles embedded single quotes.
+- Test-only contract: `REPOWOLF_TEST_VALIDATE_IMAGE=repowolf:mvp` makes the test's fake `repowolf config validate` delegate to the loaded image. It is not read by production scripts.
+
+- [ ] **Step 1: Add the complete host policy template**
+
+Create `examples/docker/config/repowolf-host.yaml`:
+
+```yaml
+apiVersion: repowolf.dev/v1alpha1
+listen: __REPOWOLF_LISTEN__
+
+tls:
+  certificate: __REPOWOLF_TLS_CERTIFICATE__
+  privateKey: __REPOWOLF_TLS_PRIVATE_KEY__
+
+tools:
+  gh: __REPOWOLF_GH_PATH__
+  ssh: __REPOWOLF_SSH_PATH__
+
+providers:
+  github-public:
+    kind: github
+    apiHost: github.com
+    gitHost: github.com
+    sshUser: git
+    sshPort: 22
+
+repositories:
+  example:
+    provider: github-public
+    owner: __REPOWOLF_OWNER__
+    name: __REPOWOLF_NAME__
+    git:
+      denyRefs:
+        - refs/heads/main
+      denyDeletes: true
+      maxRefUpdates: 16
+
+principals:
+  example-agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_EXAMPLE_AGENT
+    grants:
+      - repository: example
+        capabilities:
+          - repository:read
+          - issues:read
+          - issues:write
+          - pull_requests:read
+          - pull_requests:write
+          - actions:read
+          - statuses:read
+          - git:read
+          - git:write
+```
+
+- [ ] **Step 2: Write the failing host-installer behavior test**
+
+Create `examples/docker/test-install-host-broker.sh` with `set -euo pipefail`, a private `mktemp -d` root, and an EXIT/INT/TERM trap. Copy the installer and template into that root before each case so every case is isolated.
+
+The test harness must provide these executable shims under `$case_root/bin`:
+
+- `docker`: for exactly `network inspect --format '{{(index .IPAM.Config 0).Gateway}}' bridge`, print `172.18.0.1`; reject every other argv.
+- `repowolf`: `cert init` creates `ca.crt`, `ca.key`, `tls.crt`, and `tls.key`; `config validate` rejects any remaining `__REPOWOLF_` token and records each invocation. When `REPOWOLF_TEST_VALIDATE_IMAGE` is set, invoke the real Docker binary captured before PATH replacement and mount the requested config at `/config.yaml` for `repowolf:mvp config validate --config /config.yaml`.
+- `sudo`: append shell-escaped argv to `$case_root/sudo.log`; remove `-u USER` before execution; for `install`, replace requested owner/group with the current test user/group while preserving modes; execute `test`, `mktemp`, `ln`, `chmod`, and `rm`; treat `chown` as a logged no-op. If `FAIL_INSTALLED_VALIDATE=1`, fail only the `config validate` call whose path ends in `/repowolf.yaml`.
+- `gh` and `ssh`: exit zero so their absolute shim paths are executable configuration values.
+
+Use helpers with these exact calling conventions:
+
+```bash
+run_installer() {
+  env PATH="$case_root/bin:$ORIGINAL_PATH" \
+    REPOWOLF_REPO=rochecompaan/repowolf \
+    REPOWOLF_BROKER_USER="$(id -un)" \
+    REPOWOLF_BROKER_GROUP="$(id -gn)" \
+    REPOWOLF_CONFIG_DIR="$case_root/etc/repowolf" \
+    REPOWOLF_STATE_DIR="$case_root/var/lib/repowolf" \
+    REPOWOLF_RUNTIME_DIR="$case_root/run/repowolf" \
+    "$@" "$case_root/install-host-broker.sh"
+}
+
+expect_status() {
+  expected=$1
+  label=$2
+  shift 2
+  set +e
+  "$@" >"$case_root/$label.out" 2>&1
+  actual=$?
+  set -e
+  if [ "$actual" -ne "$expected" ]; then
+    cat "$case_root/$label.out" >&2
+    echo "$label: expected $expected, got $actual" >&2
+    exit 1
+  fi
+}
+```
+
+Cover the following observable cases:
+
+```bash
+run_installer
+grep -F "listen: '172.18.0.1:9443'" "$case_root/etc/repowolf/repowolf.yaml"
+grep -F "owner: 'rochecompaan'" "$case_root/etc/repowolf/repowolf.yaml"
+grep -F "name: 'repowolf'" "$case_root/etc/repowolf/repowolf.yaml"
+test "$(stat -c %a "$case_root/etc/repowolf/repowolf.yaml")" = 640
+test "$(stat -c %a "$case_root/var/lib/repowolf/tls/tls.key")" = 640
+test "$(stat -c %a "$case_root/var/lib/repowolf/tls/ca.key")" = 600
+test "$(grep -c 'config validate' "$case_root/repowolf.log")" -eq 2
+
+grep -F 'install -o root' "$case_root/sudo.log"
+grep -F 'chown root:' "$case_root/sudo.log"
+
+expect_status 2 invalid-repository run_installer REPOWOLF_REPO=owner/name/extra
+expect_status 2 wildcard-listen run_installer REPOWOLF_LISTEN=0.0.0.0:9443
+expect_status 2 relative-gh run_installer REPOWOLF_GH_PATH=bin/gh
+expect_status 2 relative-config run_installer REPOWOLF_CONFIG_DIR=etc/repowolf
+
+test ! -s "$case_root/sudo.log"
+
+mkdir -p "$case_root/var/lib/repowolf/tls"
+expect_status 1 existing-tls run_installer
+test ! -e "$case_root/repowolf-cert-init-called"
+
+rm -rf "$case_root/var/lib/repowolf/tls"
+mkdir -p "$case_root/var/lib/repowolf" "$case_root/etc/repowolf"
+touch "$case_root/var/lib/repowolf/.preexisting" \
+  "$case_root/etc/repowolf/.preexisting"
+expect_status 1 cleanup run_installer FAIL_INSTALLED_VALIDATE=1
+test ! -e "$case_root/var/lib/repowolf/tls"
+test ! -e "$case_root/etc/repowolf/repowolf.yaml"
+test -e "$case_root/var/lib/repowolf/.preexisting"
+test -e "$case_root/etc/repowolf/.preexisting"
+```
+
+Implement each case with a fresh `case_root`; do not reuse the successful installation for rejection/cleanup cases. Add one successful case whose `REPOWOLF_GH_PATH` contains a literal single quote and assert YAML renders it as two adjacent single quotes inside the scalar.
+
+- [ ] **Step 3: Run the test to verify RED**
+
+Run:
+
+```bash
+cd examples/docker
+chmod +x test-install-host-broker.sh
+./test-install-host-broker.sh
+```
+
+Expected: non-zero because `install-host-broker.sh` does not exist. The failure must occur before any real `sudo` command or system-path write.
+
+- [ ] **Step 4: Implement strict input validation and rendering**
+
+Create `examples/docker/install-host-broker.sh` with these foundations:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+TEMPLATE=$SCRIPT_DIR/config/repowolf-host.yaml
+REPOSITORY=${REPOWOLF_REPO:-rochecompaan/repowolf}
+CONFIG_DIR=${REPOWOLF_CONFIG_DIR:-/etc/repowolf}
+STATE_DIR=${REPOWOLF_STATE_DIR:-/var/lib/repowolf}
+RUNTIME_DIR=${REPOWOLF_RUNTIME_DIR:-/run/repowolf}
+BROKER_USER=${REPOWOLF_BROKER_USER:-repowolf}
+BROKER_GROUP=${REPOWOLF_BROKER_GROUP:-repowolf}
+CONFIG_FILE=$CONFIG_DIR/repowolf.yaml
+TLS_DIR=$STATE_DIR/tls
+
+fail_usage() {
+  echo "install-host-broker: $*" >&2
+  exit 2
+}
+
+reject_control() {
+  label=$1
+  value=$2
+  if [[ $value =~ [[:cntrl:]] ]]; then
+    fail_usage "$label contains a control character"
+  fi
+}
+
+require_absolute() {
+  label=$1
+  value=$2
+  reject_control "$label" "$value"
+  case $value in
+    /*) ;;
+    *) fail_usage "$label must be an absolute path" ;;
+  esac
+  [ "$value" != / ] || fail_usage "$label must not be /"
+}
+
+yaml_quote() {
+  value=${1//\'/\'\'}
+  printf "'%s'" "$value"
+}
+```
+
+Parse `REPOWOLF_REPO` with `^([A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/([A-Za-z0-9][A-Za-z0-9._-]{0,99})$`, assigning `OWNER=${BASH_REMATCH[1]}` and `NAME=${BASH_REMATCH[3]}`. Parse `REPOWOLF_LISTEN` with `^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\]):([1-9][0-9]{0,4})$`, convert the captured port with base 10, require `1..65535`, and reject wildcard hosts `0.0.0.0`, `::`, and `[::]`. When unset, resolve the gateway with this exact command and require an IPv4 result:
+
+```bash
+docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' bridge
+```
+
+Resolve `repowolf`, `gh`, `ssh`, and `sudo` with `command -v`; require absolute executable paths for `repowolf`, `gh`, and `ssh`. Validate the broker user with `id -u`, the group with `getent group`, then loop over the whitespace-separated output of `id -Gn "$BROKER_USER"` and require one exact group-name match before invoking `sudo`.
+
+Render by matching complete template lines, not by evaluating environment text or building a `sed` program:
+
+```bash
+render_policy() {
+  while IFS= read -r line || [[ -n $line ]]; do
+    case $line in
+      'listen: __REPOWOLF_LISTEN__')
+        printf 'listen: %s\n' "$(yaml_quote "$LISTEN")"
+        ;;
+      '  certificate: __REPOWOLF_TLS_CERTIFICATE__')
+        printf '  certificate: %s\n' "$(yaml_quote "$TLS_DIR/tls.crt")"
+        ;;
+      '  privateKey: __REPOWOLF_TLS_PRIVATE_KEY__')
+        printf '  privateKey: %s\n' "$(yaml_quote "$TLS_DIR/tls.key")"
+        ;;
+      '  gh: __REPOWOLF_GH_PATH__')
+        printf '  gh: %s\n' "$(yaml_quote "$GH_PATH")"
+        ;;
+      '  ssh: __REPOWOLF_SSH_PATH__')
+        printf '  ssh: %s\n' "$(yaml_quote "$SSH_PATH")"
+        ;;
+      '    owner: __REPOWOLF_OWNER__')
+        printf '    owner: %s\n' "$(yaml_quote "$OWNER")"
+        ;;
+      '    name: __REPOWOLF_NAME__')
+        printf '    name: %s\n' "$(yaml_quote "$NAME")"
+        ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+  done < "$TEMPLATE"
+}
+```
+
+Write the render to a private `mktemp` file, reject any remaining `__REPOWOLF_` token, and run `repowolf config validate --config "$rendered"` before `sudo -v`.
+
+- [ ] **Step 5: Implement no-clobber privileged publication and cleanup**
+
+After preflight succeeds:
+
+1. Use `sudo test -e` plus `sudo test -L` to refuse every existing TLS path or policy path, including dangling symlinks.
+2. Record whether `CONFIG_DIR` and `STATE_DIR` already existed, then create only those parents with root:`$BROKER_GROUP` mode `0750`.
+3. Run `sudo "$REPOWOLF_BIN" cert init --output "$TLS_DIR" --dns repowolf.internal --ip 127.0.0.1 >/dev/null`. RepoWolf's certificate publisher already refuses an existing destination and leaves no final path on prepublication failure; mark `TLS_DIR` as invocation-owned only after success.
+4. Set `STATE_DIR` and `TLS_DIR` to root:`$BROKER_GROUP` mode `0750`; `tls.crt`/`tls.key` to root:`$BROKER_GROUP` mode `0640`; `ca.crt` to root:root mode `0644`; and `ca.key` to root:root mode `0600`.
+5. Create a root-owned sibling with `sudo mktemp "$CONFIG_DIR/.repowolf.yaml.XXXXXX"`, install the rendered file to it as root:`$BROKER_GROUP` mode `0640`, and publish it without overwrite using `sudo ln "$privileged_temp" "$CONFIG_FILE"`. Remove the sibling link after the final hard link succeeds.
+6. Run `sudo -u "$BROKER_USER" "$REPOWOLF_BIN" config validate --config "$CONFIG_FILE"`.
+
+The EXIT trap must remove the private render unconditionally. On non-zero exit it must remove only an invocation-owned privileged sibling, final config, TLS directory, and parent directories that this invocation created and left empty. Disable cleanup before printing:
+
+```text
+install-host-broker: installed /etc/repowolf/repowolf.yaml and /var/lib/repowolf/tls
+install-host-broker: load /run/repowolf/service.env plus the principal environment before restarting the broker
+```
+
+Paths in output must reflect overrides rather than hard-coded defaults.
+
+- [ ] **Step 6: Run focused GREEN verification**
+
+Run:
+
+```bash
+cd examples/docker
+chmod +x install-host-broker.sh
+bash -n install-host-broker.sh test-install-host-broker.sh
+./test-install-host-broker.sh
+git diff --check
+```
+
+Expected: syntax exits zero; all isolated cases pass; no `/etc/repowolf`, `/var/lib/repowolf`, or `/run/repowolf` path is created by the test.
+
+- [ ] **Step 7: Commit the host broker installer**
+
+```bash
+git add examples/docker/config/repowolf-host.yaml \
+  examples/docker/install-host-broker.sh \
+  examples/docker/test-install-host-broker.sh
+git commit -m "feat(examples): add host broker installer"
+```
+
+---
+
+### Task 10: Host principal installer
+
+**Files:**
+- Create: `examples/docker/test-install-host-principal.sh`
+- Create: `examples/docker/install-host-principal.sh`
+
+**Interfaces:**
+- Consumes: `repowolf`, `sudo`, `id`, `getent`, `install`, `mktemp`, `ln`, and `rm`; `REPOWOLF_BROKER_USER`, `REPOWOLF_BROKER_GROUP`, `REPOWOLF_STATE_DIR`, and `REPOWOLF_RUNTIME_DIR` use the same defaults and validation as Task 9.
+- Produces: `${REPOWOLF_STATE_DIR:-/var/lib/repowolf}/token` and `${REPOWOLF_RUNTIME_DIR:-/run/repowolf}/example-agent.env`, both root:root mode `0600`.
+- Preserves: `${REPOWOLF_RUNTIME_DIR:-/run/repowolf}/service.env` byte-for-byte and never emits the generated token to stdout/stderr.
+
+- [ ] **Step 1: Write the failing principal-installer behavior test**
+
+Create `examples/docker/test-install-host-principal.sh` with isolated case roots and fake `repowolf`/`sudo` shims. The fake token command must print exactly:
+
+```text
+rw1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
+
+The fake `sudo` logs shell-escaped argv, translates requested ownership to the current test identity for actual temp-file operations, supports `test`, `install`, `mktemp`, `ln`, and `rm`, and fails the environment-file publication when `FAIL_ENV_PUBLISH=1`.
+
+Use this success contract:
+
+```bash
+printf 'GH_TOKEN=provider-marker\n' > "$case_root/run/repowolf/service.env"
+service_before=$(sha256sum "$case_root/run/repowolf/service.env")
+run_principal >"$case_root/success.out" 2>&1
+
+test "$(cat "$case_root/var/lib/repowolf/token")" = \
+  'rw1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+test "$(cat "$case_root/run/repowolf/example-agent.env")" = \
+  'REPOWOLF_TOKEN_EXAMPLE_AGENT=rw1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+test "$(stat -c %a "$case_root/var/lib/repowolf/token")" = 600
+test "$(stat -c %a "$case_root/run/repowolf/example-agent.env")" = 600
+test "$service_before" = "$(sha256sum "$case_root/run/repowolf/service.env")"
+if grep -F 'rw1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' \
+  "$case_root/success.out"; then
+  echo 'principal token leaked to output' >&2
+  exit 1
+fi
+```
+
+Also cover:
+
+- relative state/runtime directories and nonexistent broker user/group return status `2` before the first fake `sudo` call;
+- an existing token, existing principal environment, or dangling symlink at either destination returns status `1` before token generation;
+- multiline or malformed token output returns status `1` before privileged writes;
+- environment publication failure removes the invocation-created token and environment file but preserves pre-existing parent markers and `service.env`.
+
+- [ ] **Step 2: Run the test to verify RED**
+
+Run:
+
+```bash
+cd examples/docker
+chmod +x test-install-host-principal.sh
+./test-install-host-principal.sh
+```
+
+Expected: non-zero because `install-host-principal.sh` does not exist, with no token text in terminal output.
+
+- [ ] **Step 3: Implement the principal installer**
+
+Create `examples/docker/install-host-principal.sh` with strict mode, `umask 077`, and the same `fail_usage`, `reject_control`, absolute-directory, user/group existence, and group-membership validation contracts as Task 9. Resolve `repowolf` and `sudo` before privileged work.
+
+After unprivileged input/identity/tool validation, call `sudo -v` and use `sudo test -e` plus `sudo test -L` to refuse either existing destination before token generation. Then generate into a private file and validate the exact token shape before any privileged write:
+
+```bash
+"$REPOWOLF_BIN" token generate > "$token_temp"
+IFS= read -r token < "$token_temp"
+if ! [[ $token =~ ^rw1_[A-Za-z0-9_-]{43}$ ]] || \
+   [ "$(wc -l < "$token_temp")" -ne 1 ]; then
+  echo 'install-host-principal: repowolf returned an invalid token' >&2
+  exit 1
+fi
+printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$token" > "$env_temp"
+unset token
+```
+
+Create only missing state/runtime parent directories as root:root mode `0700`; do not chmod or chown a pre-existing parent. Implement this no-clobber helper for each destination:
+
+```bash
+publish_root_file() {
+  source_path=$1
+  destination=$2
+  destination_dir=${destination%/*}
+  staged=$(sudo mktemp "$destination_dir/.repowolf-install.XXXXXX")
+  sudo install -o root -g root -m 0600 "$source_path" "$staged"
+  sudo ln "$staged" "$destination"
+  sudo rm -f -- "$staged"
+}
+```
+
+Track the staged path and each published destination outside the helper so the EXIT trap can clean a failed two-file transaction. Publish the token first and environment second. On failure, remove only invocation-owned paths and newly created empty parents. On success, print only the installed paths and the requirement to load both `service.env` and `example-agent.env`; do not print or read `service.env`.
+
+- [ ] **Step 4: Run focused GREEN verification**
+
+Run:
+
+```bash
+cd examples/docker
+chmod +x install-host-principal.sh
+bash -n install-host-principal.sh test-install-host-principal.sh
+./test-install-host-principal.sh
+git diff --check
+```
+
+Expected: every success/refusal/cleanup/non-disclosure case passes and no real system path changes.
+
+- [ ] **Step 5: Commit the principal installer**
+
+```bash
+git add examples/docker/install-host-principal.sh \
+  examples/docker/test-install-host-principal.sh
+git commit -m "feat(examples): add host principal installer"
+```
+
+---
+
+### Task 11: Run host-installer behavior in CI
+
+**Files:**
+- Modify: `.github/workflows/ci.yml` (`docker-example-smoke` shell checks and post-image behavior step)
+
+**Interfaces:**
+- Consumes: executable scripts/tests from Tasks 9–10 and the `repowolf:mvp` image loaded by the current-commit Nix build.
+- Produces: unconditional PR/`main` evidence that both installers pass behavior tests and that the rendered host policy passes the current broker's real `config validate`.
+
+- [ ] **Step 1: Extend shell syntax coverage**
+
+Change the existing syntax command to:
+
+```bash
+bash -n bootstrap.sh install-host-broker.sh install-host-principal.sh \
+  wait-for-broker.sh test-bootstrap-unreadable-ssh.sh \
+  test-install-host-broker.sh test-install-host-principal.sh \
+  test-wait-for-broker.sh
+```
+
+Keep `test-wait-for-broker.sh` and `test-bootstrap-unreadable-ssh.sh` in that pre-image step. Do not hide an unavailable command with `|| echo`.
+
+- [ ] **Step 2: Add post-image host-installer behavior**
+
+Immediately after `Build and load broker image from this commit`, add:
+
+```yaml
+      - name: Check host installer behavior
+        run: |
+          REPOWOLF_TEST_VALIDATE_IMAGE=repowolf:mvp ./test-install-host-broker.sh
+          ./test-install-host-principal.sh
+```
+
+The first test must execute two real `config validate` calls for its successful case while retaining fake cert generation and temporary install roots. The principal test remains fully local and must not print its fake token.
+
+- [ ] **Step 3: Run the workflow-equivalent checks locally**
+
+Run:
+
+```bash
+cd /home/roche/projects/pi/repowolf/.worktrees/docker-example
+bash -n examples/docker/bootstrap.sh \
+  examples/docker/install-host-broker.sh \
+  examples/docker/install-host-principal.sh \
+  examples/docker/wait-for-broker.sh \
+  examples/docker/test-bootstrap-unreadable-ssh.sh \
+  examples/docker/test-install-host-broker.sh \
+  examples/docker/test-install-host-principal.sh \
+  examples/docker/test-wait-for-broker.sh
+
+image=$(nix build .#ociImage --no-link --print-out-paths)
+docker load -i "$image"
+(
+  cd examples/docker
+  ./test-wait-for-broker.sh
+  ./test-bootstrap-unreadable-ssh.sh
+  REPOWOLF_TEST_VALIDATE_IMAGE=repowolf:mvp ./test-install-host-broker.sh
+  ./test-install-host-principal.sh
+)
+```
+
+Expected: every command exits zero; the broker test's real validator accepts both the private render and installed policy; temporary roots are removed.
+
+- [ ] **Step 4: Parse workflow YAML without PyYAML**
+
+Run from the repository root:
+
+```bash
+checker=$(mktemp /tmp/repowolf-workflow-check.XXXXXX.go)
+trap 'rm -f "$checker"' EXIT INT TERM
+cat > "$checker" <<'EOF'
+package main
+
+import (
+  "fmt"
+  "os"
+
+  "gopkg.in/yaml.v3"
+)
+
+func main() {
+  if len(os.Args) != 2 {
+    panic("usage: workflow-check <path>")
+  }
+  data, err := os.ReadFile(os.Args[1])
+  if err != nil {
+    panic(err)
+  }
+  var document yaml.Node
+  if err := yaml.Unmarshal(data, &document); err != nil {
+    panic(err)
+  }
+  fmt.Println("workflow YAML parsed")
+}
+EOF
+nix develop -c go run "$checker" .github/workflows/ci.yml
+rm -f "$checker"
+trap - EXIT INT TERM
+```
+
+Expected: `workflow YAML parsed` and exit zero.
+
+- [ ] **Step 5: Commit CI integration**
+
+```bash
+git add .github/workflows/ci.yml
+git commit -m "ci(examples): test host installers"
+```
+
+---
+
+### Task 12: Compose-first README and concise host walkthrough
+
+**Files:**
+- Modify: `examples/docker/README.md`
+
+**Interfaces:**
+- Consumes: `bootstrap.sh`, `install-host-broker.sh`, `install-host-principal.sh`, `wait-for-broker.sh`, and existing Compose/client commands.
+- Produces: one canonical walkthrough ordered build → Compose broker/sandbox → host broker/Docker sandbox → boundary/reset/troubleshooting.
+
+- [ ] **Step 1: Move the Compose walkthrough before the host walkthrough**
+
+Rename and order the headings exactly:
+
+```markdown
+## Path A: compose broker + sandbox
+## Path B: host broker + sandbox
+```
+
+Move the complete existing Compose section without changing bootstrap, readiness, policy-denial, Git, or audit commands. Preserve `gh repo view --repo owner/name`, the deliberate `gh run list` denial, and the requirement for both broker-side SSH authentication and verified known-hosts state.
+
+- [ ] **Step 2: Replace host setup heredocs with the two installers**
+
+The host section must begin with:
+
+````markdown
+Install RepoWolf on the Linux host per the top-level README. Run the setup as a
+normal sudo-capable operator; the scripts invoke `sudo` only for protected
+filesystem changes and refuse existing state.
+
+```sh
+REPOWOLF_REPO=rochecompaan/repowolf ./install-host-broker.sh
+./install-host-principal.sh
+```
+````
+
+Follow it with a compact override list naming `REPOWOLF_REPO`, `REPOWOLF_LISTEN`, `REPOWOLF_GH_PATH`, `REPOWOLF_SSH_PATH`, `REPOWOLF_BROKER_USER`, `REPOWOLF_BROKER_GROUP`, `REPOWOLF_CONFIG_DIR`, `REPOWOLF_STATE_DIR`, and `REPOWOLF_RUNTIME_DIR`. State that tool/directory overrides must be absolute; `REPOWOLF_LISTEN` defaults to the Docker bridge gateway on port `9443`; a missing bridge requires an explicit listen override; and neither script starts/restarts the broker.
+
+Retain the supervisor requirement that both `/run/repowolf/service.env` and `/run/repowolf/example-agent.env` load before restart. Do not show token generation, certificate commands, a YAML heredoc, token contents, or provider credentials.
+
+- [ ] **Step 3: Make the default client command use the detected gateway**
+
+Use this exact prelude and endpoint while preserving CA/token handling and the supported repository syntax:
+
+```bash
+DOCKER_GATEWAY="$(docker network inspect \
+  --format '{{(index .IPAM.Config 0).Gateway}}' bridge)"
+docker run --rm -it \
+  -e REPOWOLF_ENDPOINT="https://$DOCKER_GATEWAY:9443" \
+  -e REPOWOLF_SERVER_NAME=repowolf.internal \
+  -e REPOWOLF_TOKEN="$(sudo cat /var/lib/repowolf/token)" \
+  -e REPOWOLF_CA_FILE=/run/repowolf/ca.crt \
+  -v /var/lib/repowolf/tls/ca.crt:/run/repowolf/ca.crt:ro \
+  repowolf-sandbox:local gh repo view --repo rochecompaan/repowolf
+```
+
+State that a custom `REPOWOLF_LISTEN` requires the reachable matching host/port in `REPOWOLF_ENDPOINT`. Keep the DNS SAN explanation and host-only SSH prerequisite.
+
+- [ ] **Step 4: Update reset and troubleshooting text**
+
+Distinguish Compose `state/`/`.env` from host paths. Explain that rerunning a host installer requires the operator to back up and deliberately remove the exact conflicting TLS/config/token/principal environment path; provide no wildcard or automatic reset command. Add failures for missing Docker bridge, invalid relative overrides, existing protected state, and failure to load both supervisor environment files.
+
+The Testing Value Gate excludes a new README-content test. Verify directly instead:
+
+```bash
+awk '/^## / { print NR ":" $0 }' examples/docker/README.md
+grep -n 'install-host-broker.sh\|install-host-principal.sh' examples/docker/README.md
+grep -n 'REPOWOLF_SERVER_NAME=repowolf.internal' examples/docker/README.md
+git diff --check
+GH_TOKEN=dummy REPOWOLF_TOKEN_AGENT=dummy \
+  docker compose -f examples/docker/compose.yaml config --quiet
+```
+
+Expected: Path A Compose precedes Path B host; each installer appears in one concise setup block; Compose interpolation and YAML parsing exit zero.
+
+- [ ] **Step 5: Commit the README refactor**
+
+```bash
+git add examples/docker/README.md
+git commit -m "docs(examples): simplify docker host setup"
+```
+
+---
+
+### Task 13: Final verification, review, and PR update
+
+**Files:** none unless review finds a scoped defect.
+
+- [ ] **Step 1: Run all focused shell and real-schema checks fresh**
+
+```bash
+cd /home/roche/projects/pi/repowolf/.worktrees/docker-example
+image=$(nix build .#ociImage --no-link --print-out-paths)
+docker load -i "$image"
+bash -n examples/docker/*.sh
+(
+  cd examples/docker
+  ./test-wait-for-broker.sh
+  ./test-bootstrap-unreadable-ssh.sh
+  REPOWOLF_TEST_VALIDATE_IMAGE=repowolf:mvp ./test-install-host-broker.sh
+  ./test-install-host-principal.sh
+)
+git diff --check
+```
+
+Expected: all syntax/tests/schema validation exit zero with no real host-install paths touched.
+
+- [ ] **Step 2: Run repository regression checks directly**
+
+```bash
+go test -race ./...
+GH_TOKEN=dummy REPOWOLF_TOKEN_AGENT=dummy \
+  docker compose -f examples/docker/compose.yaml config --quiet
+git check-ignore -q examples/docker/state/token
+git check-ignore -q examples/docker/.env
+git status --short
+```
+
+Expected: all Go packages pass; Compose config parses; both generated secret paths are ignored; status contains only intended committed branch state and no generated `state/`, `.env`, `dist/`, or test fixture.
+
+- [ ] **Step 3: Request fresh adversarial review**
+
+Resolve the canonical `reviewer` role if the resolver is available, then dispatch `reviewer` with `context: "fresh"`. Include: approved spec path, this plan path, base SHA `7c2f8b6`, current head SHA, implemented files, test evidence, and the original request to extract two host setup blocks and make Compose first. Ask specifically about sudo/no-clobber/cleanup safety, YAML quoting, token disclosure, test realism, README command consistency, and CI failure propagation.
+
+Apply `superpowers:receiving-code-review` to every finding. Reproduce each valid issue, add or adjust a behavior test before production fixes when the Testing Value Gate passes, rerun focused and full checks, and commit only scoped fixes.
+
+- [ ] **Step 4: Push the reviewed branch and watch PR checks**
+
+```bash
+git push origin feat/docker-example
+gh pr checks 2 --repo rochecompaan/repowolf --watch
+```
+
+Expected: PR #2 reports all required checks passing. If a check fails, inspect the failing job logs, reproduce locally, and follow `superpowers:systematic-debugging` before changing code.
+
+- [ ] **Step 5: Record the final handoff without releasing**
+
+Report commits, focused/full verification evidence, review disposition, PR URL, and residual platform limits. Do not create or push `v0.1.0`; after merge, ask the owner separately whether to publish it. Keep or remove the feature worktree only through the approved branch-completion workflow.
+
+---
+
 ## Plan self-review
 
-- **Finding coverage:** BusyBox checksum (Task 2), broker-readable config/TLS permissions and OpenSSH-valid ownership (Task 3), sed injection (Task 3), platform scope/no `sed -i` (Tasks 3/6), Git auth+known-hosts (Tasks 3/6), removed path overrides (Task 3), broker/fixture readiness (Tasks 2–5), supported `--repo` and audit assertions (Tasks 4–6), observable fake-SSH process launch + exact upload-pack argv (Tasks 4–5), shellcheck status (Task 3), direct Go test (Task 8), no PyYAML (Task 5), matching `REPOWOLF_VERSION` contract (Tasks 2/4/5/6), checksum-not-signature wording (Task 6), accurate gitignore wording (Tasks 1/6), cleanup traps (Tasks 2/5).
-- **Security:** CA key never mounted; private TLS/SSH files and broker config have verified narrow UID/GID modes; raw repository input is validated and never inserted into code; the fake-SSH fixture is broker-only; reset/destructive operations are explicit.
-- **Consistency:** fixed `state/`/`.env`, service `repowolf`, image `repowolf-sandbox:local`, args `REPOWOLF_VERSION`/`REPOWOLF_RELEASE_ROOT`, and audit operations are identical across all tasks.
+- **Baseline coverage:** Tasks 1–8 retain the implemented checksum, sandbox boundary, Compose bootstrap/readiness, SSH, audit/process-side-effect, CI, README, and rollout work through `ce94d61`.
+- **Follow-up coverage:** Task 9 implements the host policy/template, exact overrides, YAML-safe rendering, pre/post-install validation, no-clobber publication, narrow ownership/modes, refusal, and invocation-owned cleanup. Task 10 implements transactional principal/token installation, provider-environment separation, and non-disclosure. Task 11 runs behavior plus real schema validation in unconditional CI. Task 12 makes Compose first and removes both large host setup blocks. Task 13 runs fresh verification, adversarial review, and PR checks.
+- **Testing Value Gate:** New tests exercise reusable shell behavior and security-sensitive filesystem/error handling. README/workflow text receives direct syntax/interpolation verification rather than static content tests.
+- **Security:** Provider credentials and real SSH material remain outside the sandbox; host inputs are validated and YAML-quoted; privileged publication refuses replacement; cleanup is limited to invocation-owned paths; token output is never logged; no reset command removes broad host paths.
+- **Consistency:** Compose retains fixed `state/`/`.env`; host-only path overrides are explicit and absolute; `repowolf.internal`, detected bridge gateway, `example-agent`, `REPOWOLF_TOKEN_EXAMPLE_AGENT`, and `--repo owner/name` are consistent across template, installers, tests, docs, and CI.
