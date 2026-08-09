@@ -20,7 +20,8 @@ EOF
 chmod 0755 "$tmpdir/bootstrap.sh" "$tmpdir/config" "$tmpdir/config/repowolf.yaml" "$tmpdir/bin/docker"
 printf 'private test key\n' > "$tmpdir/key"
 printf 'github.com ssh-ed25519 test\n' > "$tmpdir/known_hosts"
-chmod 000 "$tmpdir/key" "$tmpdir/known_hosts"
+chmod 000 "$tmpdir/key"
+chmod 0644 "$tmpdir/known_hosts"
 
 expect_unreadable() {
   label=$1
@@ -47,4 +48,5 @@ expect_unreadable() {
 
 expect_unreadable unreadable-key "$tmpdir/key" "$tmpdir/known_hosts"
 chmod 0644 "$tmpdir/key"
+chmod 000 "$tmpdir/known_hosts"
 expect_unreadable unreadable-known-hosts "$tmpdir/key" "$tmpdir/known_hosts"
