@@ -1619,7 +1619,9 @@ done
 # A failed policy hard-link race preserves the competing policy and removes the
 # invocation-owned TLS directory and staging file.
 # A test-owned directory symlink switched to `/` by the `sudo -v` shim returns
-# 2 before any subsequent privileged action.
+# 2 before any subsequent privileged action. A second shim retargets it to a
+# different non-root test directory; it also returns 2, leaves both destination
+# trees untouched, and reaches no mutating sudo command.
 # A cleanup-race shim switches a configured ancestor during the first cleanup
 # sudo removal; the remaining invocation-owned state survives and no later
 # raw cleanup mutation runs through the changed ancestor.
@@ -1697,12 +1699,16 @@ require_absolute_path() {
 # existing components with Bash `cd -P` and `pwd -P`, rejecting `/tmp/..`,
 # `/.`, `//`, and accessible symlinks to `/` before sudo. An inaccessible
 # existing directory is retained as a lexical suffix so a normal sudo-capable
-# operator outside the broker group can continue. After `sudo -v`, resolve all
+# operator outside the broker group can continue. Retain those pre-sudo
+# canonical values as immutable expected values. After `sudo -v`, resolve all
 # original directory values in the running Bash interpreter through sudo,
-# reject a privileged canonical `/`, and derive final paths only from those
-# resolved values. Re-resolve before every mutating sudo call. The EXIT trap
-# must re-resolve immediately before *each* cleanup mutation and refuse that
-# mutation if any configured directory changed.
+# reject a privileged canonical `/`, and require every privileged result to
+# equal its expected value before assigning final paths or deriving a
+# destination. A symlink switched during `sudo -v` to either root or a
+# different non-root directory therefore returns status 2 before a mutation.
+# Re-resolve before every mutating sudo call. The EXIT trap must re-resolve
+# immediately before *each* cleanup mutation and refuse that mutation if any
+# configured directory changed.
 
 yaml_quote() {
   value=${1//\'/\'\'}

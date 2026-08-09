@@ -37,7 +37,7 @@ canonicalize_directory() {
   label=$1
   value=$2
   require_absolute_path "$label" "$value"
-  local base=/ candidate component canonical last_index
+  local base=/ candidate component canonical last_index resolved_base
   local -a suffix=() components=()
   IFS=/ read -r -a components <<< "${value#/}" || true
   for component in "${components[@]}"; do
@@ -62,8 +62,8 @@ canonicalize_directory() {
             candidate=$base/$component
           fi
           if [ -e "$candidate" ] || [ -L "$candidate" ]; then
-            if base=$(cd -P -- "$candidate" 2>/dev/null && pwd -P); then
-              :
+            if resolved_base=$(cd -P -- "$candidate" 2>/dev/null && pwd -P); then
+              base=$resolved_base
             elif [ "${CANONICALIZE_ALLOW_UNRESOLVED:-}" = 1 ]; then
               suffix+=("$component")
             else
@@ -101,9 +101,19 @@ canonicalize_directory \"\$1\" \"\$2\"" bash "$label" "$value") || \
 }
 
 resolve_directories() {
-  CONFIG_DIR=$(resolve_directory_privileged REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT")
-  STATE_DIR=$(resolve_directory_privileged REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
-  RUNTIME_DIR=$(resolve_directory_privileged REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
+  local resolved
+  resolved=$(resolve_directory_privileged REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT")
+  [ "$resolved" = "$EXPECTED_CONFIG_DIR" ] || \
+    fail_usage 'configured directory changed during sudo validation'
+  CONFIG_DIR=$resolved
+  resolved=$(resolve_directory_privileged REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
+  [ "$resolved" = "$EXPECTED_STATE_DIR" ] || \
+    fail_usage 'configured directory changed during sudo validation'
+  STATE_DIR=$resolved
+  resolved=$(resolve_directory_privileged REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
+  [ "$resolved" = "$EXPECTED_RUNTIME_DIR" ] || \
+    fail_usage 'configured directory changed during sudo validation'
+  RUNTIME_DIR=$resolved
   CONFIG_FILE=$CONFIG_DIR/repowolf.yaml
   TLS_DIR=$STATE_DIR/tls
 }
@@ -194,9 +204,9 @@ else
   fail_usage "REPOWOLF_REPO must match owner/name with alphanumeric first characters"
 fi
 
-CONFIG_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT")
-STATE_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
-RUNTIME_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
+EXPECTED_CONFIG_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT")
+EXPECTED_STATE_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
+EXPECTED_RUNTIME_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
 reject_control REPOWOLF_BROKER_USER "$BROKER_USER"
 reject_control REPOWOLF_BROKER_GROUP "$BROKER_GROUP"
 [ -n "$BROKER_USER" ] || fail_usage "REPOWOLF_BROKER_USER must not be empty"
