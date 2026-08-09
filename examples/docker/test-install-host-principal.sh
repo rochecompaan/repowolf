@@ -50,6 +50,10 @@ if [ "${1:-}" = -v ]; then
   if [ -n "${SIMULATE_PRIVILEGED_DIR:-}" ]; then
     chmod 0700 "$SIMULATE_PRIVILEGED_DIR"
   fi
+  if [ -n "${RACE_REDIRECT_LINK:-}" ]; then
+    rm -f -- "$RACE_REDIRECT_LINK"
+    ln -s "$RACE_REDIRECT_TARGET" "$RACE_REDIRECT_LINK"
+  fi
   if [ -n "${RACE_DIRECTORY_LINK:-}" ]; then
     rm -f -- "$RACE_DIRECTORY_LINK"
     ln -s / "$RACE_DIRECTORY_LINK"
@@ -188,6 +192,20 @@ for variable in REPOWOLF_STATE_DIR REPOWOLF_RUNTIME_DIR; do
   grep -F "$variable must not resolve to /" "$case_root/root-$root_case.out"
   test ! -s "$case_root/sudo.log"
 done
+
+setup_case
+mkdir -p "$case_root/original-state" "$case_root/redirected-state"
+ln -s "$case_root/original-state" "$case_root/state-link"
+expect_status 2 nonroot-directory-race run_principal \
+  REPOWOLF_STATE_DIR="$case_root/state-link" \
+  RACE_REDIRECT_LINK="$case_root/state-link" \
+  RACE_REDIRECT_TARGET="$case_root/redirected-state"
+test ! -e "$case_root/original-state/token"
+test ! -e "$case_root/redirected-state/token"
+if grep -Eq '^(install|mktemp|ln|chmod|chown|rm)([[:space:]]|$)' "$case_root/sudo.log"; then
+  echo 'non-root directory race reached a privileged mutation' >&2
+  exit 1
+fi
 
 setup_case
 mkdir -p "$case_root/var/lib/repowolf"
