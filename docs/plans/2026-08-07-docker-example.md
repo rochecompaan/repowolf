@@ -801,7 +801,9 @@ if REPOWOLF_IMAGE=repowolf:mvp docker compose -f compose.yaml -f compose.smoke.y
   exit 1
 fi
 docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
-grep 'github.run_list' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
+grep -E '"operation":[[:space:]]*"/repowolf\.v1\.GitHubService/Execute"' /tmp/repowolf-broker.log \
+  | grep -E '"outcome":[[:space:]]*"denied"' \
+  | grep -E '"reason":[[:space:]]*"PermissionDenied"'
 if grep 'github.run_list' /tmp/repowolf-broker.log | grep -qE '"outcome":[[:space:]]*"accepted"'; then
   echo "github.run_list must not be accepted" >&2
   exit 1
@@ -1042,7 +1044,9 @@ git commit -m "feat(examples): add compose broker and observable SSH smoke"
             exit 1
           fi
           docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
-          grep 'github.run_list' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"denied"' | grep 'PermissionDenied'
+          grep -E '"operation":[[:space:]]*"/repowolf\.v1\.GitHubService/Execute"' /tmp/repowolf-broker.log \
+            | grep -E '"outcome":[[:space:]]*"denied"' \
+            | grep -E '"reason":[[:space:]]*"PermissionDenied"'
           if grep 'github.run_list' /tmp/repowolf-broker.log | grep -qE '"outcome":[[:space:]]*"accepted"'; then
             echo "github.run_list must not be accepted" >&2
             exit 1
