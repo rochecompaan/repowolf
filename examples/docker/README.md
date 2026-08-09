@@ -6,8 +6,8 @@ side. The sandbox gets only `repowolf-client` (as `gh` and
 
 Two run modes share the same sandbox image:
 
-- **Host broker + sandbox container** — the production topology.
 - **Compose broker + sandbox container** — no host RepoWolf install.
+- **Host broker + sandbox container** — the production topology.
 
 ## Requirements and platform scope
 
@@ -31,133 +31,7 @@ checksum-verified; they are not signed.
 The runtime image has git and CA roots, runs as UID/GID 65532, and contains
 no real `gh`, OpenSSH, provider token, key, or agent socket.
 
-## Path A: host broker + sandbox
-
-Install RepoWolf on the Linux host per the top-level README. The following
-creates the matching certificate state and complete service configuration. It
-binds only the Docker bridge gateway (usually `172.17.0.1`), not `0.0.0.0`,
-and resolves the service-side tools to absolute paths:
-
-```sh
-GH_PATH="$(command -v gh)"
-SSH_PATH="$(command -v ssh)"
-case "$GH_PATH:$SSH_PATH" in
-  /*:/*) ;;
-  *) echo "gh and ssh must resolve to absolute paths" >&2; exit 1 ;;
-esac
-
-sudo install -d -o root -g repowolf -m 0750 /var/lib/repowolf /etc/repowolf
-sudo repowolf cert init --output /var/lib/repowolf/tls \
-  --dns repowolf.internal --ip 127.0.0.1
-# The broker identity must traverse these directories and read the certificate
-# and server key. The private key remains restricted to root:repowolf.
-sudo chown root:repowolf /var/lib/repowolf /var/lib/repowolf/tls \
-  /var/lib/repowolf/tls/tls.crt /var/lib/repowolf/tls/tls.key
-sudo chmod 0750 /var/lib/repowolf /var/lib/repowolf/tls
-sudo chmod 0640 /var/lib/repowolf/tls/tls.crt /var/lib/repowolf/tls/tls.key
-sudo chown root:root /var/lib/repowolf/tls/ca.key
-sudo chmod 0600 /var/lib/repowolf/tls/ca.key
-
-sudo tee /etc/repowolf/repowolf.yaml >/dev/null <<EOF
-apiVersion: repowolf.dev/v1alpha1
-listen: "172.17.0.1:9443"
-
-tls:
-  certificate: /var/lib/repowolf/tls/tls.crt
-  privateKey: /var/lib/repowolf/tls/tls.key
-
-tools:
-  gh: $GH_PATH
-  ssh: $SSH_PATH
-
-providers:
-  github-public:
-    kind: github
-    apiHost: github.com
-    gitHost: github.com
-    sshUser: git
-
-repositories:
-  example:
-    provider: github-public
-    owner: rochecompaan
-    name: repowolf
-    git:
-      denyRefs:
-        - refs/heads/main
-      denyDeletes: true
-      maxRefUpdates: 16
-
-principals:
-  example-agent:
-    tokenEnvs:
-      - REPOWOLF_TOKEN_EXAMPLE_AGENT
-    grants:
-      - repository: example
-        capabilities:
-          - repository:read
-          - issues:read
-          - issues:write
-          - pull_requests:read
-          - pull_requests:write
-          - actions:read
-          - statuses:read
-          - git:read
-          - git:write
-EOF
-sudo chown root:repowolf /etc/repowolf/repowolf.yaml
-sudo chmod 0640 /etc/repowolf/repowolf.yaml
-sudo -u repowolf repowolf config validate --config /etc/repowolf/repowolf.yaml
-```
-
-This assumes the broker runs as `repowolf` (or an identity in group
-`repowolf`). Do not loosen the private-key mode or give the sandbox the key.
-
-The example policy principal is `example-agent`, so the broker must load
-`REPOWOLF_TOKEN_EXAMPLE_AGENT` from a dedicated principal environment file,
-without overwriting provider settings in `/run/repowolf/service.env`. Generate and
-store it once in a protected file:
-
-```sh
-sudo install -d -o root -g root -m 0700 /run/repowolf
-sudo install -o root -g root -m 0600 /dev/null /var/lib/repowolf/token
-sudo install -o root -g root -m 0600 /dev/null /run/repowolf/example-agent.env
-BROKER_TOKEN="$(repowolf token generate)"
-printf '%s\n' "$BROKER_TOKEN" | sudo tee /var/lib/repowolf/token >/dev/null
-printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$BROKER_TOKEN" | \
-  sudo tee /run/repowolf/example-agent.env >/dev/null
-unset BROKER_TOKEN
-sudo chown root:root /var/lib/repowolf/token /run/repowolf/example-agent.env
-sudo chmod 0600 /var/lib/repowolf/token /run/repowolf/example-agent.env
-```
-
-Both `/run/repowolf/service.env` and `/run/repowolf/example-agent.env` must be
-loaded by the broker before restart (for example with systemd
-`EnvironmentFile=/run/repowolf/service.env` and
-`EnvironmentFile=/run/repowolf/example-agent.env`). Do not print its contents.
-
-The absolute paths avoid startup failures from ambiguous/empty PATH entries.
-Restart the broker, then:
-
-```sh
-docker run --rm -it \
-  -e REPOWOLF_ENDPOINT=https://172.17.0.1:9443 \
-  -e REPOWOLF_SERVER_NAME=repowolf.internal \
-  -e REPOWOLF_TOKEN="$(sudo cat /var/lib/repowolf/token)" \
-  -e REPOWOLF_CA_FILE=/run/repowolf/ca.crt \
-  -v /var/lib/repowolf/tls/ca.crt:/run/repowolf/ca.crt:ro \
-  repowolf-sandbox:local gh repo view --repo rochecompaan/repowolf
-```
-
-`REPOWOLF_SERVER_NAME` must match the host certificate's DNS SAN. Use
-`--add-host=host.docker.internal:host-gateway` and endpoint
-`https://host.docker.internal:9443` as an alternative to the numeric gateway.
-
-Git operations additionally require the **host broker** to have an SSH
-identity/agent and verified known-hosts state. GitHub requires authentication
-even for public SSH clones.
-
-## Path B: compose broker + sandbox
+## Path A: compose broker + sandbox
 
 ```sh
 cd examples/docker
@@ -215,6 +89,52 @@ docker compose run --rm sandbox \
 The private key/known-hosts/config are mounted only into the broker. The
 sandbox still contains no SSH identity or OpenSSH client.
 
+## Path B: host broker + sandbox
+
+Install RepoWolf on the Linux host per the top-level README. Run the setup as a
+normal sudo-capable operator; the scripts invoke `sudo` only for protected
+filesystem changes and refuse existing state.
+
+```sh
+REPOWOLF_REPO=rochecompaan/repowolf ./install-host-broker.sh
+./install-host-principal.sh
+```
+
+Override `REPOWOLF_REPO` to select the repository; `REPOWOLF_LISTEN` to select
+the bind address; `REPOWOLF_GH_PATH` and `REPOWOLF_SSH_PATH` to select the
+broker tools; `REPOWOLF_BROKER_USER` and `REPOWOLF_BROKER_GROUP` to select the
+broker identity; and `REPOWOLF_CONFIG_DIR`, `REPOWOLF_STATE_DIR`, and
+`REPOWOLF_RUNTIME_DIR` to select installation directories. Tool and directory
+overrides must be absolute paths. `REPOWOLF_LISTEN` defaults to the Docker
+bridge gateway on port `9443`; if the bridge is missing, set an explicit listen
+override. Neither script starts or restarts the broker.
+
+Both `/run/repowolf/service.env` and `/run/repowolf/example-agent.env` must be
+loaded by the broker before restart (for example with systemd
+`EnvironmentFile=/run/repowolf/service.env` and
+`EnvironmentFile=/run/repowolf/example-agent.env`). Do not print their
+contents.
+
+Run the client against the detected bridge gateway:
+
+```bash
+DOCKER_GATEWAY="$(docker network inspect \
+  --format '{{(index .IPAM.Config 0).Gateway}}' bridge)"
+docker run --rm -it \
+  -e REPOWOLF_ENDPOINT="https://$DOCKER_GATEWAY:9443" \
+  -e REPOWOLF_SERVER_NAME=repowolf.internal \
+  -e REPOWOLF_TOKEN="$(sudo cat /var/lib/repowolf/token)" \
+  -e REPOWOLF_CA_FILE=/run/repowolf/ca.crt \
+  -v /var/lib/repowolf/tls/ca.crt:/run/repowolf/ca.crt:ro \
+  repowolf-sandbox:local gh repo view --repo rochecompaan/repowolf
+```
+
+A custom `REPOWOLF_LISTEN` requires the reachable matching host and port in
+`REPOWOLF_ENDPOINT`. `REPOWOLF_SERVER_NAME` must match the host certificate's
+DNS SAN. Git operations additionally require the **host broker** to have an
+SSH identity/agent and verified known-hosts state. GitHub requires
+authentication even for public SSH clones.
+
 ## Boundary proof
 
 ```sh
@@ -228,12 +148,12 @@ docker compose run --rm --entrypoint sh sandbox -c '
 
 ## Reset and secret handling
 
-`.gitignore` prevents ordinary accidental adds of `.env` and `state/`, but
-`git add -f` bypasses it. Treat both paths as secret material.
+For Compose, `.gitignore` prevents ordinary accidental adds of `.env` and
+`state/`, but `git add -f` bypasses it. Treat both paths as secret material.
 
-Deleting `state/` destroys the CA private key, server key, principal token,
-and optional SSH key; deleting `.env` may destroy the only local copy of the
-provider token. Back them up outside the repository before reset:
+Deleting Compose `state/` destroys the CA private key, server key, principal
+token, and optional SSH key; deleting Compose `.env` may destroy the only local
+copy of the provider token. Back them up outside the repository before reset:
 
 ```sh
 docker compose down
@@ -242,16 +162,29 @@ mkdir -p "$backup"
 mv state .env "$backup/"
 ```
 
-Only use `rm -rf state .env` when that destruction is intended.
+Only use `rm -rf state .env` when that Compose-only destruction is intended.
+
+For the host installers, rerunning an installer requires backing up and then
+deliberately removing the exact conflicting path: the TLS directory
+`$REPOWOLF_STATE_DIR/tls`, policy `$REPOWOLF_CONFIG_DIR/repowolf.yaml`, token
+`$REPOWOLF_STATE_DIR/token`, or principal environment
+`$REPOWOLF_RUNTIME_DIR/example-agent.env`. Do not use a wildcard or automatic
+host reset command.
 
 ## Troubleshooting
 
 - **Connection refused after compose start:** run `./wait-for-broker.sh`; if it
   times out, inspect `docker compose logs repowolf`.
+- **Missing Docker bridge:** set an explicit `REPOWOLF_LISTEN`; the host
+  installer cannot infer its default address without the bridge.
+- **Invalid host override:** `REPOWOLF_GH_PATH`, `REPOWOLF_SSH_PATH`, and the
+  directory overrides must be absolute paths.
+- **Existing protected host state:** back up and deliberately remove only the
+  exact conflicting TLS, policy, token, or principal environment path before
+  rerunning its installer.
+- **Broker does not receive the principal token:** verify that both
+  `/run/repowolf/service.env` and `/run/repowolf/example-agent.env` load before
+  restarting the broker.
 - **TLS name mismatch:** set `REPOWOLF_SERVER_NAME` to the cert DNS SAN.
-- **Host broker cannot be reached:** it is still bound to `127.0.0.1`; bind
-  the Docker bridge gateway instead.
-- **Broker `service failed`:** check TLS ownership/modes and pin absolute
-  `tools.gh`/`tools.ssh` paths.
 - **Git host-key/authentication failure:** supply both a verified known-hosts
   file and a usable broker-side key/agent. Read-only Git is not anonymous.
