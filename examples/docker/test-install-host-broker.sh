@@ -73,8 +73,9 @@ case "$1 ${2:-}" in
     fi
     if [ -n "${REPOWOLF_TEST_VALIDATE_IMAGE:-}" ]; then
       [ -n "${ORIGINAL_DOCKER:-}" ] || exit 99
-      "$ORIGINAL_DOCKER" run --rm -v "$config:/config.yaml:ro" \
-        "$REPOWOLF_TEST_VALIDATE_IMAGE" config validate --config /config.yaml
+      "$ORIGINAL_DOCKER" run --rm --user "$(id -u):$(id -g)" \
+        -v "$config:/config.yaml:ro" "$REPOWOLF_TEST_VALIDATE_IMAGE" \
+        config validate --config /config.yaml
     fi
     ;;
   *)
