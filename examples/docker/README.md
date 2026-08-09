@@ -119,13 +119,16 @@ without overwriting provider settings in `/run/repowolf/service.env`. Generate a
 store it once in a protected file:
 
 ```sh
-umask 077
-mkdir -p /run/repowolf
-chmod 0700 /run/repowolf
+sudo install -d -o root -g root -m 0700 /run/repowolf
+sudo install -o root -g root -m 0600 /dev/null /var/lib/repowolf/token
+sudo install -o root -g root -m 0600 /dev/null /run/repowolf/example-agent.env
 BROKER_TOKEN="$(repowolf token generate)"
-printf '%s\n' "$BROKER_TOKEN" > /var/lib/repowolf/token
-printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$BROKER_TOKEN" > /run/repowolf/example-agent.env
-chmod 0600 /var/lib/repowolf/token /run/repowolf/example-agent.env
+printf '%s\n' "$BROKER_TOKEN" | sudo tee /var/lib/repowolf/token >/dev/null
+printf 'REPOWOLF_TOKEN_EXAMPLE_AGENT=%s\n' "$BROKER_TOKEN" | \
+  sudo tee /run/repowolf/example-agent.env >/dev/null
+unset BROKER_TOKEN
+sudo chown root:root /var/lib/repowolf/token /run/repowolf/example-agent.env
+sudo chmod 0600 /var/lib/repowolf/token /run/repowolf/example-agent.env
 ```
 
 Both `/run/repowolf/service.env` and `/run/repowolf/example-agent.env` must be
@@ -140,7 +143,7 @@ Restart the broker, then:
 docker run --rm -it \
   -e REPOWOLF_ENDPOINT=https://172.17.0.1:9443 \
   -e REPOWOLF_SERVER_NAME=repowolf.internal \
-  -e REPOWOLF_TOKEN="$(cat /var/lib/repowolf/token)" \
+  -e REPOWOLF_TOKEN="$(sudo cat /var/lib/repowolf/token)" \
   -e REPOWOLF_CA_FILE=/run/repowolf/ca.crt \
   -v /var/lib/repowolf/tls/ca.crt:/run/repowolf/ca.crt:ro \
   repowolf-sandbox:local gh repo view --repo rochecompaan/repowolf
