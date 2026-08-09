@@ -62,8 +62,13 @@ canonicalize_directory() {
             candidate=$base/$component
           fi
           if [ -e "$candidate" ] || [ -L "$candidate" ]; then
-            base=$(cd -P -- "$candidate" && pwd -P) || \
+            if base=$(cd -P -- "$candidate" 2>/dev/null && pwd -P); then
+              :
+            elif [ "${CANONICALIZE_ALLOW_UNRESOLVED:-}" = 1 ]; then
+              suffix+=("$component")
+            else
               fail_usage "$label must resolve to a directory"
+            fi
           else
             suffix+=("$component")
           fi
@@ -85,13 +90,31 @@ canonicalize_directory() {
   printf '%s\n' "$canonical"
 }
 
+resolve_directory_privileged() {
+  local label=$1 value=$2 resolver resolved
+  resolver=$(declare -f fail_usage reject_control require_absolute_path canonicalize_directory)
+  resolved=$("$SUDO_BIN" "$BASH" -c "$resolver
+CANONICALIZE_ALLOW_UNRESOLVED=
+canonicalize_directory \"\$1\" \"\$2\"" bash "$label" "$value") || \
+    fail_usage "$label must resolve to a directory"
+  printf '%s\n' "$resolved"
+}
+
+resolve_directories() {
+  CONFIG_DIR=$(resolve_directory_privileged REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT")
+  STATE_DIR=$(resolve_directory_privileged REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
+  RUNTIME_DIR=$(resolve_directory_privileged REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
+  CONFIG_FILE=$CONFIG_DIR/repowolf.yaml
+  TLS_DIR=$STATE_DIR/tls
+}
+
 directories_match() {
   local current
-  current=$(canonicalize_directory REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT") || return 1
+  current=$(resolve_directory_privileged REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT") || return 1
   [ "$current" = "$CONFIG_DIR" ] || return 1
-  current=$(canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT") || return 1
+  current=$(resolve_directory_privileged REPOWOLF_STATE_DIR "$STATE_DIR_INPUT") || return 1
   [ "$current" = "$STATE_DIR" ] || return 1
-  current=$(canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT") || return 1
+  current=$(resolve_directory_privileged REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT") || return 1
   [ "$current" = "$RUNTIME_DIR" ] || return 1
 }
 
@@ -101,6 +124,14 @@ recheck_directories() {
 
 sudo_mutate() {
   recheck_directories
+  "$SUDO_BIN" "$@"
+}
+
+cleanup_mutate() {
+  if ! directories_match; then
+    echo 'install-host-broker: configured directory changed; refusing cleanup' >&2
+    return 1
+  fi
   "$SUDO_BIN" "$@"
 }
 
@@ -163,11 +194,9 @@ else
   fail_usage "REPOWOLF_REPO must match owner/name with alphanumeric first characters"
 fi
 
-CONFIG_DIR=$(canonicalize_directory REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT")
-STATE_DIR=$(canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
-RUNTIME_DIR=$(canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
-CONFIG_FILE=$CONFIG_DIR/repowolf.yaml
-TLS_DIR=$STATE_DIR/tls
+CONFIG_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT")
+STATE_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
+RUNTIME_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
 reject_control REPOWOLF_BROKER_USER "$BROKER_USER"
 reject_control REPOWOLF_BROKER_GROUP "$BROKER_GROUP"
 [ -n "$BROKER_USER" ] || fail_usage "REPOWOLF_BROKER_USER must not be empty"
@@ -235,21 +264,20 @@ cleanup() {
   trap - EXIT INT TERM
   [ -z "$rendered" ] || rm -f -- "$rendered"
   if [ "$status" -ne 0 ]; then
-    if directories_match; then
-      [ -z "$privileged_temp" ] || "$SUDO_BIN" rm -f -- "$privileged_temp" || true
-      [ "$config_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$CONFIG_FILE" || true
-      [ "$tls_owned" -eq 0 ] || "$SUDO_BIN" rm -rf -- "$TLS_DIR" || true
-      [ "$config_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$CONFIG_DIR" || true
-      [ "$state_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$STATE_DIR" || true
-    else
-      echo 'install-host-broker: configured directory changed; refusing cleanup' >&2
-    fi
+    [ -z "$privileged_temp" ] || cleanup_mutate rm -f -- "$privileged_temp" || true
+    [ "$config_owned" -eq 0 ] || cleanup_mutate rm -f -- "$CONFIG_FILE" || true
+    [ "$tls_owned" -eq 0 ] || cleanup_mutate rm -rf -- "$TLS_DIR" || true
+    [ "$config_dir_created" -eq 0 ] || cleanup_mutate rm -d -- "$CONFIG_DIR" || true
+    [ "$state_dir_created" -eq 0 ] || cleanup_mutate rm -d -- "$STATE_DIR" || true
   fi
   exit "$status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+"$SUDO_BIN" -v
+resolve_directories
 
 rendered=$(mktemp)
 render_policy > "$rendered"
@@ -258,8 +286,6 @@ if grep -q '__REPOWOLF_' "$rendered"; then
   exit 1
 fi
 "$REPOWOLF_BIN" config validate --config "$rendered"
-recheck_directories
-"$SUDO_BIN" -v
 
 if path_exists "$TLS_DIR"; then
   echo "install-host-broker: TLS directory already exists: $TLS_DIR" >&2

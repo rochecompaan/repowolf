@@ -1620,6 +1620,9 @@ done
 # invocation-owned TLS directory and staging file.
 # A test-owned directory symlink switched to `/` by the `sudo -v` shim returns
 # 2 before any subsequent privileged action.
+# A cleanup-race shim switches a configured ancestor during the first cleanup
+# sudo removal; the remaining invocation-owned state survives and no later
+# raw cleanup mutation runs through the changed ancestor.
 
 rm -rf "$case_root/var/lib/repowolf/tls"
 mkdir -p "$case_root/var/lib/repowolf" "$case_root/etc/repowolf"
@@ -1690,14 +1693,16 @@ require_absolute_path() {
 }
 
 # canonicalize_directory first requires an absolute, control-character-free
-# value. It walks existing components with Bash `cd -P` and `pwd -P`, keeps a
-# lexical suffix only after the first nonexistent component, processes `.` and
-# `..`, and rejects a final canonical `/`. This catches `/tmp/..`, `/.`, `//`,
-# and existing symlinks to `/` without an added external dependency. Store the
-# canonical config/state/runtime values, derive all final paths from them, and
-# re-resolve each original value before `sudo -v` and every mutating sudo call.
-# If a re-resolution differs, fail closed; the EXIT cleanup must likewise
-# refuse privileged cleanup when the configured directories changed.
+# value and performs lexical `.`/`..` normalization. It resolves accessible
+# existing components with Bash `cd -P` and `pwd -P`, rejecting `/tmp/..`,
+# `/.`, `//`, and accessible symlinks to `/` before sudo. An inaccessible
+# existing directory is retained as a lexical suffix so a normal sudo-capable
+# operator outside the broker group can continue. After `sudo -v`, resolve all
+# original directory values in the running Bash interpreter through sudo,
+# reject a privileged canonical `/`, and derive final paths only from those
+# resolved values. Re-resolve before every mutating sudo call. The EXIT trap
+# must re-resolve immediately before *each* cleanup mutation and refuse that
+# mutation if any configured directory changed.
 
 yaml_quote() {
   value=${1//\'/\'\'}
@@ -1746,7 +1751,10 @@ render_policy() {
 }
 ```
 
-Write the render to a private `mktemp` file, reject any remaining `__REPOWOLF_` token, and run `repowolf config validate --config "$rendered"` before `sudo -v`.
+After pre-sudo lexical root rejection and `sudo -v`, perform privileged Bash
+resolution before rendering. Write the render to a private `mktemp` file,
+reject any remaining `__REPOWOLF_` token, and run
+`repowolf config validate --config "$rendered"` against the resolved paths.
 
 - [ ] **Step 5: Implement no-clobber privileged publication and cleanup**
 
@@ -1759,7 +1767,7 @@ After preflight succeeds:
 5. Create a root-owned sibling with `sudo mktemp "$CONFIG_DIR/.repowolf.yaml.XXXXXX"`, install the rendered file to it as root:`$BROKER_GROUP` mode `0640`, and publish it without overwrite using `sudo ln "$privileged_temp" "$CONFIG_FILE"`. Remove the sibling link after the final hard link succeeds.
 6. Run `sudo -u "$BROKER_USER" "$REPOWOLF_BIN" config validate --config "$CONFIG_FILE"`.
 
-The EXIT trap must remove the private render unconditionally. On non-zero exit it must remove only an invocation-owned privileged sibling, final config, TLS directory, and parent directories that this invocation created and left empty. Disable cleanup before printing:
+The EXIT trap must remove the private render unconditionally. On non-zero exit it must remove only an invocation-owned privileged sibling, final config, TLS directory, and parent directories that this invocation created and left empty. Recheck immediately before every individual privileged cleanup mutation; after a recheck fails, do not run that mutation. Disable cleanup before printing:
 
 ```text
 install-host-broker: installed /etc/repowolf/repowolf.yaml and /var/lib/repowolf/tls
@@ -1838,6 +1846,9 @@ fi
 Also cover:
 
 - relative state/runtime directories and nonexistent broker user/group return status `2` before the first fake `sudo` call;
+- an existing non-traversable state directory still permits the principal
+  installation through the sudo Bash resolver without loosening production
+  state permissions;
 - an existing token, existing principal environment, or dangling symlink at either destination returns status `1` before token generation;
 - multiline or malformed token output returns status `1` before privileged writes;
 - environment publication failure removes the invocation-created token and environment file but preserves pre-existing parent markers and `service.env`.
@@ -1858,7 +1869,13 @@ Expected: non-zero because `install-host-principal.sh` does not exist, with no t
 
 Create `examples/docker/install-host-principal.sh` with strict mode, `umask 077`, and the same `fail_usage`, `reject_control`, absolute-directory, user/group existence, and group-membership validation contracts as Task 9. Resolve `repowolf` and `sudo` before privileged work.
 
-After unprivileged input/identity/tool validation, call `sudo -v` and use `sudo test -e` plus `sudo test -L` to refuse either existing destination before token generation. Then generate into a private file and validate the exact token shape before any privileged write:
+After unprivileged lexical root-equivalence/input/identity/tool validation, call
+`sudo -v`, resolve state/runtime through the running Bash interpreter under
+sudo (including a non-traversable existing broker state directory), and reject
+the resulting root path or changed resolution. Use `sudo test -e` plus
+`sudo test -L` to refuse either existing destination before token generation.
+Then generate into a private file and validate the exact token shape before any
+privileged write:
 
 ```bash
 "$REPOWOLF_BIN" token generate > "$token_temp"

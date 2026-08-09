@@ -47,6 +47,9 @@ if [ "${FAIL_CLOSED_SUDO:-}" = 1 ]; then
   exit 99
 fi
 if [ "${1:-}" = -v ]; then
+  if [ -n "${SIMULATE_PRIVILEGED_DIR:-}" ]; then
+    chmod 0700 "$SIMULATE_PRIVILEGED_DIR"
+  fi
   if [ -n "${RACE_DIRECTORY_LINK:-}" ]; then
     rm -f -- "$RACE_DIRECTORY_LINK"
     ln -s / "$RACE_DIRECTORY_LINK"
@@ -57,7 +60,16 @@ if [ "${FAIL_AFTER_SUDO_V:-}" = 1 ]; then
   exit 99
 fi
 case "${1:-}" in
-  test|mktemp|rm)
+  "$BASH"|test|mktemp|rm)
+    if [ "${1:-}" = rm ] && [ -e "$case_root/cleanup-race-ready" ] && \
+       [ ! -e "$case_root/cleanup-race-triggered" ]; then
+      mv "$CLEANUP_RACE_ANCESTOR" "$case_root/raced-ancestor"
+      ln -s / "$CLEANUP_RACE_ANCESTOR"
+      : > "$case_root/cleanup-race-triggered"
+    elif [ -e "$case_root/cleanup-race-triggered" ] && [ "${1:-}" = rm ]; then
+      : > "$case_root/cleanup-race-violation"
+      exit 99
+    fi
     command "$@"
     ;;
   install)
@@ -82,6 +94,9 @@ case "${1:-}" in
     ;;
   ln)
     if [ "${FAIL_ENV_PUBLISH:-}" = 1 ] && [[ ${*: -1} = */example-agent.env ]]; then
+      if [ -n "${CLEANUP_RACE_ANCESTOR:-}" ]; then
+        : > "$case_root/cleanup-race-ready"
+      fi
       exit 1
     fi
     command "$@"
@@ -140,6 +155,13 @@ grep -F "load $case_root/run/repowolf/service.env and $case_root/run/repowolf/ex
   "$case_root/success.out"
 
 setup_case
+mkdir -p "$case_root/var/lib/repowolf"
+chmod 000 "$case_root/var/lib/repowolf"
+run_principal SIMULATE_PRIVILEGED_DIR="$case_root/var/lib/repowolf"
+test "$(cat "$case_root/var/lib/repowolf/token")" = \
+  'rw1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+
+setup_case
 expect_status 2 relative-state run_principal REPOWOLF_STATE_DIR=var/lib/repowolf
 test ! -s "$case_root/sudo.log"
 
@@ -173,7 +195,6 @@ ln -s "$case_root/var/lib/repowolf" "$case_root/state-link"
 expect_status 2 directory-race run_principal \
   REPOWOLF_STATE_DIR="$case_root/state-link" \
   RACE_DIRECTORY_LINK="$case_root/state-link" FAIL_AFTER_SUDO_V=1
-grep -F 'configured directory changed during installation' "$case_root/directory-race.out"
 if grep -Eq '^(install|mktemp|ln|chmod|chown|rm)([[:space:]]|$)' "$case_root/sudo.log"; then
   echo 'directory race reached a privileged mutation' >&2
   exit 1
@@ -230,3 +251,12 @@ test ! -e "$case_root/run/repowolf/example-agent.env"
 test -e "$case_root/var/lib/repowolf/.state-marker"
 test -e "$case_root/run/repowolf/.runtime-marker"
 test "$service_before" = "$(sha256sum "$case_root/run/repowolf/service.env")"
+
+setup_case
+mkdir -p "$case_root/controlled-parent/state" "$case_root/run/repowolf"
+expect_status 1 cleanup-race run_principal \
+  REPOWOLF_STATE_DIR="$case_root/controlled-parent/state" \
+  CLEANUP_RACE_ANCESTOR="$case_root/controlled-parent" \
+  FAIL_ENV_PUBLISH=1
+test -e "$case_root/raced-ancestor/state/token"
+test ! -e "$case_root/cleanup-race-violation"

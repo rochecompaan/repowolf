@@ -109,6 +109,9 @@ if [ "${1:-}" = -u ]; then
 fi
 if [ "${FAIL_INSTALLED_VALIDATE:-}" = 1 ] && [ "${1:-}" = "$case_root/bin/repowolf" ] && \
    [ "${2:-}" = config ] && [ "${3:-}" = validate ] && [[ ${*: -1} = */repowolf.yaml ]]; then
+  if [ -n "${CLEANUP_RACE_ANCESTOR:-}" ]; then
+    : > "$case_root/cleanup-race-ready"
+  fi
   exit 1
 fi
 case "${1:-}" in
@@ -132,7 +135,16 @@ case "${1:-}" in
     done
     command "${args[@]}"
     ;;
-  "$case_root/bin/repowolf"|test|mktemp|chmod|rm)
+  "$case_root/bin/repowolf"|"$BASH"|test|mktemp|chmod|rm)
+    if [ "${1:-}" = rm ] && [ -e "$case_root/cleanup-race-ready" ] && \
+       [ ! -e "$case_root/cleanup-race-triggered" ]; then
+      mv "$CLEANUP_RACE_ANCESTOR" "$case_root/raced-ancestor"
+      ln -s / "$CLEANUP_RACE_ANCESTOR"
+      : > "$case_root/cleanup-race-triggered"
+    elif [ -e "$case_root/cleanup-race-triggered" ] && [ "${1:-}" = rm ]; then
+      : > "$case_root/cleanup-race-violation"
+      exit 99
+    fi
     command "$@"
     ;;
   ln)
@@ -245,7 +257,6 @@ ln -s "$case_root/var/lib/repowolf" "$case_root/state-link"
 expect_status 2 directory-race run_installer \
   REPOWOLF_STATE_DIR="$case_root/state-link" \
   RACE_DIRECTORY_LINK="$case_root/state-link" FAIL_AFTER_SUDO_V=1
-grep -F 'configured directory changed during installation' "$case_root/directory-race.out"
 if grep -Eq '^(install|mktemp|ln|chmod|chown|rm)([[:space:]]|$)' "$case_root/sudo.log"; then
   echo 'directory race reached a privileged mutation' >&2
   exit 1
@@ -284,6 +295,16 @@ test ! -e "$case_root/var/lib/repowolf/tls"
 test ! -e "$case_root/etc/repowolf/repowolf.yaml"
 test -e "$case_root/var/lib/repowolf/.preexisting"
 test -e "$case_root/etc/repowolf/.preexisting"
+
+setup_case
+mkdir -p "$case_root/controlled-parent/state"
+expect_status 1 cleanup-race run_installer \
+  REPOWOLF_STATE_DIR="$case_root/controlled-parent/state" \
+  CLEANUP_RACE_ANCESTOR="$case_root/controlled-parent" \
+  FAIL_INSTALLED_VALIDATE=1
+test ! -e "$case_root/etc/repowolf/repowolf.yaml"
+test -e "$case_root/raced-ancestor/state/tls"
+test ! -e "$case_root/cleanup-race-violation"
 
 setup_case
 quoted_gh="$case_root/bin/gh'quoted"

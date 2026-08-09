@@ -58,8 +58,13 @@ canonicalize_directory() {
             candidate=$base/$component
           fi
           if [ -e "$candidate" ] || [ -L "$candidate" ]; then
-            base=$(cd -P -- "$candidate" && pwd -P) || \
+            if base=$(cd -P -- "$candidate" 2>/dev/null && pwd -P); then
+              :
+            elif [ "${CANONICALIZE_ALLOW_UNRESOLVED:-}" = 1 ]; then
+              suffix+=("$component")
+            else
               fail_usage "$label must resolve to a directory"
+            fi
           else
             suffix+=("$component")
           fi
@@ -81,11 +86,28 @@ canonicalize_directory() {
   printf '%s\n' "$canonical"
 }
 
+resolve_directory_privileged() {
+  local label=$1 value=$2 resolver resolved
+  resolver=$(declare -f fail_usage reject_control require_absolute_path canonicalize_directory)
+  resolved=$("$SUDO_BIN" "$BASH" -c "$resolver
+CANONICALIZE_ALLOW_UNRESOLVED=
+canonicalize_directory \"\$1\" \"\$2\"" bash "$label" "$value") || \
+    fail_usage "$label must resolve to a directory"
+  printf '%s\n' "$resolved"
+}
+
+resolve_directories() {
+  STATE_DIR=$(resolve_directory_privileged REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
+  RUNTIME_DIR=$(resolve_directory_privileged REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
+  TOKEN_FILE=$STATE_DIR/token
+  ENV_FILE=$RUNTIME_DIR/example-agent.env
+}
+
 directories_match() {
   local current
-  current=$(canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT") || return 1
+  current=$(resolve_directory_privileged REPOWOLF_STATE_DIR "$STATE_DIR_INPUT") || return 1
   [ "$current" = "$STATE_DIR" ] || return 1
-  current=$(canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT") || return 1
+  current=$(resolve_directory_privileged REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT") || return 1
   [ "$current" = "$RUNTIME_DIR" ] || return 1
 }
 
@@ -95,6 +117,14 @@ recheck_directories() {
 
 sudo_mutate() {
   recheck_directories
+  "$SUDO_BIN" "$@"
+}
+
+cleanup_mutate() {
+  if ! directories_match; then
+    echo 'install-host-principal: configured directory changed; refusing cleanup' >&2
+    return 1
+  fi
   "$SUDO_BIN" "$@"
 }
 
@@ -116,10 +146,8 @@ path_exists() {
   return "$exists"
 }
 
-STATE_DIR=$(canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
-RUNTIME_DIR=$(canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
-TOKEN_FILE=$STATE_DIR/token
-ENV_FILE=$RUNTIME_DIR/example-agent.env
+STATE_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
+RUNTIME_DIR=$(CANONICALIZE_ALLOW_UNRESOLVED=1 canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
 reject_control REPOWOLF_BROKER_USER "$BROKER_USER"
 reject_control REPOWOLF_BROKER_GROUP "$BROKER_GROUP"
 [ -n "$BROKER_USER" ] || fail_usage "REPOWOLF_BROKER_USER must not be empty"
@@ -156,15 +184,11 @@ cleanup() {
   [ -z "$token_temp" ] || rm -f -- "$token_temp"
   [ -z "$env_temp" ] || rm -f -- "$env_temp"
   if [ "$status" -ne 0 ]; then
-    if directories_match; then
-      [ -z "$privileged_temp" ] || "$SUDO_BIN" rm -f -- "$privileged_temp" || true
-      [ "$token_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$TOKEN_FILE" || true
-      [ "$env_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$ENV_FILE" || true
-      [ "$runtime_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$RUNTIME_DIR" || true
-      [ "$state_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$STATE_DIR" || true
-    else
-      echo 'install-host-principal: configured directory changed; refusing cleanup' >&2
-    fi
+    [ -z "$privileged_temp" ] || cleanup_mutate rm -f -- "$privileged_temp" || true
+    [ "$token_owned" -eq 0 ] || cleanup_mutate rm -f -- "$TOKEN_FILE" || true
+    [ "$env_owned" -eq 0 ] || cleanup_mutate rm -f -- "$ENV_FILE" || true
+    [ "$runtime_dir_created" -eq 0 ] || cleanup_mutate rm -d -- "$RUNTIME_DIR" || true
+    [ "$state_dir_created" -eq 0 ] || cleanup_mutate rm -d -- "$STATE_DIR" || true
   fi
   exit "$status"
 }
@@ -172,8 +196,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-recheck_directories
 "$SUDO_BIN" -v
+resolve_directories
 if path_exists "$TOKEN_FILE"; then
   echo "install-host-principal: token already exists: $TOKEN_FILE" >&2
   exit 1
