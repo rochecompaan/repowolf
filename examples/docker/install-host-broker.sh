@@ -5,14 +5,11 @@ umask 077
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 TEMPLATE=$SCRIPT_DIR/config/repowolf-host.yaml
 REPOSITORY=${REPOWOLF_REPO:-rochecompaan/repowolf}
-CONFIG_DIR=${REPOWOLF_CONFIG_DIR:-/etc/repowolf}
-STATE_DIR=${REPOWOLF_STATE_DIR:-/var/lib/repowolf}
-RUNTIME_DIR=${REPOWOLF_RUNTIME_DIR:-/run/repowolf}
+CONFIG_DIR_INPUT=${REPOWOLF_CONFIG_DIR:-/etc/repowolf}
+STATE_DIR_INPUT=${REPOWOLF_STATE_DIR:-/var/lib/repowolf}
+RUNTIME_DIR_INPUT=${REPOWOLF_RUNTIME_DIR:-/run/repowolf}
 BROKER_USER=${REPOWOLF_BROKER_USER:-repowolf}
 BROKER_GROUP=${REPOWOLF_BROKER_GROUP:-repowolf}
-CONFIG_FILE=$CONFIG_DIR/repowolf.yaml
-TLS_DIR=$STATE_DIR/tls
-
 fail_usage() {
   echo "install-host-broker: $*" >&2
   exit 2
@@ -26,7 +23,7 @@ reject_control() {
   fi
 }
 
-require_absolute() {
+require_absolute_path() {
   label=$1
   value=$2
   reject_control "$label" "$value"
@@ -34,7 +31,77 @@ require_absolute() {
     /*) ;;
     *) fail_usage "$label must be an absolute path" ;;
   esac
-  [ "$value" != / ] || fail_usage "$label must not be /"
+}
+
+canonicalize_directory() {
+  label=$1
+  value=$2
+  require_absolute_path "$label" "$value"
+  local base=/ candidate component canonical last_index
+  local -a suffix=() components=()
+  IFS=/ read -r -a components <<< "${value#/}" || true
+  for component in "${components[@]}"; do
+    case $component in
+      ''|.) ;;
+      ..)
+        if [ "${#suffix[@]}" -gt 0 ]; then
+          last_index=$((${#suffix[@]} - 1))
+          unset "suffix[$last_index]"
+        elif [ "$base" = / ]; then
+          base=/
+        else
+          base=$(cd -P -- "$base/.." && pwd -P) || \
+            fail_usage "$label must resolve to a directory"
+        fi
+        ;;
+      *)
+        if [ "${#suffix[@]}" -eq 0 ]; then
+          if [ "$base" = / ]; then
+            candidate=/$component
+          else
+            candidate=$base/$component
+          fi
+          if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+            base=$(cd -P -- "$candidate" && pwd -P) || \
+              fail_usage "$label must resolve to a directory"
+          else
+            suffix+=("$component")
+          fi
+        else
+          suffix+=("$component")
+        fi
+        ;;
+    esac
+  done
+  canonical=$base
+  for component in "${suffix[@]}"; do
+    if [ "$canonical" = / ]; then
+      canonical=/$component
+    else
+      canonical=$canonical/$component
+    fi
+  done
+  [ "$canonical" != / ] || fail_usage "$label must not resolve to /"
+  printf '%s\n' "$canonical"
+}
+
+directories_match() {
+  local current
+  current=$(canonicalize_directory REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT") || return 1
+  [ "$current" = "$CONFIG_DIR" ] || return 1
+  current=$(canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT") || return 1
+  [ "$current" = "$STATE_DIR" ] || return 1
+  current=$(canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT") || return 1
+  [ "$current" = "$RUNTIME_DIR" ] || return 1
+}
+
+recheck_directories() {
+  directories_match || fail_usage 'configured directory changed during installation'
+}
+
+sudo_mutate() {
+  recheck_directories
+  "$SUDO_BIN" "$@"
 }
 
 yaml_quote() {
@@ -45,7 +112,7 @@ yaml_quote() {
 require_executable() {
   label=$1
   value=$2
-  require_absolute "$label" "$value"
+  require_absolute_path "$label" "$value"
   [ -x "$value" ] || fail_usage "$label must be an executable path"
 }
 
@@ -96,9 +163,11 @@ else
   fail_usage "REPOWOLF_REPO must match owner/name with alphanumeric first characters"
 fi
 
-require_absolute REPOWOLF_CONFIG_DIR "$CONFIG_DIR"
-require_absolute REPOWOLF_STATE_DIR "$STATE_DIR"
-require_absolute REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR"
+CONFIG_DIR=$(canonicalize_directory REPOWOLF_CONFIG_DIR "$CONFIG_DIR_INPUT")
+STATE_DIR=$(canonicalize_directory REPOWOLF_STATE_DIR "$STATE_DIR_INPUT")
+RUNTIME_DIR=$(canonicalize_directory REPOWOLF_RUNTIME_DIR "$RUNTIME_DIR_INPUT")
+CONFIG_FILE=$CONFIG_DIR/repowolf.yaml
+TLS_DIR=$STATE_DIR/tls
 reject_control REPOWOLF_BROKER_USER "$BROKER_USER"
 reject_control REPOWOLF_BROKER_GROUP "$BROKER_GROUP"
 [ -n "$BROKER_USER" ] || fail_usage "REPOWOLF_BROKER_USER must not be empty"
@@ -166,11 +235,15 @@ cleanup() {
   trap - EXIT INT TERM
   [ -z "$rendered" ] || rm -f -- "$rendered"
   if [ "$status" -ne 0 ]; then
-    [ -z "$privileged_temp" ] || "$SUDO_BIN" rm -f -- "$privileged_temp" || true
-    [ "$config_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$CONFIG_FILE" || true
-    [ "$tls_owned" -eq 0 ] || "$SUDO_BIN" rm -rf -- "$TLS_DIR" || true
-    [ "$config_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$CONFIG_DIR" || true
-    [ "$state_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$STATE_DIR" || true
+    if directories_match; then
+      [ -z "$privileged_temp" ] || "$SUDO_BIN" rm -f -- "$privileged_temp" || true
+      [ "$config_owned" -eq 0 ] || "$SUDO_BIN" rm -f -- "$CONFIG_FILE" || true
+      [ "$tls_owned" -eq 0 ] || "$SUDO_BIN" rm -rf -- "$TLS_DIR" || true
+      [ "$config_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$CONFIG_DIR" || true
+      [ "$state_dir_created" -eq 0 ] || "$SUDO_BIN" rm -d -- "$STATE_DIR" || true
+    else
+      echo 'install-host-broker: configured directory changed; refusing cleanup' >&2
+    fi
   fi
   exit "$status"
 }
@@ -185,6 +258,7 @@ if grep -q '__REPOWOLF_' "$rendered"; then
   exit 1
 fi
 "$REPOWOLF_BIN" config validate --config "$rendered"
+recheck_directories
 "$SUDO_BIN" -v
 
 if path_exists "$TLS_DIR"; then
@@ -197,29 +271,29 @@ if path_exists "$CONFIG_FILE"; then
 fi
 
 if ! path_exists "$CONFIG_DIR"; then
-  "$SUDO_BIN" install -o root -g "$BROKER_GROUP" -m 0750 -d "$CONFIG_DIR"
+  sudo_mutate install -o root -g "$BROKER_GROUP" -m 0750 -d "$CONFIG_DIR"
   config_dir_created=1
 fi
 if ! path_exists "$STATE_DIR"; then
-  "$SUDO_BIN" install -o root -g "$BROKER_GROUP" -m 0750 -d "$STATE_DIR"
+  sudo_mutate install -o root -g "$BROKER_GROUP" -m 0750 -d "$STATE_DIR"
   state_dir_created=1
 fi
 
-"$SUDO_BIN" "$REPOWOLF_BIN" cert init --output "$TLS_DIR" --dns repowolf.internal --ip 127.0.0.1 >/dev/null
+sudo_mutate "$REPOWOLF_BIN" cert init --output "$TLS_DIR" --dns repowolf.internal --ip 127.0.0.1 >/dev/null
 tls_owned=1
-"$SUDO_BIN" chown root:"$BROKER_GROUP" "$STATE_DIR" "$TLS_DIR" \
+sudo_mutate chown root:"$BROKER_GROUP" "$STATE_DIR" "$TLS_DIR" \
   "$TLS_DIR/tls.crt" "$TLS_DIR/tls.key"
-"$SUDO_BIN" chmod 0750 "$STATE_DIR" "$TLS_DIR"
-"$SUDO_BIN" chmod 0640 "$TLS_DIR/tls.crt" "$TLS_DIR/tls.key"
-"$SUDO_BIN" chown root:root "$TLS_DIR/ca.crt" "$TLS_DIR/ca.key"
-"$SUDO_BIN" chmod 0644 "$TLS_DIR/ca.crt"
-"$SUDO_BIN" chmod 0600 "$TLS_DIR/ca.key"
+sudo_mutate chmod 0750 "$STATE_DIR" "$TLS_DIR"
+sudo_mutate chmod 0640 "$TLS_DIR/tls.crt" "$TLS_DIR/tls.key"
+sudo_mutate chown root:root "$TLS_DIR/ca.crt" "$TLS_DIR/ca.key"
+sudo_mutate chmod 0644 "$TLS_DIR/ca.crt"
+sudo_mutate chmod 0600 "$TLS_DIR/ca.key"
 
-privileged_temp=$("$SUDO_BIN" mktemp "$CONFIG_DIR/.repowolf.yaml.XXXXXX")
-"$SUDO_BIN" install -o root -g "$BROKER_GROUP" -m 0640 "$rendered" "$privileged_temp"
-"$SUDO_BIN" ln "$privileged_temp" "$CONFIG_FILE"
+privileged_temp=$(sudo_mutate mktemp "$CONFIG_DIR/.repowolf.yaml.XXXXXX")
+sudo_mutate install -o root -g "$BROKER_GROUP" -m 0640 "$rendered" "$privileged_temp"
+sudo_mutate ln "$privileged_temp" "$CONFIG_FILE"
 config_owned=1
-"$SUDO_BIN" rm -f -- "$privileged_temp"
+sudo_mutate rm -f -- "$privileged_temp"
 privileged_temp=
 
 "$SUDO_BIN" -u "$BROKER_USER" "$REPOWOLF_BIN" config validate --config "$CONFIG_FILE"
