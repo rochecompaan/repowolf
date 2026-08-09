@@ -56,7 +56,10 @@ jobs:
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
       - name: Check example shell syntax and behavior
         run: |
-          bash -n bootstrap.sh wait-for-broker.sh test-wait-for-broker.sh test-bootstrap-unreadable-ssh.sh
+          bash -n bootstrap.sh install-host-broker.sh install-host-principal.sh \
+            wait-for-broker.sh test-bootstrap-unreadable-ssh.sh \
+            test-install-host-broker.sh test-install-host-principal.sh \
+            test-wait-for-broker.sh
           ./test-wait-for-broker.sh
           ./test-bootstrap-unreadable-ssh.sh
       - name: Build and load broker image from this commit
@@ -64,6 +67,10 @@ jobs:
         run: |
           image="$(nix build .#ociImage --no-link --print-out-paths)"
           docker load -i "$image"
+      - name: Check host installer behavior
+        run: |
+          REPOWOLF_TEST_VALIDATE_IMAGE=repowolf:mvp ./test-install-host-broker.sh
+          ./test-install-host-principal.sh
       - name: Build sandbox image from current-commit archives
         working-directory: .
         run: |
