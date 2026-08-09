@@ -161,7 +161,7 @@ expect_status 1 malformed-token run_principal TOKEN_OUTPUT=not-a-token
 test -e "$case_root/token-generated"
 test ! -e "$case_root/var/lib/repowolf/token"
 test ! -e "$case_root/run/repowolf/example-agent.env"
-if grep -F ' install ' "$case_root/sudo.log"; then
+if grep -Eq '^install([[:space:]]|$)' "$case_root/sudo.log"; then
   echo 'malformed token reached privileged writes' >&2
   exit 1
 fi
@@ -170,7 +170,7 @@ setup_case
 expect_status 1 multiline-token run_principal $'TOKEN_OUTPUT=rw1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nextra\n'
 test ! -e "$case_root/var/lib/repowolf/token"
 test ! -e "$case_root/run/repowolf/example-agent.env"
-if grep -F ' install ' "$case_root/sudo.log"; then
+if grep -Eq '^install([[:space:]]|$)' "$case_root/sudo.log"; then
   echo 'multiline token reached privileged writes' >&2
   exit 1
 fi
