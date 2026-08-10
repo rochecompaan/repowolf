@@ -94,15 +94,8 @@ jobs:
         working-directory: .
         run: scripts/ci/docker-example/assert-fake-ssh.sh
       - name: Assert sandbox boundary
-        run: |
-          docker compose -f compose.yaml -f compose.smoke.yaml run --rm --entrypoint sh sandbox -c '
-            set -e
-            test -z "${GH_TOKEN+x}"
-            test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
-            test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
-            ! command -v ssh >/dev/null
-            test "$(id -u)" = "65532"
-          '
+        working-directory: .
+        run: scripts/ci/docker-example/assert-sandbox-boundary.sh
       - name: Tear down
         if: always()
         run: docker compose -f compose.yaml -f compose.smoke.yaml down -v
