@@ -7,6 +7,7 @@ in
   packages = [
     pkgs.go
     pkgs.goreleaser
+    pkgs.shellcheck
     pkgs.skopeo
     repowolfPackages.repowolf
     repowolfPackages."repowolf-client"
