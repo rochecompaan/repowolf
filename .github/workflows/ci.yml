@@ -75,23 +75,8 @@ jobs:
         working-directory: .
         run: scripts/ci/docker-example/build-sandbox-image.sh
       - name: Bootstrap disposable state and verify broker ownership
-        run: |
-          ssh_test=$(mktemp -d /tmp/repowolf-ci-ssh.XXXXXX)
-          ssh-keygen -q -t ed25519 -N '' -f "$ssh_test/id_ed25519"
-          printf 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestOnly\n' > "$ssh_test/known_hosts"
-          printf 'GH_TOKEN=dummy-ci-token\n' > .env
-          REPOWOLF_REPO=rochecompaan/repowolf \
-          REPOWOLF_SSH_KEY="$ssh_test/id_ed25519" \
-          REPOWOLF_KNOWN_HOSTS="$ssh_test/known_hosts" \
-          ./bootstrap.sh
-          rm -rf "$ssh_test"
-          docker run --rm --user 65532:65532 -v "$PWD/state/config.yaml:/config.yaml:ro" \
-            repowolf:mvp config validate --config /config.yaml
-          docker run --rm -v "$PWD/state/ssh:/tmp/.ssh:ro" \
-            --entrypoint ssh repowolf:mvp -G github.com > /tmp/ssh-effective
-          grep -E '^identityagent[[:space:]]+none$' /tmp/ssh-effective
-          grep -E '^identityfile[[:space:]]+/tmp/.ssh/id_ed25519$' /tmp/ssh-effective
-          grep -E '^userknownhostsfile[[:space:]]+/tmp/.ssh/known_hosts$' /tmp/ssh-effective
+        working-directory: .
+        run: scripts/ci/docker-example/bootstrap-disposable-state.sh
       - name: Install observable fake SSH fixture
         working-directory: .
         run: |
