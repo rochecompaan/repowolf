@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-if [ "${1-}" = "--inside" ]; then
+if [ "$#" -eq 1 ] && [ "${1-}" = "--inside" ]; then
   test -z "${GH_TOKEN+x}"
   test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
   test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
