@@ -323,9 +323,9 @@ docker run --rm --user 65532:65532 \
 docker run --rm \
   -v "$EXAMPLE_DIR/state/ssh:/tmp/.ssh:ro" \
   --entrypoint ssh "$REPOWOLF_IMAGE" -G github.com >"$ssh_effective"
-grep -qE '^identityagent[[:space:]]+none$' "$ssh_effective"
-grep -qE '^identityfile[[:space:]]+/tmp/.ssh/id_ed25519$' "$ssh_effective"
-grep -qE '^userknownhostsfile[[:space:]]+/tmp/.ssh/known_hosts$' "$ssh_effective"
+grep -E '^identityagent[[:space:]]+none$' "$ssh_effective"
+grep -E '^identityfile[[:space:]]+/tmp/.ssh/id_ed25519$' "$ssh_effective"
+grep -E '^userknownhostsfile[[:space:]]+/tmp/.ssh/known_hosts$' "$ssh_effective"
 ```
 
 Make it executable:
