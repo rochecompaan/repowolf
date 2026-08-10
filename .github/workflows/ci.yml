@@ -54,6 +54,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
+      - name: Lint Docker example shell
+        working-directory: .
+        run: nix develop -c scripts/ci/docker-example/lint.sh
       - name: Check example shell syntax and behavior
         run: |
           bash -n bootstrap.sh install-host-broker.sh install-host-principal.sh \

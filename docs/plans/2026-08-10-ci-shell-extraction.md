@@ -933,9 +933,11 @@ Run from the repository root:
 
 ```bash
 set -euo pipefail
+export REPOWOLF_IMAGE=repowolf:mvp
+export REPOWOLF_SANDBOX_IMAGE=repowolf-sandbox:local
 docker compose -f examples/docker/compose.yaml \
   -f examples/docker/compose.smoke.yaml down -v || true
-backup=$(mktemp -d)
+backup=$(mktemp -d "$PWD/.superpowers/sdd/2026-08-10-ci-shell-extraction/task-8-backup.XXXXXX")
 cleanup() {
   rc=$?
   trap - EXIT INT TERM
@@ -1056,9 +1058,11 @@ First run the real extracted path from isolated generated state while preserving
 
 ```bash
 set -euo pipefail
+export REPOWOLF_IMAGE=repowolf:mvp
+export REPOWOLF_SANDBOX_IMAGE=repowolf-sandbox:local
 docker compose -f examples/docker/compose.yaml \
   -f examples/docker/compose.smoke.yaml down -v || true
-backup=$(mktemp -d)
+backup=$(mktemp -d "$PWD/.superpowers/sdd/2026-08-10-ci-shell-extraction/task-8-backup.XXXXXX")
 cleanup() {
   rc=$?
   trap - EXIT INT TERM
