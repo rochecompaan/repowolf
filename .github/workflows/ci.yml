@@ -91,25 +91,8 @@ jobs:
         working-directory: .
         run: scripts/ci/docker-example/assert-github-policy.sh
       - name: Assert broker launched fake SSH with upload-pack argv
-        run: |
-          if docker compose -f compose.yaml -f compose.smoke.yaml run --rm sandbox \
-            git ls-remote git@github.com:rochecompaan/repowolf.git; then
-            echo "fake SSH unexpectedly succeeded" >&2
-            exit 1
-          fi
-          docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf > /tmp/repowolf-broker.log
-          grep 'git.upload-pack' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"accepted"'
-          diff -u <(cat <<'EOF'
-          -T
-          -p
-          22
-          --
-          git@github.com
-          git-upload-pack 'rochecompaan/repowolf.git'
-          EOF
-          ) state/test/ssh-argv
-          grep 'git.upload-pack' /tmp/repowolf-broker.log | grep -E '"outcome":[[:space:]]*"failed"' \
-            | grep 'GIT_TERMINAL_CATEGORY_PROVIDER_FAILURE'
+        working-directory: .
+        run: scripts/ci/docker-example/assert-fake-ssh.sh
       - name: Assert sandbox boundary
         run: |
           docker compose -f compose.yaml -f compose.smoke.yaml run --rm --entrypoint sh sandbox -c '
