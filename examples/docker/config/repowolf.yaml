@@ -1,0 +1,57 @@
+apiVersion: repowolf.dev/v1alpha1
+listen: "0.0.0.0:8443"
+
+tls:
+  certificate: /run/repowolf/tls/tls.crt
+  privateKey: /run/repowolf/tls/tls.key
+
+tools:
+  gh: null
+  ssh: null
+
+providers:
+  github-public:
+    kind: github
+    apiHost: github.com
+    gitHost: github.com
+    sshUser: git
+    sshPort: 22
+
+repositories:
+  example:
+    provider: github-public
+    owner: "__OWNER__"
+    name: "__NAME__"
+    git:
+      denyRefs:
+        - refs/heads/main
+      denyDeletes: true
+      maxRefUpdates: 16
+
+principals:
+  agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_AGENT
+    grants:
+      - repository: example
+        capabilities:
+          - repository:read
+          - issues:read
+          - issues:write
+          - pull_requests:read
+          - pull_requests:write
+          - statuses:read
+          - git:read
+          - git:write
+          # actions:read deliberately omitted: `gh run list` must be denied.
+
+limits:
+  maxConcurrentRequests: 16
+  maxConcurrentRequestsPerPrincipal: 8
+  maxMessageBytes: 1048576
+  maxStreamChunkBytes: 65536
+  maxPushPrefixBytes: 1048576
+  maxGitBytesPerDirection: 1073741824
+  initialStreamTimeout: 5s
+  operationTimeout: 10m
+  idleStreamTimeout: 2m

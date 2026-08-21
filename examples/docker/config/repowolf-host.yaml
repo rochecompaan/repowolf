@@ -1,0 +1,46 @@
+apiVersion: repowolf.dev/v1alpha1
+listen: __REPOWOLF_LISTEN__
+
+tls:
+  certificate: __REPOWOLF_TLS_CERTIFICATE__
+  privateKey: __REPOWOLF_TLS_PRIVATE_KEY__
+
+tools:
+  gh: __REPOWOLF_GH_PATH__
+  ssh: __REPOWOLF_SSH_PATH__
+
+providers:
+  github-public:
+    kind: github
+    apiHost: github.com
+    gitHost: github.com
+    sshUser: git
+    sshPort: 22
+
+repositories:
+  example:
+    provider: github-public
+    owner: __REPOWOLF_OWNER__
+    name: __REPOWOLF_NAME__
+    git:
+      denyRefs:
+        - refs/heads/main
+      denyDeletes: true
+      maxRefUpdates: 16
+
+principals:
+  example-agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_EXAMPLE_AGENT
+    grants:
+      - repository: example
+        capabilities:
+          - repository:read
+          - issues:read
+          - issues:write
+          - pull_requests:read
+          - pull_requests:write
+          - actions:read
+          - statuses:read
+          - git:read
+          - git:write

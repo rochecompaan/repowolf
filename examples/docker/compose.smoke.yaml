@@ -1,0 +1,8 @@
+# Test-only override: mounts an observable static fake-SSH fixture into the
+# trusted broker. Never used by the user walkthrough.
+services:
+  repowolf:
+    environment:
+      FAKE_SSH_LOG: /run/repowolf/test/ssh-argv
+    volumes:
+      - ./state/test:/run/repowolf/test
