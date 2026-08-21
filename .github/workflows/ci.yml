@@ -42,6 +42,67 @@ jobs:
           docker load -i "$image"
           docker run --rm repowolf:mvp --version
 
+  docker-example-smoke:
+    needs: test
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash -euo pipefail {0}
+        working-directory: examples/docker
+    env:
+      REPOWOLF_IMAGE: repowolf:mvp
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
+      - name: Lint Docker example shell
+        working-directory: .
+        run: nix develop -c scripts/ci/docker-example/lint.sh
+      - name: Check example shell syntax and behavior
+        run: |
+          bash -n bootstrap.sh install-host-broker.sh install-host-principal.sh \
+            wait-for-broker.sh test-bootstrap-unreadable-ssh.sh \
+            test-install-host-broker.sh test-install-host-principal.sh \
+            test-wait-for-broker.sh
+          ./test-wait-for-broker.sh
+          ./test-bootstrap-unreadable-ssh.sh
+      - name: Build and load broker image from this commit
+        working-directory: .
+        run: |
+          image="$(nix build .#ociImage --no-link --print-out-paths)"
+          docker load -i "$image"
+      - name: Check host installer behavior
+        run: |
+          REPOWOLF_TEST_VALIDATE_IMAGE=repowolf:mvp ./test-install-host-broker.sh
+          ./test-install-host-principal.sh
+      - name: Build sandbox image from current-commit archives
+        working-directory: .
+        run: scripts/ci/docker-example/build-sandbox-image.sh
+      - name: Bootstrap disposable state and verify broker ownership
+        working-directory: .
+        run: scripts/ci/docker-example/bootstrap-disposable-state.sh
+      - name: Install observable fake SSH fixture
+        working-directory: .
+        run: scripts/ci/docker-example/install-fake-ssh-fixture.sh
+      - name: Start broker and wait for readiness
+        run: |
+          docker compose -f compose.yaml -f compose.smoke.yaml up -d repowolf
+          if ! ./wait-for-broker.sh 127.0.0.1 8443 30; then
+            docker compose -f compose.yaml -f compose.smoke.yaml logs repowolf
+            exit 1
+          fi
+      - name: Assert GitHub policy outcomes
+        working-directory: .
+        run: scripts/ci/docker-example/assert-github-policy.sh
+      - name: Assert broker launched fake SSH with upload-pack argv
+        working-directory: .
+        run: scripts/ci/docker-example/assert-fake-ssh.sh
+      - name: Assert sandbox boundary
+        working-directory: .
+        run: scripts/ci/docker-example/assert-sandbox-boundary.sh
+      - name: Tear down
+        if: always()
+        run: docker compose -f compose.yaml -f compose.smoke.yaml down -v
+
   release-smoke:
     needs: test
     strategy:

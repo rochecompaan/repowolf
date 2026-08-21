@@ -1,0 +1,6 @@
+-T
+-p
+22
+--
+git@github.com
+git-upload-pack 'rochecompaan/repowolf.git'

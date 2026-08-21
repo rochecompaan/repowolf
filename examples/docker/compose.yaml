@@ -1,0 +1,33 @@
+name: repowolf-example
+
+services:
+  repowolf:
+    image: ${REPOWOLF_IMAGE:-ghcr.io/rochecompaan/repowolf:v0.1.0}
+    command: serve --config /etc/repowolf/repowolf.yaml
+    environment:
+      GH_TOKEN: ${GH_TOKEN:?copy .env.example to .env and set GH_TOKEN}
+      REPOWOLF_TOKEN_AGENT: ${REPOWOLF_TOKEN_AGENT:?run ./bootstrap.sh first}
+    volumes:
+      - ./state/config.yaml:/etc/repowolf/repowolf.yaml:ro
+      - ./state/tls/tls.crt:/run/repowolf/tls/tls.crt:ro
+      - ./state/tls/tls.key:/run/repowolf/tls/tls.key:ro
+      - ./state/ssh:/tmp/.ssh:ro
+    ports:
+      - "127.0.0.1:8443:8443"
+    restart: unless-stopped
+
+  sandbox:
+    image: repowolf-sandbox:local
+    build:
+      context: ./sandbox
+      args:
+        REPOWOLF_VERSION: ${REPOWOLF_VERSION:-v0.1.0}
+        REPOWOLF_RELEASE_ROOT: ${REPOWOLF_RELEASE_ROOT:-https://github.com/rochecompaan/repowolf/releases/download}
+    environment:
+      REPOWOLF_ENDPOINT: https://repowolf:8443
+      REPOWOLF_TOKEN: ${REPOWOLF_TOKEN_AGENT:?run ./bootstrap.sh first}
+      REPOWOLF_CA_FILE: /run/repowolf/ca.crt
+    volumes:
+      - ./state/tls/ca.crt:/run/repowolf/ca.crt:ro
+    depends_on:
+      - repowolf
