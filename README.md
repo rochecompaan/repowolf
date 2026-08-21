@@ -1,6 +1,6 @@
 <p align="center">
   <picture>
-    <img alt="RepoWolf logo" src="docs/assets/repowolf-logo.png">
+    <img alt="RepoWolf logo" src="docs/assets/repowolf-logo.png" width="500">
   </picture>
 </p>
 
