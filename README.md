@@ -25,11 +25,12 @@ RepoWolf token + CA            audit JSON Lines
 no GitHub token or SSH key
 ```
 
-- Give each principal explicit capabilities for each repository.
-- Use the `gh` compatibility client for restricted GitHub operations.
-- Use `repowolf-git-ssh` for Git over SSH.
-- Protect refs and deletes. Limit ref updates.
-- Load strict startup configuration and write JSON Lines audit output.
+- RepoWolf enforces explicit capabilities for each principal and repository.
+- The `gh` compatibility client restricts GitHub operations.
+- `repowolf-git-ssh` provides Git over SSH.
+- RepoWolf protects refs and deletes. It limits ref updates.
+- RepoWolf loads strict configuration at startup.
+- It writes JSON Lines audit output.
 
 ## Choose your setup
 
