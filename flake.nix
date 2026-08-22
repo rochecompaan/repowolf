@@ -36,7 +36,7 @@
         let pkgs = import nixpkgs { inherit system; };
         in {
           default = pkgs.mkShell {
-            packages = with pkgs; [ go goreleaser shellcheck skopeo ];
+            packages = with pkgs; [ go goreleaser jq shellcheck skopeo ];
           };
         });
     };
