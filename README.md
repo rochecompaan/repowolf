@@ -51,11 +51,11 @@ repository that this token can read.
 ```bash
 git clone https://github.com/rochecompaan/repowolf.git
 cd repowolf/examples/docker
-docker compose build sandbox
 cp .env.example .env
 # Edit .env. Set GH_TOKEN and leave REPOWOLF_TOKEN_AGENT empty.
 export REPOWOLF_REPO=rochecompaan/repowolf
 ./bootstrap.sh
+docker compose build sandbox
 docker compose up -d repowolf
 ./wait-for-broker.sh 127.0.0.1 8443 30
 docker compose run --rm sandbox gh repo view --repo "$REPOWOLF_REPO"
