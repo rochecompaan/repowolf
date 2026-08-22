@@ -1004,7 +1004,7 @@ git commit -m "docs(readme): add Docker-first onboarding"
 
 **Interfaces:**
 - Consumes: All implementation tasks.
-- Produces: Completion evidence for the PR description and reviewer.
+- Produces: Pre-release completion evidence and a post-release OCI follow-up.
 
 - [ ] **Step 1: Run shell, workflow, Go, and Nix checks**
 
@@ -1039,11 +1039,27 @@ Do not create or register a deploy key without operator approval.
 CAUTION: Make sure that `examples/docker/state` and `examples/docker/.env`
 contain only disposable verification state. The cleanup step removes them.
 
-- [ ] **Step 3: Run the API quickstart on Linux**
+This is a pre-release check. Step 1 loads the current broker image as
+`repowolf:mvp`. The sandbox build helper creates `repowolf-sandbox:local`
+from current-commit snapshot archives. Do not authenticate Docker to GHCR for
+this check.
 
-From `examples/docker`:
+- [ ] **Step 3: Run the pre-release API quickstart on Linux**
+
+From the repository root, build the sandbox image from the current commit:
 
 ```bash
+scripts/ci/docker-example/build-sandbox-image.sh
+rm -rf -- dist
+```
+
+The helper owns the generated `dist/` directory. The local image remains after
+this command removes the snapshot archives.
+
+Then run these commands from `examples/docker`:
+
+```bash
+export REPOWOLF_IMAGE=repowolf:mvp
 docker compose down -v >/dev/null 2>&1 || true
 rm -rf -- state .env
 cp .env.example .env
@@ -1051,13 +1067,13 @@ chmod 0600 .env
 printf 'GH_TOKEN=%s\nREPOWOLF_TOKEN_AGENT=\n' "$VERIFY_GH_TOKEN" >.env
 export REPOWOLF_REPO="$VERIFY_REPO"
 ./bootstrap.sh
-docker compose build sandbox
 docker compose up -d repowolf
 ./wait-for-broker.sh 127.0.0.1 8443 30
 docker compose run --rm sandbox gh repo view --repo "$VERIFY_REPO"
 ```
 
-Expected: `gh repo view` returns repository data through RepoWolf.
+Expected: `gh repo view` returns repository data through RepoWolf built from
+the current commit.
 
 - [ ] **Step 4: Run the sandbox boundary proof**
 
@@ -1082,6 +1098,7 @@ verified `known_hosts` file:
 ```bash
 docker compose down -v
 rm -rf -- state
+REPOWOLF_IMAGE=repowolf:mvp \
 REPOWOLF_REPO="$VERIFY_REPO" \
 REPOWOLF_SSH_KEY="$VERIFY_SSH_KEY" \
 REPOWOLF_KNOWN_HOSTS="$VERIFY_KNOWN_HOSTS" \
@@ -1101,7 +1118,7 @@ Run:
 ```bash
 docker compose down -v
 rm -rf -- state .env
-unset VERIFY_GH_TOKEN VERIFY_SSH_KEY VERIFY_KNOWN_HOSTS VERIFY_REPO
+unset REPOWOLF_IMAGE VERIFY_GH_TOKEN VERIFY_SSH_KEY VERIFY_KNOWN_HOSTS VERIFY_REPO
 ```
 
 If the operator created a deploy key for this test, ask the operator to remove
@@ -1119,7 +1136,25 @@ git log --oneline --decorate -10
 
 Expected: no uncommitted implementation files and no disposable Docker state.
 
-- [ ] **Step 8: Record non-blocking platform follow-up**
+- [ ] **Step 8: Record the required post-release OCI follow-up**
+
+Add this unchecked list to the release handoff. Do not push a tag or change
+package visibility during this task.
+
+```markdown
+### Post-release OCI validation
+
+- [ ] Publish the release from the intended `v*` tag.
+- [ ] Make `ghcr.io/rochecompaan/repowolf` public in the GitHub package settings.
+- [ ] Pull the canonical tag without registry credentials.
+- [ ] Confirm that its manifest contains `linux/amd64` and `linux/arm64`.
+- [ ] Run the documented Docker quickstart without `REPOWOLF_IMAGE`.
+```
+
+This list does not block pre-release branch completion. It blocks claims that
+the published image and default Docker onboarding passed live verification.
+
+- [ ] **Step 9: Record non-blocking platform follow-up**
 
 Add this unchecked list to the PR description or a follow-up issue:
 
@@ -1137,7 +1172,7 @@ Git `ls-remote`, and cleanup.
 Do not change the README to say that these checks passed until a developer
 reports successful results.
 
-- [ ] **Step 9: If verification changed files, commit the fixes**
+- [ ] **Step 10: If verification changed files, commit the fixes**
 
 If a command exposed a documentation or script defect, fix the defect and run
 the affected checks again. Then commit the fix with a specific Conventional
