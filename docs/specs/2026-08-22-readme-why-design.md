@@ -1,6 +1,6 @@
 # README “Why RepoWolf” Design
 
-**Date:** 2026-08-22  
+**Date:** 2026-08-22
 **Status:** Approved
 
 ## Goal

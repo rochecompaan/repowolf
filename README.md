@@ -32,6 +32,8 @@ receiving the underlying credentials.
 
 ![Comparison of SSH access, fine-grained tokens, and RepoWolf policy enforcement](docs/assets/why-repowolf.png)
 
+RepoWolf loads policy at startup. Restart the broker after each policy change.
+
 ## How it works
 
 ```text
@@ -69,6 +71,7 @@ repository that this token can read.
 git clone https://github.com/rochecompaan/repowolf.git
 cd repowolf/examples/docker
 cp .env.example .env
+chmod 0600 .env
 # Edit .env. Set GH_TOKEN and leave REPOWOLF_TOKEN_AGENT empty.
 export REPOWOLF_REPO=rochecompaan/repowolf
 ./bootstrap.sh
