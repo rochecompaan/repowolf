@@ -47,6 +47,6 @@ docker pull ghcr.io/rochecompaan/repowolf:v0.1.0
 ```
 
 For a complete sandbox-image example with host-broker and compose
-walkthroughs, see [examples/docker](examples/docker/README.md).
+walkthroughs, see [examples/docker](../examples/docker/README.md).
 
 Next, [configure RepoWolf](configuration.md).
