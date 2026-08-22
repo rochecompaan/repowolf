@@ -28,6 +28,7 @@ Run these commands from the repository's `examples/docker` directory.
 
 ```bash
 cp .env.example .env
+chmod 0600 .env
 # Set GH_TOKEN in .env. Leave REPOWOLF_TOKEN_AGENT empty.
 export REPOWOLF_REPO=rochecompaan/repowolf
 ./bootstrap.sh
@@ -102,7 +103,7 @@ docker compose run --rm sandbox \
   git ls-remote git@github.com:rochecompaan/repowolf.git
 ```
 
-The private key, known-hosts file, and config go only to the broker.
+The private key, known-hosts file, and configuration go only to the broker.
 The sandbox still contains no SSH identity or OpenSSH client.
 
 ## Native Linux broker and sandbox container

@@ -1113,16 +1113,14 @@ Expected: Git prints remote refs through `repowolf-git-ssh`.
 
 - [ ] **Step 6: Remove disposable secrets and state**
 
-Run:
+Remove any disposable deploy key created for this test from GitHub. Confirm
+that GitHub shows that the key is removed. Then run:
 
 ```bash
 docker compose down -v
 rm -rf -- state .env
 unset REPOWOLF_IMAGE VERIFY_GH_TOKEN VERIFY_SSH_KEY VERIFY_KNOWN_HOSTS VERIFY_REPO
 ```
-
-If the operator created a deploy key for this test, ask the operator to remove
-it from GitHub.
 
 - [ ] **Step 7: Run final repository checks**
 

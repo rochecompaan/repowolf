@@ -63,11 +63,11 @@ magick compare -metric AE \
   docs/assets/why-repowolf.png \
   null: 2>/tmp/repowolf-why-pixel-diff
 
-test "$(cat /tmp/repowolf-why-pixel-diff)" = "0"
+test "$(awk '{print $1}' /tmp/repowolf-why-pixel-diff)" = "0"
 rm -f /tmp/repowolf-why-pixel-diff
 ```
 
-Expected: oxipng completes successfully, the output is not larger than the source, and ImageMagick reports zero changed pixels.
+Expected: oxipng completes successfully, the output is not larger than the source, and the first ImageMagick result token is `0`.
 
 - [ ] **Step 3: Add the approved README section**
 
