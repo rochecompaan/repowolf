@@ -27,11 +27,11 @@ in this guide requires Linux.
 Run these commands from the repository's `examples/docker` directory.
 
 ```bash
-docker compose build sandbox
 cp .env.example .env
 # Set GH_TOKEN in .env. Leave REPOWOLF_TOKEN_AGENT empty.
 export REPOWOLF_REPO=rochecompaan/repowolf
 ./bootstrap.sh
+docker compose build sandbox
 docker compose up -d repowolf
 ./wait-for-broker.sh 127.0.0.1 8443 30
 docker compose run --rm sandbox gh repo view --repo "$REPOWOLF_REPO"
