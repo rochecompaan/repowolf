@@ -38,7 +38,12 @@ case "${1:-}" in
     [ "$3" = "$FAKE_IMAGE" ]
     ;;
   image)
-    [ "${2:-}" = inspect ]
+    [ "$#" -eq 5 ]
+    [ "$1" = image ]
+    [ "$2" = inspect ]
+    [ "$3" = --format ]
+    [ "$4" = '{{.Architecture}}' ]
+    [ "$5" = repowolf:mvp ]
     printf '%s\n' "$FAKE_ARCH"
     ;;
   run)
