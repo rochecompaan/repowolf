@@ -15,6 +15,23 @@ RepoWolf client, a scoped RepoWolf token, and the public CA certificate.
 
 RepoWolf does not create, inspect, register, or attest sandboxes.
 
+## Why RepoWolf
+
+Most developers give a coding agent the same SSH key that they use for Git.
+That key can reach every repository the developer can access. If the agent or
+sandbox is compromised, every reachable repository is at risk.
+
+Fine-grained access tokens reduce this blast radius, but they are a pain to
+create and manage. Each repository needs a token, scopes, and an expiration
+date. Teams must distribute, renew, and revoke these tokens as access changes.
+
+RepoWolf keeps the developer’s SSH key and provider credentials outside the
+agent sandbox. A local YAML policy grants each sandbox access to only the
+repositories and actions it needs. The agent gets scoped access without
+receiving the underlying credentials.
+
+![Comparison of SSH access, fine-grained tokens, and RepoWolf policy enforcement](docs/assets/why-repowolf.png)
+
 ## How it works
 
 ```text
