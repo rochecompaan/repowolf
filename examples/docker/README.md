@@ -24,6 +24,8 @@ in this guide requires Linux.
 
 ## Quickstart: Compose broker and sandbox
 
+Run these commands from the repository's `examples/docker` directory.
+
 ```bash
 docker compose build sandbox
 cp .env.example .env
