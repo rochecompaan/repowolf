@@ -171,8 +171,8 @@ func testConfig() config.Config {
 		},
 		Repositories: map[string]config.Repository{
 			"sample-project": {Provider: "github", Owner: "alpha", Name: "sample-project", Git: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, DenyDeletes: true, MaxRefUpdates: 16}},
-			"tools":     {Provider: "forge", Owner: "ops", Name: "tools", Git: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 16}},
-			"private":   {Provider: "github", Owner: "other", Name: "private", Git: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 16}},
+			"tools":          {Provider: "forge", Owner: "ops", Name: "tools", Git: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 16}},
+			"private":        {Provider: "github", Owner: "other", Name: "private", Git: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 16}},
 		},
 		Principals: map[string]config.Principal{
 			"infra-agent": {Grants: []config.Grant{
