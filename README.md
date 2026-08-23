@@ -37,11 +37,21 @@ RepoWolf loads policy at startup. Restart the broker after each policy change.
 ## How it works
 
 ```text
-Agent sandbox                  RepoWolf broker                    GitHub
---------------                 ---------------                    ------
-gh / repowolf-git-ssh --TLS--> repository policy --provider auth--> API / Git
-RepoWolf token + CA            audit JSON Lines
-no GitHub token or SSH key
+1. Agent sandbox
+   - Runs gh or repowolf-git-ssh
+   - Uses a RepoWolf token and CA
+   - Has no GitHub token or SSH key
+             |
+             | TLS
+             v
+2. RepoWolf broker
+   - Enforces repository policy
+   - Authenticates with the provider
+   - Writes JSONL audit records
+             |
+             v
+3. GitHub
+   - API and Git
 ```
 
 - RepoWolf enforces explicit capabilities for each principal and repository.
