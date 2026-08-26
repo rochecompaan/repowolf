@@ -1,6 +1,6 @@
 <p align="center">
   <picture>
-    <img alt="RepoWolf logo" src="docs/assets/repowolf-logo.png" width="500">
+    <img alt="RepoWolf logo" src="docs/assets/repowolf-logo-light.png" width="500">
   </picture>
 </p>
 
@@ -63,11 +63,11 @@ RepoWolf loads policy at startup. Restart the broker after each policy change.
 
 ## Choose your setup
 
-| Host | Recommended setup | Notes |
-| --- | --- | --- |
-| Linux | Docker for the quickest start. Native for a long-running broker. | Native packages support amd64 and arm64 |
-| macOS | Docker Desktop from Terminal | No native RepoWolf package |
-| Windows | Docker Desktop through WSL2 | Run commands inside WSL2; PowerShell and cmd are not supported |
+| Host    | Recommended setup                                                | Notes                                                          |
+| ------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| Linux   | Docker for the quickest start. Native for a long-running broker. | Native packages support amd64 and arm64                        |
+| macOS   | Docker Desktop from Terminal                                     | No native RepoWolf package                                     |
+| Windows | Docker Desktop through WSL2                                      | Run commands inside WSL2; PowerShell and cmd are not supported |
 
 Docker Compose is the recommended first setup because it needs no host RepoWolf installation.
 
