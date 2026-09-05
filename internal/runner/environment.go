@@ -49,9 +49,3 @@ func hasTokenEnvironmentPrefix(name string) bool {
 	}
 	return false
 }
-
-// ProviderEnvironment removes service credentials and controls without
-// inspecting or rewriting any retained value.
-func ProviderEnvironment(base []string, excluded []string) []string {
-	return TokenFreeEnvironment(base, excluded)
-}

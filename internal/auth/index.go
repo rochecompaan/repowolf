@@ -4,12 +4,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"sort"
-
-	"github.com/rochecompaan/repowolf/internal/config"
 )
-
-// LookupEnv returns the value of a named environment variable.
-type LookupEnv func(string) (string, bool)
 
 // Index holds startup-loaded token digests and their principals.
 type Index struct {
@@ -45,33 +40,6 @@ func NewIndex(principals map[string][]string) (*Index, error) {
 		}
 	}
 	return index, nil
-}
-
-// Load reads configured token environment variables into an authentication index.
-func Load(principals map[string]config.Principal, lookup LookupEnv) (*Index, error) {
-	ids := make([]string, 0, len(principals))
-	for id := range principals {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
-	values := make(map[string][]string, len(principals))
-	for _, id := range ids {
-		for _, name := range principals[id].TokenEnvs {
-			value, found := "", false
-			if lookup != nil {
-				value, found = lookup(name)
-			}
-			if !found {
-				return nil, fmt.Errorf("token environment %q is missing", name)
-			}
-			if value == "" {
-				return nil, fmt.Errorf("token environment %q is empty", name)
-			}
-			values[id] = append(values[id], value)
-		}
-	}
-	return NewIndex(values)
 }
 
 // Authenticate returns the principal associated with token, when configured.

@@ -15,7 +15,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/tlsconfig"
 )
 
-func TestNewRuntimeBuildsImmutableDependenciesAndSafeProviderEnvironment(t *testing.T) {
+func TestNewRuntimeBuildsImmutableDependenciesAndTokenFreeSSHEnvironment(t *testing.T) {
 	configPath, token := runtimeFixture(t)
 	t.Setenv("REPOWOLF_TOKEN_AGENT", token)
 	t.Setenv("REPOWOLF_INTERNAL_CONTROL", "remove-me")
@@ -28,9 +28,9 @@ func TestNewRuntimeBuildsImmutableDependenciesAndSafeProviderEnvironment(t *test
 	if runtime.Server == nil || runtime.GitHub == nil || runtime.Git == nil || runtime.Tokens == nil || runtime.TLSConfig == nil || runtime.Policy == nil || runtime.Tools.GH == "" || runtime.Tools.SSH == "" {
 		t.Fatalf("incomplete runtime: %#v", runtime)
 	}
-	environment := strings.Join(runtime.ProviderEnvironment, "\n")
+	environment := strings.Join(runtime.SSHEnvironment, "\n")
 	if strings.Contains(environment, "REPOWOLF_") || strings.Contains(environment, "GH_TOKEN=preserve=a=b") {
-		t.Fatalf("provider environment = %q", environment)
+		t.Fatalf("SSH environment = %q", environment)
 	}
 }
 

@@ -74,7 +74,10 @@ func TestStartServerRetriesAddressCollision(t *testing.T) {
 	server, err := startServer(t, ServerOptions{
 		Binary: binaries.Service, PolicyPath: filepath.Join(repository, "integration/testdata/policy.yaml"),
 		Certificate: certificate, GHPath: provider, SSHPath: ssh,
-		Environment: []string{"REPOWOLF_TOKEN_AGENT=rw1_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"},
+		Environment: []string{
+			"REPOWOLF_TOKEN_AGENT=rw1_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+			"GH_TOKEN=test-provider-token",
+		},
 	}, serverStartSettings{attempts: 2, readinessTimeout: 5 * time.Second, address: address})
 	if err != nil {
 		t.Fatal(err)
