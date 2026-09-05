@@ -19,7 +19,7 @@ trap 'exit 143' TERM
 
 cd -- "$EXAMPLE_DIR"
 if "${compose[@]}" run --rm sandbox gh repo view --repo rochecompaan/repowolf; then
-  echo "expected upstream failure with dummy GH_TOKEN" >&2
+  echo "expected upstream failure with dummy REPOWOLF_TOKEN_GITHUB_PUBLIC" >&2
   exit 1
 fi
 "${compose[@]}" logs repowolf >"$broker_log"

@@ -5,10 +5,10 @@ change requires a service restart.
 
 ## Policy model
 
-A provider defines the GitHub API and Git hosts. A repository maps one policy
-name to an owner, repository name, provider, and Git limits. A principal names
-one or more token environment variables. A grant gives that principal an
-explicit capability set for one repository.
+A provider defines its kind, API host, Git host, and token environment name. A
+repository maps one policy name to an owner, repository name, provider, and Git
+limits. A principal names one or more token environment variables. A grant
+gives that principal an explicit capability set for one repository.
 
 ## Tokens and TLS
 
@@ -51,6 +51,7 @@ providers:
     apiHost: github.com
     gitHost: github.com
     sshUser: git
+    tokenEnv: REPOWOLF_TOKEN_GITHUB_PUBLIC
 
 repositories:
   example:
@@ -87,7 +88,25 @@ Validate policy without loading token values, TLS files, or provider executables
 repowolf config validate --config /etc/repowolf/repowolf.yaml
 ```
 
-Set every environment variable named by `tokenEnvs` before starting the service. For the example, place `REPOWOLF_TOKEN_EXAMPLE_AGENT=<generated-value>` in the service's protected environment. Provider authentication such as `GH_TOKEN` and SSH configuration also belongs only in the service environment and filesystem. A `null` tool path resolves `gh` or `ssh` once from service startup `PATH`; an absolute YAML path can pin either executable.
+Set every environment variable named by `tokenEnvs` and `tokenEnv` before you
+start the service. A provider record stores only the token environment name.
+For this example, export the values in the protected service environment:
+
+```sh
+export REPOWOLF_TOKEN_GITHUB_PUBLIC='<provider-token>'
+export REPOWOLF_TOKEN_EXAMPLE_AGENT='<generated-principal-token>'
+```
+
+New GitHub records and all Gitea records require an explicit `tokenEnv`. An
+empty or null `tokenEnv` stops startup. One GitHub record can omit `tokenEnv`
+during migration. In that case, startup accepts exactly one non-empty
+`GH_TOKEN` or `GITHUB_TOKEN`. Startup stops if both variables are present, both
+are absent, or the one present value is empty. Gitea provider records are
+runtime state only in Issue 1. They do not enable Gitea operations.
+
+SSH configuration belongs only in the service environment and filesystem. A
+`null` tool path resolves `gh` or `ssh` once from service startup `PATH`; an
+absolute YAML path can pin either executable.
 
 Start the service with:
 

@@ -27,7 +27,7 @@ ssh_effective=$(mktemp "$tmp_root/repowolf-ssh-effective.XXXXXX")
 ssh-keygen -q -t ed25519 -N '' -f "$ssh_test/id_ed25519"
 printf 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestOnly\n' \
   >"$ssh_test/known_hosts"
-printf 'GH_TOKEN=dummy-ci-token\n' >"$EXAMPLE_DIR/.env"
+printf 'REPOWOLF_TOKEN_GITHUB_PUBLIC=dummy-ci-token\n' >"$EXAMPLE_DIR/.env"
 (
   cd -- "$EXAMPLE_DIR"
   REPOWOLF_IMAGE="$REPOWOLF_IMAGE" \

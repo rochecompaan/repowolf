@@ -16,6 +16,7 @@ providers:
     gitHost: github.com
     sshUser: git
     sshPort: 22
+    tokenEnv: REPOWOLF_TOKEN_GITHUB_PUBLIC
 
 repositories:
   example:

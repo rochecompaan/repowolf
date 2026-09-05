@@ -29,7 +29,7 @@ Run these commands from the repository's `examples/docker` directory.
 ```bash
 cp .env.example .env
 chmod 0600 .env
-# Set GH_TOKEN in .env. Leave REPOWOLF_TOKEN_AGENT empty.
+# Set REPOWOLF_TOKEN_GITHUB_PUBLIC in .env. Leave REPOWOLF_TOKEN_AGENT empty.
 export REPOWOLF_REPO=rochecompaan/repowolf
 ./bootstrap.sh
 docker compose build sandbox
@@ -58,6 +58,7 @@ a GitHub token, SSH key, SSH client, or agent socket.
 ```sh
 docker compose run --rm --entrypoint sh sandbox -c '
   test -z "${GH_TOKEN+x}"
+  test -z "${REPOWOLF_TOKEN_GITHUB_PUBLIC+x}"
   test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
   test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
   ! command -v ssh
