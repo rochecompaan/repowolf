@@ -52,6 +52,39 @@ func TestDecodeRejectsAliasedNullProviderTokenEnv(t *testing.T) {
 	}
 }
 
+func TestDecodeDistinguishesMergedProviderTokenEnvironmentStates(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		mergedValue string
+		tokenLine   string
+		wantToken   string
+		wantError   bool
+	}{
+		{name: "merged null", mergedValue: "null", wantError: true},
+		{name: "merged shorthand null", mergedValue: "~", wantError: true},
+		{name: "merged string", mergedValue: "REPOWOLF_TOKEN_GITHUB", wantToken: "REPOWOLF_TOKEN_GITHUB"},
+		{name: "direct string overrides merged null", mergedValue: "null", tokenLine: "    tokenEnv: REPOWOLF_TOKEN_GITHUB\n", wantToken: "REPOWOLF_TOKEN_GITHUB"},
+		{name: "direct null overrides merged string", mergedValue: "REPOWOLF_TOKEN_GITHUB", tokenLine: "    tokenEnv: null\n", wantError: true},
+		{name: "direct shorthand null overrides merged string", mergedValue: "REPOWOLF_TOKEN_GITHUB", tokenLine: "    tokenEnv: ~\n", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg, err := Decode(strings.NewReader(mergedProviderYAML(test.mergedValue, test.tokenLine)))
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "tokenEnv") {
+					t.Fatalf("Decode() error = %v, want tokenEnv error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cfg.Providers["provider"].TokenEnv; got != test.wantToken {
+				t.Fatalf("TokenEnv = %q, want %q", got, test.wantToken)
+			}
+		})
+	}
+}
+
 func TestValidateProviderTokenEnvironmentRules(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -221,6 +254,41 @@ providers:
     apiHost: github.com
     gitHost: github.com
     sshUser: git
+` + tokenLine + `repositories:
+  sample-project:
+    provider: provider
+    owner: alpha
+    name: sample-project
+    git:
+      denyDeletes: true
+      maxRefUpdates: 16
+principals:
+  agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_AGENT
+    grants:
+      - repository: sample-project
+        capabilities:
+          - repository:read
+          - git:read
+          - git:write
+`
+}
+
+func mergedProviderYAML(mergedValue, tokenLine string) string {
+	return `apiVersion: repowolf.dev/v1alpha1
+listen: :8443
+tls:
+  certificate: /run/repowolf/tls.crt
+  privateKey: /run/repowolf/tls.key
+providers:
+  provider:
+    <<: &defaults
+      kind: github
+      apiHost: github.com
+      gitHost: github.com
+      sshUser: git
+      tokenEnv: ` + mergedValue + `
 ` + tokenLine + `repositories:
   sample-project:
     provider: provider

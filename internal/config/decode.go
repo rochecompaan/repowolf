@@ -147,23 +147,70 @@ func rejectNullProviderTokenEnv(document *yaml.Node) error {
 		}
 		providers := root.Content[index+1]
 		for providerIndex := 1; providerIndex < len(providers.Content); providerIndex += 2 {
-			provider := providers.Content[providerIndex]
-			if provider.Kind != yaml.MappingNode {
-				continue
-			}
-			for fieldIndex := 0; fieldIndex < len(provider.Content); fieldIndex += 2 {
-				value := provider.Content[fieldIndex+1]
-				isNull := value.Tag == "!!null"
-				if value.Kind == yaml.AliasNode && value.Alias != nil {
-					isNull = value.Alias.Tag == "!!null"
-				}
-				if provider.Content[fieldIndex].Value == "tokenEnv" && isNull {
-					return fmt.Errorf("tokenEnv must be a string")
-				}
+			value, ok := effectiveMappingValue(providers.Content[providerIndex], "tokenEnv", make(map[*yaml.Node]struct{}))
+			if ok && isNullNode(value) {
+				return fmt.Errorf("tokenEnv must be a string")
 			}
 		}
 	}
 	return nil
+}
+
+func effectiveMappingValue(node *yaml.Node, field string, active map[*yaml.Node]struct{}) (*yaml.Node, bool) {
+	if node == nil {
+		return nil, false
+	}
+	if _, exists := active[node]; exists {
+		return nil, false
+	}
+	active[node] = struct{}{}
+	defer delete(active, node)
+
+	if node.Kind == yaml.AliasNode {
+		return effectiveMappingValue(node.Alias, field, active)
+	}
+	if node.Kind != yaml.MappingNode {
+		return nil, false
+	}
+
+	var merge *yaml.Node
+	for index := 0; index < len(node.Content); index += 2 {
+		key, value := node.Content[index], node.Content[index+1]
+		if isMergeKey(key) {
+			merge = value
+			continue
+		}
+		if key.Value == field {
+			return value, true
+		}
+	}
+	return mergedMappingValue(merge, field, active)
+}
+
+func mergedMappingValue(node *yaml.Node, field string, active map[*yaml.Node]struct{}) (*yaml.Node, bool) {
+	if node == nil {
+		return nil, false
+	}
+	if node.Kind != yaml.SequenceNode {
+		return effectiveMappingValue(node, field, active)
+	}
+	for _, mapping := range node.Content {
+		if value, ok := effectiveMappingValue(mapping, field, active); ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func isMergeKey(node *yaml.Node) bool {
+	return node.Kind == yaml.ScalarNode && node.Value == "<<" && (node.Tag == "" || node.Tag == "!" || node.ShortTag() == "!!merge")
+}
+
+func isNullNode(node *yaml.Node) bool {
+	for node != nil && node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	return node != nil && node.ShortTag() == "!!null"
 }
 
 func duplicateKey(node *yaml.Node) error {
