@@ -16,12 +16,13 @@ func TestTokenFreeEnvironmentRemovesTokensAndControls(t *testing.T) {
 		"GH_TOKEN=ambient-gh",
 		"GH_HOST=ambient-host",
 		"GITHUB_TOKEN=ambient-github",
+		"EXACT_SECRET=excluded",
 		"NO_COLOR=0",
 		"SAFE=value=with=equals",
 		"MALFORMED",
 	}
 
-	got := TokenFreeEnvironment(base, []string{"REPOWOLF_TOKEN_AGENT", "REPOWOLF_TOKEN_GITHUB"})
+	got := TokenFreeEnvironment(base, []string{"REPOWOLF_TOKEN_AGENT", "REPOWOLF_TOKEN_GITHUB", "EXACT_SECRET"})
 	want := []string{
 		"PATH=/bin",
 		"SSH_AUTH_SOCK=/run/agent.sock",
