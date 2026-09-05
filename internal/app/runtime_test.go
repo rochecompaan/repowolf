@@ -29,7 +29,7 @@ func TestNewRuntimeBuildsImmutableDependenciesAndSafeProviderEnvironment(t *test
 		t.Fatalf("incomplete runtime: %#v", runtime)
 	}
 	environment := strings.Join(runtime.ProviderEnvironment, "\n")
-	if strings.Contains(environment, "REPOWOLF_") || !strings.Contains(environment, "GH_TOKEN=preserve=a=b") {
+	if strings.Contains(environment, "REPOWOLF_") || strings.Contains(environment, "GH_TOKEN=preserve=a=b") {
 		t.Fatalf("provider environment = %q", environment)
 	}
 }
