@@ -22,11 +22,26 @@ type rawConfig struct {
 }
 
 type rawProvider struct {
-	Kind    ProviderKind `yaml:"kind"`
-	APIHost string       `yaml:"apiHost"`
-	GitHost string       `yaml:"gitHost"`
-	SSHUser string       `yaml:"sshUser"`
-	SSHPort *uint16      `yaml:"sshPort"`
+	Kind     ProviderKind      `yaml:"kind"`
+	APIHost  string            `yaml:"apiHost"`
+	GitHost  string            `yaml:"gitHost"`
+	SSHUser  string            `yaml:"sshUser"`
+	SSHPort  *uint16           `yaml:"sshPort"`
+	TokenEnv rawOptionalString `yaml:"tokenEnv"`
+}
+
+type rawOptionalString struct {
+	present bool
+	value   string
+}
+
+func (value *rawOptionalString) UnmarshalYAML(node *yaml.Node) error {
+	value.present = true
+	if node.Tag != "!!str" {
+		return fmt.Errorf("tokenEnv must be a string")
+	}
+	value.value = node.Value
+	return nil
 }
 
 type rawRepository struct {
@@ -107,12 +122,41 @@ func rejectDuplicateKeys(data []byte) error {
 	if err := duplicateKey(&document); err != nil {
 		return err
 	}
+	if err := rejectNullProviderTokenEnv(&document); err != nil {
+		return err
+	}
 	var second yaml.Node
 	if err := decoder.Decode(&second); err != io.EOF {
 		if err != nil {
 			return fmt.Errorf("decode YAML: %w", err)
 		}
 		return fmt.Errorf("configuration contains more than one YAML document")
+	}
+	return nil
+}
+
+func rejectNullProviderTokenEnv(document *yaml.Node) error {
+	// yaml.v3 bypasses UnmarshalYAML for explicit null values.
+	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	root := document.Content[0]
+	for index := 0; index < len(root.Content); index += 2 {
+		if root.Content[index].Value != "providers" || root.Content[index+1].Kind != yaml.MappingNode {
+			continue
+		}
+		providers := root.Content[index+1]
+		for providerIndex := 1; providerIndex < len(providers.Content); providerIndex += 2 {
+			provider := providers.Content[providerIndex]
+			if provider.Kind != yaml.MappingNode {
+				continue
+			}
+			for fieldIndex := 0; fieldIndex < len(provider.Content); fieldIndex += 2 {
+				if provider.Content[fieldIndex].Value == "tokenEnv" && provider.Content[fieldIndex+1].Tag == "!!null" {
+					return fmt.Errorf("tokenEnv must be a string")
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -168,11 +212,14 @@ func normalize(raw rawConfig) (Config, error) {
 		Limits:       defaultLimits(),
 	}
 	for id, provider := range raw.Providers {
+		if provider.TokenEnv.present && provider.TokenEnv.value == "" {
+			return Config{}, fmt.Errorf("provider %q tokenEnv must not be empty", id)
+		}
 		port := uint16(defaultSSHPort)
 		if provider.SSHPort != nil {
 			port = *provider.SSHPort
 		}
-		cfg.Providers[id] = Provider{Kind: provider.Kind, APIHost: provider.APIHost, GitHost: provider.GitHost, SSHUser: provider.SSHUser, SSHPort: port}
+		cfg.Providers[id] = Provider{Kind: provider.Kind, APIHost: provider.APIHost, GitHost: provider.GitHost, SSHUser: provider.SSHUser, SSHPort: port, TokenEnv: provider.TokenEnv.value}
 	}
 	for id, repository := range raw.Repositories {
 		policy := defaultPushPolicy()

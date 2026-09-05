@@ -40,14 +40,18 @@ type Tools struct {
 
 type ProviderKind string
 
-const ProviderGitHub ProviderKind = "github"
+const (
+	ProviderGitHub ProviderKind = "github"
+	ProviderGitea  ProviderKind = "gitea"
+)
 
 type Provider struct {
-	Kind    ProviderKind `yaml:"kind"`
-	APIHost string       `yaml:"apiHost"`
-	GitHost string       `yaml:"gitHost"`
-	SSHUser string       `yaml:"sshUser"`
-	SSHPort uint16       `yaml:"sshPort"`
+	Kind     ProviderKind `yaml:"kind"`
+	APIHost  string       `yaml:"apiHost"`
+	GitHost  string       `yaml:"gitHost"`
+	SSHUser  string       `yaml:"sshUser"`
+	SSHPort  uint16       `yaml:"sshPort"`
+	TokenEnv string       `yaml:"tokenEnv"`
 }
 
 type Repository struct {

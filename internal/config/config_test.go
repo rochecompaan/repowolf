@@ -316,7 +316,7 @@ func validConfig() Config {
 		Listen:     ":8443",
 		TLS:        TLS{Certificate: "/run/repowolf/tls.crt", PrivateKey: "/run/repowolf/tls.key"},
 		Providers: map[string]Provider{
-			"github": {Kind: ProviderGitHub, APIHost: "github.com", GitHost: "github.com", SSHUser: "git", SSHPort: 22},
+			"github": {Kind: ProviderGitHub, APIHost: "github.com", GitHost: "github.com", SSHUser: "git", SSHPort: 22, TokenEnv: "REPOWOLF_TOKEN_GITHUB"},
 		},
 		Repositories: map[string]Repository{
 			"sample-project": {Provider: "github", Owner: "alpha", Name: "sample-project", Git: PushPolicy{DenyRefs: []string{"refs/heads/main"}, DenyDeletes: true, MaxRefUpdates: 16}},
@@ -340,6 +340,7 @@ providers:
     apiHost: github.com
     gitHost: github.com
     sshUser: git
+    tokenEnv: REPOWOLF_TOKEN_GITHUB
 repositories:
   sample-project:
     provider: github
