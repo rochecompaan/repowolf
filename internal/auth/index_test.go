@@ -8,90 +8,39 @@ import (
 	"testing"
 
 	"github.com/rochecompaan/repowolf/internal/auth"
-	"github.com/rochecompaan/repowolf/internal/config"
 )
 
-func TestLoadRejectsMissingToken(t *testing.T) {
-	principals := map[string]config.Principal{
-		"agent": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT"}},
-	}
-
-	_, err := auth.Load(principals, func(string) (string, bool) { return "", false })
-	assertSafeEnvironmentError(t, err, "REPOWOLF_TOKEN_AGENT", "")
-}
-
-func TestLoadRejectsEmptyToken(t *testing.T) {
-	principals := map[string]config.Principal{
-		"agent": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT"}},
-	}
-
-	_, err := auth.Load(principals, func(string) (string, bool) { return "", true })
-	assertSafeEnvironmentError(t, err, "REPOWOLF_TOKEN_AGENT", "")
-}
-
-func TestLoadDoesNotDiscloseMalformedToken(t *testing.T) {
-	secret := "not-a-valid-token"
-	principals := map[string]config.Principal{
-		"agent": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT"}},
-	}
-
-	_, err := auth.Load(principals, func(string) (string, bool) { return secret, true })
-	assertSafeEnvironmentError(t, err, "REPOWOLF_TOKEN_AGENT", secret)
-}
-
-func TestLoadRejectsDuplicateTokenForOnePrincipal(t *testing.T) {
-	secret := testToken(1)
-	principals := map[string]config.Principal{
-		"agent": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT_A", "REPOWOLF_TOKEN_AGENT_B"}},
-	}
-
-	_, err := auth.Load(principals, lookupValues(map[string]string{
-		"REPOWOLF_TOKEN_AGENT_A": secret,
-		"REPOWOLF_TOKEN_AGENT_B": secret,
-	}))
-	assertSafeEnvironmentError(t, err, "REPOWOLF_TOKEN_AGENT_B", secret)
-}
-
-func TestLoadRejectsDuplicateTokenAcrossPrincipals(t *testing.T) {
-	secret := testToken(2)
-	principals := map[string]config.Principal{
-		"agent-a": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT_A"}},
-		"agent-b": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT_B"}},
-	}
-
-	_, err := auth.Load(principals, lookupValues(map[string]string{
-		"REPOWOLF_TOKEN_AGENT_A": secret,
-		"REPOWOLF_TOKEN_AGENT_B": secret,
-	}))
-	assertSafeEnvironmentError(t, err, "REPOWOLF_TOKEN_AGENT_B", secret)
-}
-
-func TestLoadAuthenticatesDistinctTokensForOnePrincipal(t *testing.T) {
-	first := testToken(3)
-	second := testToken(4)
-	principals := map[string]config.Principal{
-		"agent": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT_A", "REPOWOLF_TOKEN_AGENT_B"}},
-	}
-
-	index, err := auth.Load(principals, lookupValues(map[string]string{
-		"REPOWOLF_TOKEN_AGENT_A": first,
-		"REPOWOLF_TOKEN_AGENT_B": second,
-	}))
+func TestNewIndexAuthenticatesDistinctTokens(t *testing.T) {
+	first := testToken(1)
+	second := testToken(2)
+	index, err := auth.NewIndex(map[string][]string{
+		"agent-a": {first},
+		"agent-b": {second},
+	})
 	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+		t.Fatal(err)
 	}
-	for _, token := range []string{first, second} {
-		principal, ok := index.Authenticate(token)
-		if !ok || principal != "agent" {
-			t.Fatalf("Authenticate() = (%q, %t), want (agent, true)", principal, ok)
-		}
+	if principal, ok := index.Authenticate(first); !ok || principal != "agent-a" {
+		t.Fatalf("Authenticate(first) = %q, %v", principal, ok)
 	}
-	if _, ok := index.Authenticate(testToken(5)); ok {
-		t.Fatal("Authenticate() accepted an unconfigured token")
+	if principal, ok := index.Authenticate(second); !ok || principal != "agent-b" {
+		t.Fatalf("Authenticate(second) = %q, %v", principal, ok)
 	}
-	if _, ok := index.Authenticate("not-a-valid-token"); ok {
-		t.Fatal("Authenticate() accepted a malformed token")
-	}
+}
+
+func TestNewIndexRejectsMalformedPrincipalTokenWithoutDisclosure(t *testing.T) {
+	secret := "not-a-valid-token"
+	_, err := auth.NewIndex(map[string][]string{"agent": {secret}})
+	assertSafeTokenError(t, err, "agent", secret)
+}
+
+func TestNewIndexRejectsDuplicatePrincipalTokenWithoutDisclosure(t *testing.T) {
+	secret := testToken(1)
+	_, err := auth.NewIndex(map[string][]string{
+		"agent-a": {secret},
+		"agent-b": {secret},
+	})
+	assertSafeTokenError(t, err, "agent-b", secret)
 }
 
 func TestPrincipalContext(t *testing.T) {
@@ -107,26 +56,19 @@ func TestPrincipalContext(t *testing.T) {
 	}
 }
 
-func lookupValues(values map[string]string) auth.LookupEnv {
-	return func(name string) (string, bool) {
-		value, ok := values[name]
-		return value, ok
-	}
-}
-
 func testToken(byteValue byte) string {
 	return "rw1_" + base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{byteValue}, 32))
 }
 
-func assertSafeEnvironmentError(t *testing.T, err error, environment, secret string) {
+func assertSafeTokenError(t *testing.T, err error, identifier, secret string) {
 	t.Helper()
 	if err == nil {
-		t.Fatal("Load() returned nil error")
+		t.Fatal("NewIndex() returned nil error")
 	}
-	if !strings.Contains(err.Error(), environment) {
-		t.Fatalf("Load() error did not name %q", environment)
+	if !strings.Contains(err.Error(), identifier) {
+		t.Fatalf("NewIndex() error did not name %q", identifier)
 	}
-	if secret != "" && strings.Contains(err.Error(), secret) {
-		t.Fatal("Load() error disclosed a token")
+	if strings.Contains(err.Error(), secret) {
+		t.Fatal("NewIndex() error disclosed a token")
 	}
 }

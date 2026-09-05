@@ -12,6 +12,7 @@ providers:
     apiHost: github.com
     gitHost: github.com
     sshUser: git
+    tokenEnv: REPOWOLF_TOKEN_GITHUB
 repositories:
   sample-project:
     provider: github

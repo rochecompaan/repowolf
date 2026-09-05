@@ -82,7 +82,7 @@ git clone https://github.com/rochecompaan/repowolf.git
 cd repowolf/examples/docker
 cp .env.example .env
 chmod 0600 .env
-# Edit .env. Set GH_TOKEN and leave REPOWOLF_TOKEN_AGENT empty.
+# Edit .env. Set REPOWOLF_TOKEN_GITHUB_PUBLIC and leave REPOWOLF_TOKEN_AGENT empty.
 export REPOWOLF_REPO=rochecompaan/repowolf
 ./bootstrap.sh
 docker compose build sandbox
@@ -98,6 +98,7 @@ Run this command to prove the sandbox boundary:
 ```sh
 docker compose run --rm --entrypoint sh sandbox -c '
   test -z "${GH_TOKEN+x}"
+  test -z "${REPOWOLF_TOKEN_GITHUB_PUBLIC+x}"
   test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
   test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
   ! command -v ssh

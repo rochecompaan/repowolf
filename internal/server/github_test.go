@@ -39,6 +39,13 @@ func TestNewRegistersGitHubServiceWhenDependenciesConfigured(t *testing.T) {
 	}
 }
 
+func TestNewOmitsGitHubServiceWhenDependenciesAbsent(t *testing.T) {
+	service := testServer(t, Options{})
+	if _, ok := service.grpc.GetServiceInfo()["repowolf.v1.GitHubService"]; ok {
+		t.Fatal("GitHub service was registered")
+	}
+}
+
 func TestGitHubServiceAuthorizesExactSelectorAndCapabilityBeforeExecution(t *testing.T) {
 	snapshot := githubPolicy(t, config.IssuesRead, config.ProviderGitHub)
 	executor := &fakeGitHubExecutor{response: &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueView{IssueView: &repowolfv1.GitHubIssueViewResult{}}}}

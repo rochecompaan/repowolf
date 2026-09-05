@@ -5,6 +5,7 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -16,6 +17,7 @@ var (
 	identifier     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 	ownerName      = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})?$`)
 	repositoryName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+	giteaName      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 	sshUserName    = regexp.MustCompile(`^[a-z_][a-z0-9_-]*\$?$`)
 )
 
@@ -36,6 +38,7 @@ func (c Config) Validate() error {
 	if len(c.Providers) == 0 || len(c.Repositories) == 0 || len(c.Principals) == 0 {
 		return fmt.Errorf("providers, repositories, and principals are required")
 	}
+	legacyGitHubProviders := 0
 	for id, provider := range c.Providers {
 		if !identifier.MatchString(id) {
 			return fmt.Errorf("invalid provider id %q", id)
@@ -43,6 +46,15 @@ func (c Config) Validate() error {
 		if err := validateProvider(id, provider); err != nil {
 			return err
 		}
+		if provider.Kind == ProviderGitHub && provider.TokenEnv == "" {
+			legacyGitHubProviders++
+		}
+	}
+	if legacyGitHubProviders > 1 {
+		return fmt.Errorf("only one GitHub provider may omit tokenEnv for legacy configuration")
+	}
+	if err := validateCredentialNames(c.Principals, c.Providers); err != nil {
+		return err
 	}
 	for id, repository := range c.Repositories {
 		if !identifier.MatchString(id) {
@@ -51,6 +63,9 @@ func (c Config) Validate() error {
 		if err := validateRepository(id, repository, c.Providers); err != nil {
 			return err
 		}
+	}
+	if err := validateGiteaRepositoryCollisions(c.Repositories, c.Providers); err != nil {
+		return err
 	}
 	if err := validatePrincipals(c.Principals, c.Repositories); err != nil {
 		return err
@@ -86,8 +101,17 @@ func validateTools(tools Tools) error {
 }
 
 func validateProvider(id string, provider Provider) error {
-	if provider.Kind != ProviderGitHub {
+	switch provider.Kind {
+	case ProviderGitHub, ProviderGitea:
+	default:
 		return fmt.Errorf("provider %q has unsupported kind %q", id, provider.Kind)
+	}
+	if provider.TokenEnv == "" {
+		if provider.Kind == ProviderGitea {
+			return fmt.Errorf("provider %q requires tokenEnv", id)
+		}
+	} else if !tokenEnvName.MatchString(provider.TokenEnv) {
+		return fmt.Errorf("provider %q has invalid token environment name", id)
 	}
 	if !validHost(provider.APIHost) || !validHost(provider.GitHost) {
 		return fmt.Errorf("provider %q has invalid host", id)
@@ -102,32 +126,89 @@ func validateProvider(id string, provider Provider) error {
 }
 
 func validateRepository(id string, repository Repository, providers map[string]Provider) error {
-	if _, ok := providers[repository.Provider]; !ok {
+	provider, ok := providers[repository.Provider]
+	if !ok {
 		return fmt.Errorf("repository %q references undefined provider %q", id, repository.Provider)
 	}
-	if !ownerName.MatchString(repository.Owner) || !repositoryName.MatchString(repository.Name) {
+	if provider.Kind == ProviderGitea {
+		if !validGiteaName(repository.Owner) || !validGiteaName(repository.Name) || strings.HasSuffix(repository.Name, ".git") {
+			return fmt.Errorf("repository %q has invalid owner or name", id)
+		}
+	} else if !ownerName.MatchString(repository.Owner) || !repositoryName.MatchString(repository.Name) {
 		return fmt.Errorf("repository %q has invalid owner or name", id)
 	}
 	return validatePushPolicy(id, repository.Git)
 }
 
+func validGiteaName(value string) bool {
+	return giteaName.MatchString(value) && value != "." && value != ".."
+}
+
+func validateCredentialNames(principals map[string]Principal, providers map[string]Provider) error {
+	owners := make(map[string]string)
+	for _, id := range sortedIDs(principals) {
+		for _, name := range principals[id].TokenEnvs {
+			if !tokenEnvName.MatchString(name) {
+				return fmt.Errorf("principal %q has invalid token environment name", id)
+			}
+			if err := addCredentialName(owners, name, fmt.Sprintf("principal %q", id)); err != nil {
+				return err
+			}
+		}
+	}
+	for _, id := range sortedIDs(providers) {
+		name := providers[id].TokenEnv
+		if name == "" {
+			continue
+		}
+		if err := addCredentialName(owners, name, fmt.Sprintf("provider %q", id)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addCredentialName(owners map[string]string, name, owner string) error {
+	if previous, exists := owners[name]; exists {
+		return fmt.Errorf("%s and %s duplicate token environment %q", previous, owner, name)
+	}
+	owners[name] = owner
+	return nil
+}
+
+func validateGiteaRepositoryCollisions(repositories map[string]Repository, providers map[string]Provider) error {
+	ids := sortedIDs(repositories)
+	slugs := make(map[string]string)
+	for _, id := range ids {
+		repository := repositories[id]
+		if providers[repository.Provider].Kind != ProviderGitea {
+			continue
+		}
+		key := strings.ToLower(repository.Owner) + "/" + strings.ToLower(repository.Name)
+		if previous, exists := slugs[key]; exists {
+			return fmt.Errorf("repositories %q and %q have colliding Gitea repository slug", previous, id)
+		}
+		slugs[key] = id
+	}
+	return nil
+}
+
+func sortedIDs[T any](values map[string]T) []string {
+	ids := make([]string, 0, len(values))
+	for id := range values {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 func validatePrincipals(principals map[string]Principal, repositories map[string]Repository) error {
-	tokenEnvs := make(map[string]string)
 	for id, principal := range principals {
 		if !identifier.MatchString(id) {
 			return fmt.Errorf("invalid principal id %q", id)
 		}
 		if len(principal.TokenEnvs) == 0 || len(principal.Grants) == 0 {
 			return fmt.Errorf("principal %q requires tokenEnvs and grants", id)
-		}
-		for _, tokenEnv := range principal.TokenEnvs {
-			if !tokenEnvName.MatchString(tokenEnv) {
-				return fmt.Errorf("principal %q has invalid token environment name", id)
-			}
-			if previous, exists := tokenEnvs[tokenEnv]; exists {
-				return fmt.Errorf("principals %q and %q duplicate token environment %q", previous, id, tokenEnv)
-			}
-			tokenEnvs[tokenEnv] = id
 		}
 		grantedRepositories := make(map[string]struct{}, len(principal.Grants))
 		for index, grant := range principal.Grants {

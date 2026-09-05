@@ -5,41 +5,90 @@ import (
 	"testing"
 )
 
-func TestProviderEnvironmentRemovesExactTokensAndInternalControls(t *testing.T) {
+func TestTokenFreeEnvironmentRemovesTokensAndControls(t *testing.T) {
 	base := []string{
 		"PATH=/bin",
-		"GH_TOKEN=provider-auth=preserved\nbyte-for-byte",
-		"REPOWOLF_TOKEN_AGENT=service-secret",
+		"SSH_AUTH_SOCK=/run/agent.sock",
+		"GIT_PROTOCOL=version=2",
+		"REPOWOLF_TOKEN_AGENT=principal-secret",
+		"REPOWOLF_TOKEN_GITHUB=provider-secret",
 		"REPOWOLF_INTERNAL=control",
-		"XREPOWOLF_INTERNAL=ordinary",
-		"REPOWOLF=ordinary",
-		"EMPTY=",
+		"GH_TOKEN=ambient-gh",
+		"GH_HOST=ambient-host",
+		"GITHUB_TOKEN=ambient-github",
+		"EXACT_SECRET=excluded",
+		"NO_COLOR=0",
+		"SAFE=value=with=equals",
 		"MALFORMED",
-		"GH_TOKEN_SUFFIX=ordinary",
 	}
-	got := ProviderEnvironment(base, []string{"REPOWOLF_TOKEN_AGENT"})
+
+	got := TokenFreeEnvironment(base, []string{"REPOWOLF_TOKEN_AGENT", "REPOWOLF_TOKEN_GITHUB", "EXACT_SECRET"})
 	want := []string{
 		"PATH=/bin",
-		"GH_TOKEN=provider-auth=preserved\nbyte-for-byte",
-		"XREPOWOLF_INTERNAL=ordinary",
-		"REPOWOLF=ordinary",
-		"EMPTY=",
+		"SSH_AUTH_SOCK=/run/agent.sock",
+		"GIT_PROTOCOL=version=2",
+		"NO_COLOR=0",
+		"SAFE=value=with=equals",
 		"MALFORMED",
-		"GH_TOKEN_SUFFIX=ordinary",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("environment = %#v, want %#v", got, want)
 	}
-	base[0] = "changed"
+}
+
+func TestTokenFreeEnvironmentCopiesInput(t *testing.T) {
+	base := []string{"PATH=/bin"}
+	got := TokenFreeEnvironment(base, nil)
+
+	base[0] = "PATH=/changed"
 	if got[0] != "PATH=/bin" {
 		t.Fatal("result aliases input")
 	}
 }
 
-func TestProviderEnvironmentParsesNameAtFirstEquals(t *testing.T) {
-	got := ProviderEnvironment([]string{"TOKEN=value=TOKEN", "OTHER=TOKEN=value"}, []string{"TOKEN"})
-	want := []string{"OTHER=TOKEN=value"}
+func TestGitHubEnvironmentAppendsGitHubControls(t *testing.T) {
+	tokenFree := TokenFreeEnvironment([]string{
+		"PATH=/bin",
+		"NO_COLOR=0",
+		"SAFE=value=with=equals",
+		"MALFORMED",
+	}, nil)
+
+	got := GitHubEnvironment(tokenFree, "provider-secret")
+	want := []string{
+		"PATH=/bin",
+		"SAFE=value=with=equals",
+		"MALFORMED",
+		"GH_TOKEN=provider-secret",
+		"GH_PROMPT_DISABLED=1",
+		"GH_NO_UPDATE_NOTIFIER=1",
+		"NO_COLOR=1",
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("environment = %#v, want %#v", got, want)
 	}
+}
+
+func TestGitHubEnvironmentCopiesInputAndOutput(t *testing.T) {
+	tokenFree := []string{"PATH=/bin"}
+	first := GitHubEnvironment(tokenFree, "first-secret")
+	second := GitHubEnvironment(tokenFree, "second-secret")
+
+	tokenFree[0] = "PATH=/changed"
+	first[0] = "PATH=/first-changed"
+	if second[0] != "PATH=/bin" {
+		t.Fatal("GitHub environments alias an input or output")
+	}
+	if contains(first, "GH_TOKEN=second-secret") || contains(second, "GH_TOKEN=first-secret") {
+		t.Fatal("GitHub environments contain another environment's token")
+	}
+}
+
+func contains(environment []string, entry string) bool {
+	for _, candidate := range environment {
+		if candidate == entry {
+			return true
+		}
+	}
+	return false
 }

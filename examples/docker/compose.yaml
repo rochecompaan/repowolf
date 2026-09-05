@@ -5,7 +5,7 @@ services:
     image: ${REPOWOLF_IMAGE:-ghcr.io/rochecompaan/repowolf:v0.1.0}
     command: serve --config /etc/repowolf/repowolf.yaml
     environment:
-      GH_TOKEN: ${GH_TOKEN:?copy .env.example to .env and set GH_TOKEN}
+      REPOWOLF_TOKEN_GITHUB_PUBLIC: ${REPOWOLF_TOKEN_GITHUB_PUBLIC:?copy .env.example to .env and set REPOWOLF_TOKEN_GITHUB_PUBLIC}
       REPOWOLF_TOKEN_AGENT: ${REPOWOLF_TOKEN_AGENT:?run ./bootstrap.sh first}
     volumes:
       - ./state/config.yaml:/etc/repowolf/repowolf.yaml:ro

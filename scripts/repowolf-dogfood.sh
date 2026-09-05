@@ -40,6 +40,7 @@ providers:
     gitHost: github.com
     sshUser: git
     sshPort: 22
+    tokenEnv: REPOWOLF_TOKEN_GITHUB_PUBLIC
 repositories:
   repowolf:
     provider: github-public
@@ -115,12 +116,12 @@ status() {
 serve() {
   local state
   state=$(state_dir)
-  GH_TOKEN=$(real_gh_token)
-  if [ -z "$GH_TOKEN" ]; then
+  REPOWOLF_TOKEN_GITHUB_PUBLIC=$(real_gh_token)
+  if [ -z "$REPOWOLF_TOKEN_GITHUB_PUBLIC" ]; then
     echo "repowolf-dogfood: $(real_gh) auth token returned empty; cannot start broker" >&2
     return 1
   fi
-  export GH_TOKEN
+  export REPOWOLF_TOKEN_GITHUB_PUBLIC
   REPOWOLF_TOKEN_AGENT=$(cat "$state/token")
   export REPOWOLF_TOKEN_AGENT
   exec repowolf serve --config "$state/config.yaml"

@@ -74,7 +74,15 @@ func TestStartServerRetriesAddressCollision(t *testing.T) {
 	server, err := startServer(t, ServerOptions{
 		Binary: binaries.Service, PolicyPath: filepath.Join(repository, "integration/testdata/policy.yaml"),
 		Certificate: certificate, GHPath: provider, SSHPath: ssh,
-		Environment: []string{"REPOWOLF_TOKEN_AGENT=rw1_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"},
+		Environment: []string{
+			"REPOWOLF_TOKEN_AGENT=rw1_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+			"REPOWOLF_TOKEN_GITHUB=test-provider-token",
+			"REPOWOLF_TOKEN_GITEA=test-gitea-provider-token",
+			"GH_TOKEN=ambient-gh-must-be-removed",
+			"GITHUB_TOKEN=ambient-github-must-be-removed",
+			"SSH_AUTH_SOCK=/run/test-agent.sock",
+			"GIT_PROTOCOL=version=2",
+		},
 	}, serverStartSettings{attempts: 2, readinessTimeout: 5 * time.Second, address: address})
 	if err != nil {
 		t.Fatal(err)

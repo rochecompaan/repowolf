@@ -6,15 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/rochecompaan/repowolf/internal/audit"
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/config"
+	"github.com/rochecompaan/repowolf/internal/credentials"
 	"github.com/rochecompaan/repowolf/internal/gitservice"
 	"github.com/rochecompaan/repowolf/internal/policy"
-	providergithub "github.com/rochecompaan/repowolf/internal/provider/github"
 	"github.com/rochecompaan/repowolf/internal/runner"
 	"github.com/rochecompaan/repowolf/internal/server"
 	"github.com/rochecompaan/repowolf/internal/tlsconfig"
@@ -24,15 +23,16 @@ const shutdownGracePeriod = 30 * time.Second
 
 // Runtime is the immutable startup snapshot used for the process lifetime.
 type Runtime struct {
-	Config              config.Config
-	Tokens              *auth.Index
-	TLSConfig           *tls.Config
-	Tools               runner.Toolset
-	Policy              *policy.Snapshot
-	ProviderEnvironment []string
-	GitHub              *providergithub.Adapter
-	Git                 *gitservice.Service
-	Server              *server.Server
+	Config         config.Config
+	Tokens         *auth.Index
+	TLSConfig      *tls.Config
+	Tools          runner.Toolset
+	Policy         *policy.Snapshot
+	SSHEnvironment []string
+	GitHub         server.GitHubExecutor
+	Git            *gitservice.Service
+	Server         *server.Server
+	providers      map[string]providerInstance
 }
 
 // NewRuntime validates and pins every runtime dependency before readiness.
@@ -41,15 +41,16 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load configuration: %w", err)
 	}
-	tokens, err := auth.Load(cfg.Principals, os.LookupEnv)
+	credentialSnapshot, err := credentials.Load(cfg, os.LookupEnv)
 	if err != nil {
-		return nil, fmt.Errorf("load authentication: %w", err)
+		return nil, fmt.Errorf("load credentials: %w", err)
 	}
 	tlsConfig, err := tlsconfig.LoadServer(cfg.TLS.Certificate, cfg.TLS.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("load TLS: %w", err)
 	}
-	tools, err := runner.ResolveTools(cfg.Tools, runner.LookPath)
+	githubRequired := hasProviderKind(cfg.Providers, config.ProviderGitHub)
+	tools, err := runner.ResolveTools(cfg.Tools, githubRequired, runner.LookPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve tools: %w", err)
 	}
@@ -57,46 +58,63 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build policy: %w", err)
 	}
-	providerEnvironment := runner.ProviderEnvironment(os.Environ(), tokenEnvironmentNames(cfg))
+	tokenFreeEnvironment := runner.TokenFreeEnvironment(os.Environ(), credentialSnapshot.EnvironmentNames())
 	providerRunner := &runner.Runner{}
-	githubAdapter, err := providergithub.New(providergithub.AdapterOptions{
-		Path: tools.GH, Environment: providerEnvironment,
-		Timeout: cfg.Limits.OperationTimeout, Caller: providerRunner,
-	})
+	instances, err := buildProviderInstances(cfg, credentialSnapshot, tools, tokenFreeEnvironment, providerRunner)
 	if err != nil {
-		return nil, fmt.Errorf("create GitHub adapter: %w", err)
+		return nil, fmt.Errorf("create provider instances: %w", err)
 	}
+	githubExecutor := buildGitHubExecutor(instances)
+
 	auditWriter := audit.NewWriter(auditOutput)
 	git, err := gitservice.New(gitservice.Options{
-		Policy: policySnapshot, SSHPath: tools.SSH, Environment: providerEnvironment,
+		Policy: policySnapshot, SSHPath: tools.SSH, Environment: tokenFreeEnvironment,
 		Limits: cfg.Limits, Runner: providerRunner, Audit: auditWriter,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create Git service: %w", err)
 	}
+	var githubPolicy *policy.Snapshot
+	var githubService server.GitHubExecutor
+	if githubExecutor != nil {
+		githubPolicy = policySnapshot
+		githubService = githubExecutor
+	}
 	grpcServer, err := server.New(server.Options{
-		TLSConfig: tlsConfig, Tokens: tokens, AuditWriter: auditWriter,
+		TLSConfig: tlsConfig, Tokens: credentialSnapshot.AuthIndex(), AuditWriter: auditWriter,
 		MaxConcurrentRequests:             cfg.Limits.MaxConcurrentRequests,
 		MaxConcurrentRequestsPerPrincipal: cfg.Limits.MaxConcurrentRequestsPerPrincipal,
-		OperationTimeout:                  cfg.Limits.OperationTimeout, GracePeriod: shutdownGracePeriod,
-		Policy: policySnapshot, GitHub: githubAdapter, Git: git, Cleanup: providerRunner.Cleanup,
+		OperationTimeout:                  cfg.Limits.OperationTimeout,
+		GracePeriod:                       shutdownGracePeriod,
+		Policy:                            githubPolicy,
+		GitHub:                            githubService,
+		Git:                               git,
+		Cleanup:                           providerRunner.Cleanup,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create server: %w", err)
 	}
 	runtime := &Runtime{
-		Config: cfg, Tokens: tokens, TLSConfig: tlsConfig, Tools: tools,
-		Policy: policySnapshot, ProviderEnvironment: providerEnvironment, GitHub: githubAdapter, Git: git, Server: grpcServer,
+		Config:         cfg,
+		Tokens:         credentialSnapshot.AuthIndex(),
+		TLSConfig:      tlsConfig,
+		Tools:          tools,
+		Policy:         policySnapshot,
+		SSHEnvironment: append([]string(nil), tokenFreeEnvironment...),
+		GitHub:         githubService,
+		Git:            git,
+		Server:         grpcServer,
+		providers:      instances,
 	}
 	runtime.Server.MarkReady()
 	return runtime, nil
 }
 
-func tokenEnvironmentNames(cfg config.Config) []string {
-	names := make([]string, 0)
-	for _, principal := range cfg.Principals {
-		names = append(names, principal.TokenEnvs...)
+func hasProviderKind(providers map[string]config.Provider, kind config.ProviderKind) bool {
+	for _, provider := range providers {
+		if provider.Kind == kind {
+			return true
+		}
 	}
-	sort.Strings(names)
-	return names
+	return false
 }

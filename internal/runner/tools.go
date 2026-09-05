@@ -19,13 +19,17 @@ type Toolset struct {
 }
 
 // ResolveTools resolves and validates the provider executables once at startup.
-func ResolveTools(tools config.Tools, lookPath func(string) (string, error)) (Toolset, error) {
+func ResolveTools(tools config.Tools, githubRequired bool, lookPath func(string) (string, error)) (Toolset, error) {
 	if lookPath == nil {
 		return Toolset{}, fmt.Errorf("resolve provider tools: lookup is unavailable")
 	}
-	gh, err := resolveTool("gh", tools.GH, lookPath)
-	if err != nil {
-		return Toolset{}, err
+	gh := ""
+	if githubRequired {
+		var err error
+		gh, err = resolveTool("gh", tools.GH, lookPath)
+		if err != nil {
+			return Toolset{}, err
+		}
 	}
 	ssh, err := resolveTool("ssh", tools.SSH, lookPath)
 	if err != nil {

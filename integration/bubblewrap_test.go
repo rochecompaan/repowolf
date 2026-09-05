@@ -106,32 +106,20 @@ func TestBubblewrapClientClosureSupportsRestrictedGHAndRealGit(t *testing.T) {
 		"refs/heads/feature/task15", "refs/heads/main",
 	)...)
 	assertAuditInvocations(t, string(mustRead(fixture.server.AuditPath)), expected, auditLeakMarkers())
-	for name, environment := range map[string]string{
-		"provider": string(mustRead(fixture.providerEnvironment)),
-		"ssh":      string(mustRead(fixture.sshEnvironment)),
-	} {
-		if !providerEnvironmentContractMet(environment) {
-			t.Errorf("%s environment contract mismatch", name)
-		}
-	}
+	assertProviderEnvironment(t, string(mustRead(fixture.providerEnvironment)))
+	assertSSHEnvironment(t, string(mustRead(fixture.sshEnvironment)))
 	assertNoFixtureProcess(t, fixture.root)
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
 }
 
 func jailOutputLeaksSensitiveMarker(stdout, stderr []byte) bool {
 	output := string(stdout) + string(stderr)
-	for _, marker := range []string{agentToken, providerCredential, environmentMarker, providerStderr, sshStderrMarker} {
+	for _, marker := range []string{agentToken, providerCredential, giteaCredential, ambientGHCredential, ambientGitHubCredential, environmentMarker, providerStderr, sshStderrMarker} {
 		if strings.Contains(output, marker) {
 			return true
 		}
 	}
 	return false
-}
-
-func providerEnvironmentContractMet(environment string) bool {
-	return strings.Contains(environment, "GH_TOKEN="+providerCredential) &&
-		strings.Contains(environment, "REPOWOLF_TOKEN_AGENT=unset") &&
-		strings.Contains(environment, "REPOWOLF_ENDPOINT=unset")
 }
 
 type jailFixture struct {
@@ -153,8 +141,10 @@ func prepareJailFixture(t *testing.T) *jailFixture {
 		Binary: fixture.binaries.Service, PolicyPath: filepath.Join("testdata", "policy.yaml"), Certificate: certificate,
 		GHPath: filepath.Join(fixture.root, "bin", "fake-provider"), SSHPath: filepath.Join(fixture.root, "bin", "fake-ssh"),
 		Environment: []string{
-			"REPOWOLF_TOKEN_AGENT=" + agentToken, "GH_TOKEN=" + providerCredential,
-			"TASK13_ENV_MARKER=" + environmentMarker,
+			"REPOWOLF_TOKEN_AGENT=" + agentToken, "REPOWOLF_TOKEN_GITHUB=" + providerCredential,
+			"REPOWOLF_TOKEN_GITEA=" + giteaCredential, "GH_TOKEN=" + ambientGHCredential,
+			"GITHUB_TOKEN=" + ambientGitHubCredential, "SSH_AUTH_SOCK=/run/test-agent.sock",
+			"GIT_PROTOCOL=version=2",
 			"FAKE_PROVIDER_ARGV_LOG=" + providerArgv, "FAKE_PROVIDER_STDIN_LOG=" + providerInput,
 			"FAKE_PROVIDER_OUTPUT_LOG=" + providerOutput, "FAKE_PROVIDER_ENV_LOG=" + providerEnvironment,
 			"FAKE_PROVIDER_STDERR_LOG=" + providerStderrPath, "FAKE_PROVIDER_STDERR=" + providerStderr,

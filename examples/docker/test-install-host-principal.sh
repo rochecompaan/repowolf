@@ -140,7 +140,7 @@ expect_status() {
 
 setup_case
 mkdir -p "$case_root/run/repowolf"
-printf 'GH_TOKEN=provider-marker\n' > "$case_root/run/repowolf/service.env"
+printf 'REPOWOLF_TOKEN_GITHUB_PUBLIC=provider-marker\n' > "$case_root/run/repowolf/service.env"
 service_before=$(sha256sum "$case_root/run/repowolf/service.env")
 run_principal >"$case_root/success.out" 2>&1
 test "$(cat "$case_root/var/lib/repowolf/token")" = \
@@ -261,7 +261,7 @@ fi
 setup_case
 mkdir -p "$case_root/var/lib/repowolf" "$case_root/run/repowolf"
 touch "$case_root/var/lib/repowolf/.state-marker" "$case_root/run/repowolf/.runtime-marker"
-printf 'GH_TOKEN=provider-marker\n' > "$case_root/run/repowolf/service.env"
+printf 'REPOWOLF_TOKEN_GITHUB_PUBLIC=provider-marker\n' > "$case_root/run/repowolf/service.env"
 service_before=$(sha256sum "$case_root/run/repowolf/service.env")
 expect_status 1 publication-cleanup run_principal FAIL_ENV_PUBLISH=1
 test ! -e "$case_root/var/lib/repowolf/token"

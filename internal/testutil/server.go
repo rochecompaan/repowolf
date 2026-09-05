@@ -62,6 +62,22 @@ func StartServer(t testing.TB, options ServerOptions) *Server {
 	return server
 }
 
+// StartServerFailure starts one service attempt and returns its sanitized startup failure.
+func StartServerFailure(t testing.TB, options ServerOptions) string {
+	t.Helper()
+	server, err := startServer(t, options, serverStartSettings{
+		attempts:         1,
+		readinessTimeout: defaultReadinessTimeout,
+		address:          reserveAddress,
+	})
+	if err != nil {
+		return err.Error()
+	}
+	_ = server.stop()
+	t.Fatal("service reached readiness")
+	return ""
+}
+
 func startServer(t testing.TB, options ServerOptions, settings serverStartSettings) (*Server, error) {
 	t.Helper()
 	if settings.attempts <= 0 || settings.readinessTimeout <= 0 || settings.address == nil {

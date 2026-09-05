@@ -12,9 +12,16 @@ set -eu
   printf 'END\n'
 } >> "$FAKE_SSH_ARGV_LOG"
 {
-  printf 'GH_TOKEN=%s\n' "${GH_TOKEN-}"
-  printf 'TASK13_ENV_MARKER=%s\n' "${TASK13_ENV_MARKER-}"
+  printf 'GH_TOKEN=%s\n' "${GH_TOKEN-unset}"
+  printf 'GITHUB_TOKEN=%s\n' "${GITHUB_TOKEN-unset}"
+  printf 'GH_PROMPT_DISABLED=%s\n' "${GH_PROMPT_DISABLED-unset}"
+  printf 'GH_NO_UPDATE_NOTIFIER=%s\n' "${GH_NO_UPDATE_NOTIFIER-unset}"
+  printf 'NO_COLOR=%s\n' "${NO_COLOR-unset}"
   printf 'REPOWOLF_TOKEN_AGENT=%s\n' "${REPOWOLF_TOKEN_AGENT-unset}"
+  printf 'REPOWOLF_TOKEN_GITHUB=%s\n' "${REPOWOLF_TOKEN_GITHUB-unset}"
+  printf 'REPOWOLF_TOKEN_GITEA=%s\n' "${REPOWOLF_TOKEN_GITEA-unset}"
+  printf 'SSH_AUTH_SOCK=%s\n' "${SSH_AUTH_SOCK-unset}"
+  printf 'GIT_PROTOCOL=%s\n' "${GIT_PROTOCOL-unset}"
   printf 'REPOWOLF_ENDPOINT=%s\n' "${REPOWOLF_ENDPOINT-unset}"
   printf 'FAKE_GIT_UPLOAD_PACK=%s\n' "$FAKE_GIT_UPLOAD_PACK"
   printf 'FAKE_GIT_RECEIVE_PACK=%s\n' "$FAKE_GIT_RECEIVE_PACK"

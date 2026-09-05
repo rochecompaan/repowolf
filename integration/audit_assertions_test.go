@@ -183,7 +183,7 @@ func gitAuditExpectations(allowedRef, deniedRef string) [][]auditExpectation {
 }
 
 func auditLeakMarkers() []string {
-	return []string{agentToken, providerCredential, providerStderr, environmentMarker, issueBodyMarker, commentMarker, argvMarker, packMarker, sshStderrMarker}
+	return []string{agentToken, providerCredential, giteaCredential, ambientGHCredential, ambientGitHubCredential, providerStderr, environmentMarker, issueBodyMarker, commentMarker, argvMarker, packMarker, sshStderrMarker}
 }
 
 func TestParseAuditRecordsRejectsUnsafeJSONL(t *testing.T) {

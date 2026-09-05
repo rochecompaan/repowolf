@@ -22,11 +22,26 @@ type rawConfig struct {
 }
 
 type rawProvider struct {
-	Kind    ProviderKind `yaml:"kind"`
-	APIHost string       `yaml:"apiHost"`
-	GitHost string       `yaml:"gitHost"`
-	SSHUser string       `yaml:"sshUser"`
-	SSHPort *uint16      `yaml:"sshPort"`
+	Kind     ProviderKind      `yaml:"kind"`
+	APIHost  string            `yaml:"apiHost"`
+	GitHost  string            `yaml:"gitHost"`
+	SSHUser  string            `yaml:"sshUser"`
+	SSHPort  *uint16           `yaml:"sshPort"`
+	TokenEnv rawOptionalString `yaml:"tokenEnv"`
+}
+
+type rawOptionalString struct {
+	present bool
+	value   string
+}
+
+func (value *rawOptionalString) UnmarshalYAML(node *yaml.Node) error {
+	value.present = true
+	if node.Tag != "!!str" {
+		return fmt.Errorf("tokenEnv must be a string")
+	}
+	value.value = node.Value
+	return nil
 }
 
 type rawRepository struct {
@@ -107,6 +122,9 @@ func rejectDuplicateKeys(data []byte) error {
 	if err := duplicateKey(&document); err != nil {
 		return err
 	}
+	if err := rejectNullProviderTokenEnv(&document); err != nil {
+		return err
+	}
 	var second yaml.Node
 	if err := decoder.Decode(&second); err != io.EOF {
 		if err != nil {
@@ -115,6 +133,88 @@ func rejectDuplicateKeys(data []byte) error {
 		return fmt.Errorf("configuration contains more than one YAML document")
 	}
 	return nil
+}
+
+func rejectNullProviderTokenEnv(document *yaml.Node) error {
+	// yaml.v3 bypasses UnmarshalYAML for explicit null values.
+	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	root := document.Content[0]
+	providers, ok := effectiveMappingValue(root, "providers", make(map[*yaml.Node]struct{}))
+	if !ok {
+		return nil
+	}
+	for providers != nil && providers.Kind == yaml.AliasNode {
+		providers = providers.Alias
+	}
+	if providers == nil || providers.Kind != yaml.MappingNode {
+		return nil
+	}
+	for providerIndex := 1; providerIndex < len(providers.Content); providerIndex += 2 {
+		value, ok := effectiveMappingValue(providers.Content[providerIndex], "tokenEnv", make(map[*yaml.Node]struct{}))
+		if ok && isNullNode(value) {
+			return fmt.Errorf("tokenEnv must be a string")
+		}
+	}
+	return nil
+}
+
+func effectiveMappingValue(node *yaml.Node, field string, active map[*yaml.Node]struct{}) (*yaml.Node, bool) {
+	if node == nil {
+		return nil, false
+	}
+	if _, exists := active[node]; exists {
+		return nil, false
+	}
+	active[node] = struct{}{}
+	defer delete(active, node)
+
+	if node.Kind == yaml.AliasNode {
+		return effectiveMappingValue(node.Alias, field, active)
+	}
+	if node.Kind != yaml.MappingNode {
+		return nil, false
+	}
+
+	var merge *yaml.Node
+	for index := 0; index < len(node.Content); index += 2 {
+		key, value := node.Content[index], node.Content[index+1]
+		if isMergeKey(key) {
+			merge = value
+			continue
+		}
+		if key.Value == field {
+			return value, true
+		}
+	}
+	return mergedMappingValue(merge, field, active)
+}
+
+func mergedMappingValue(node *yaml.Node, field string, active map[*yaml.Node]struct{}) (*yaml.Node, bool) {
+	if node == nil {
+		return nil, false
+	}
+	if node.Kind != yaml.SequenceNode {
+		return effectiveMappingValue(node, field, active)
+	}
+	for _, mapping := range node.Content {
+		if value, ok := effectiveMappingValue(mapping, field, active); ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func isMergeKey(node *yaml.Node) bool {
+	return node.Kind == yaml.ScalarNode && node.Value == "<<" && (node.Tag == "" || node.Tag == "!" || node.ShortTag() == "!!merge")
+}
+
+func isNullNode(node *yaml.Node) bool {
+	for node != nil && node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	return node != nil && node.ShortTag() == "!!null"
 }
 
 func duplicateKey(node *yaml.Node) error {
@@ -168,11 +268,14 @@ func normalize(raw rawConfig) (Config, error) {
 		Limits:       defaultLimits(),
 	}
 	for id, provider := range raw.Providers {
+		if provider.TokenEnv.present && provider.TokenEnv.value == "" {
+			return Config{}, fmt.Errorf("provider %q tokenEnv must not be empty", id)
+		}
 		port := uint16(defaultSSHPort)
 		if provider.SSHPort != nil {
 			port = *provider.SSHPort
 		}
-		cfg.Providers[id] = Provider{Kind: provider.Kind, APIHost: provider.APIHost, GitHost: provider.GitHost, SSHUser: provider.SSHUser, SSHPort: port}
+		cfg.Providers[id] = Provider{Kind: provider.Kind, APIHost: provider.APIHost, GitHost: provider.GitHost, SSHUser: provider.SSHUser, SSHPort: port, TokenEnv: provider.TokenEnv.value}
 	}
 	for id, repository := range raw.Repositories {
 		policy := defaultPushPolicy()

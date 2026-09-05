@@ -159,7 +159,7 @@ trap - EXIT INT TERM
 cat <<EOF
 bootstrap: state written to $STATE_DIR (keep token/private keys private)
 next:
-  1. set GH_TOKEN in $ENV_FILE (see .env.example)
+  1. set REPOWOLF_TOKEN_GITHUB_PUBLIC in $ENV_FILE (see .env.example)
   2. docker compose -f $SCRIPT_DIR/compose.yaml up -d repowolf
   3. $SCRIPT_DIR/wait-for-broker.sh 127.0.0.1 8443 30
   4. docker compose -f $SCRIPT_DIR/compose.yaml run --rm sandbox gh repo view --repo $REPOWOLF_REPO
