@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/rochecompaan/repowolf/internal/auth"
-	"github.com/rochecompaan/repowolf/internal/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -111,9 +110,7 @@ func testIndex(t *testing.T) (string, *auth.Index) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	index, err := auth.Load(map[string]config.Principal{"agent": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT"}}}, func(name string) (string, bool) {
-		return token, name == "REPOWOLF_TOKEN_AGENT"
-	})
+	index, err := auth.NewIndex(map[string][]string{"agent": {token}})
 	if err != nil {
 		t.Fatal(err)
 	}

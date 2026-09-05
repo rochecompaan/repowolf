@@ -21,7 +21,6 @@ import (
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/audit"
 	"github.com/rochecompaan/repowolf/internal/auth"
-	"github.com/rochecompaan/repowolf/internal/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -352,7 +351,7 @@ func serverTestIndex(t *testing.T) (string, *auth.Index) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	index, err := auth.Load(map[string]config.Principal{"agent": {TokenEnvs: []string{"REPOWOLF_TOKEN_AGENT"}}}, func(string) (string, bool) { return token, true })
+	index, err := auth.NewIndex(map[string][]string{"agent": {token}})
 	if err != nil {
 		t.Fatal(err)
 	}

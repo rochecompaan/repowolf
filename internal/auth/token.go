@@ -24,6 +24,12 @@ func Generate(random io.Reader) (string, error) {
 	return tokenPrefix + base64.RawURLEncoding.EncodeToString(entropy), nil
 }
 
+// ValidToken reports whether token has the canonical RepoWolf principal-token form.
+func ValidToken(token string) bool {
+	_, ok := tokenDigest(token)
+	return ok
+}
+
 func tokenDigest(token string) ([sha256.Size]byte, bool) {
 	if len(token) != tokenLength || !strings.HasPrefix(token, tokenPrefix) {
 		return [sha256.Size]byte{}, false

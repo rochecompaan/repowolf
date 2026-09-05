@@ -21,8 +21,8 @@ type entry struct {
 	principal string
 }
 
-// Load reads configured token environment variables into an authentication index.
-func Load(principals map[string]config.Principal, lookup LookupEnv) (*Index, error) {
+// NewIndex creates an authentication index from principal token values.
+func NewIndex(principals map[string][]string) (*Index, error) {
 	ids := make([]string, 0, len(principals))
 	for id := range principals {
 		ids = append(ids, id)
@@ -31,6 +31,31 @@ func Load(principals map[string]config.Principal, lookup LookupEnv) (*Index, err
 
 	index := &Index{}
 	seen := make(map[[32]byte]string)
+	for _, id := range ids {
+		for _, value := range principals[id] {
+			digest, ok := tokenDigest(value)
+			if !ok {
+				return nil, fmt.Errorf("principal %q has an invalid token", id)
+			}
+			if previous, duplicate := seen[digest]; duplicate {
+				return nil, fmt.Errorf("principal %q duplicates token for principal %q", id, previous)
+			}
+			seen[digest] = id
+			index.entries = append(index.entries, entry{digest: digest, principal: id})
+		}
+	}
+	return index, nil
+}
+
+// Load reads configured token environment variables into an authentication index.
+func Load(principals map[string]config.Principal, lookup LookupEnv) (*Index, error) {
+	ids := make([]string, 0, len(principals))
+	for id := range principals {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	values := make(map[string][]string, len(principals))
 	for _, id := range ids {
 		for _, name := range principals[id].TokenEnvs {
 			value, found := "", false
@@ -43,19 +68,10 @@ func Load(principals map[string]config.Principal, lookup LookupEnv) (*Index, err
 			if value == "" {
 				return nil, fmt.Errorf("token environment %q is empty", name)
 			}
-
-			digest, ok := tokenDigest(value)
-			if !ok {
-				return nil, fmt.Errorf("token environment %q has an invalid token", name)
-			}
-			if previous, duplicate := seen[digest]; duplicate {
-				return nil, fmt.Errorf("token environment %q duplicates token environment %q", name, previous)
-			}
-			seen[digest] = name
-			index.entries = append(index.entries, entry{digest: digest, principal: id})
+			values[id] = append(values[id], value)
 		}
 	}
-	return index, nil
+	return NewIndex(values)
 }
 
 // Authenticate returns the principal associated with token, when configured.
