@@ -13,6 +13,14 @@ providers:
     gitHost: github.com
     sshUser: git
     sshPort: 22
+    tokenEnv: REPOWOLF_TOKEN_GITHUB
+  gitea-lab:
+    kind: gitea
+    apiHost: gitea.example.invalid
+    gitHost: gitea.example.invalid
+    sshUser: git
+    sshPort: 2222
+    tokenEnv: REPOWOLF_TOKEN_GITEA
 repositories:
   alpha:
     provider: github
@@ -28,6 +36,13 @@ repositories:
     provider: github
     owner: beta
     name: repo
+    git:
+      denyDeletes: true
+      maxRefUpdates: 16
+  gitea-unused:
+    provider: gitea-lab
+    owner: alpha
+    name: gitea-repo
     git:
       denyDeletes: true
       maxRefUpdates: 16

@@ -13,13 +13,16 @@ import (
 )
 
 const (
-	agentToken         = "rw1_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
-	providerCredential = "task13-provider-credential-marker"
-	providerStderr     = "task13-provider-stderr-marker"
-	environmentMarker  = "task13-provider-environment-marker"
-	argvMarker         = "task13-api-argv-marker.invalid"
-	issueBodyMarker    = "task13-issue-body-marker"
-	commentMarker      = "task13-comment-marker"
+	agentToken              = "rw1_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+	providerCredential      = "task13-provider-credential-marker"
+	giteaCredential         = "gitea-provider-credential-marker"
+	ambientGHCredential     = "ambient-gh-must-be-removed"
+	ambientGitHubCredential = "ambient-github-must-be-removed"
+	providerStderr          = "task13-provider-stderr-marker"
+	environmentMarker       = "task13-provider-environment-marker"
+	argvMarker              = "task13-api-argv-marker.invalid"
+	issueBodyMarker         = "task13-issue-body-marker"
+	commentMarker           = "task13-comment-marker"
 )
 
 func TestRestrictedGHUsesLoopbackTLSBearerAuthAndTypedProviderCommands(t *testing.T) {
@@ -53,6 +56,7 @@ func TestRestrictedGHUsesLoopbackTLSBearerAuthAndTypedProviderCommands(t *testin
 
 	fixture.stop(t)
 	assertProviderContract(t, fixture.providerArgv(), fixture.providerInput())
+	assertProviderEnvironment(t, string(mustRead(fixture.providerEnvPath)))
 	assertSafeAudit(t, fixture.audit())
 	assertNoFixtureProcess(t, fixture.root)
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
@@ -89,8 +93,12 @@ func newFixture(t *testing.T) *fixture {
 		GHPath: provider, SSHPath: ssh,
 		Environment: []string{
 			"REPOWOLF_TOKEN_AGENT=" + agentToken,
-			"GH_TOKEN=" + providerCredential,
-			"TASK13_ENV_MARKER=" + environmentMarker,
+			"REPOWOLF_TOKEN_GITHUB=" + providerCredential,
+			"REPOWOLF_TOKEN_GITEA=" + giteaCredential,
+			"GH_TOKEN=" + ambientGHCredential,
+			"GITHUB_TOKEN=" + ambientGitHubCredential,
+			"SSH_AUTH_SOCK=/run/test-agent.sock",
+			"GIT_PROTOCOL=version=2",
 			"FAKE_PROVIDER_ARGV_LOG=" + providerArgvPath,
 			"FAKE_PROVIDER_STDIN_LOG=" + providerInputPath,
 			"FAKE_PROVIDER_OUTPUT_LOG=" + providerOutputPath,
@@ -190,6 +198,24 @@ func assertProviderContract(t *testing.T, argv, input string) {
 	wantInput := [][]string{{`{"assignees":null,"body":"` + issueBodyMarker + `","labels":null,"title":"typed write"}`}, {`{"body":"` + commentMarker + `"}`}}
 	if got := recordedBlocks(input); !reflect.DeepEqual(got, wantInput) {
 		t.Errorf("provider input = %#v, want %#v", got, wantInput)
+	}
+}
+
+func assertProviderEnvironment(t *testing.T, environment string) {
+	t.Helper()
+	for _, expected := range []string{
+		"GH_TOKEN=" + providerCredential,
+		"GITHUB_TOKEN=unset",
+		"GH_PROMPT_DISABLED=1",
+		"GH_NO_UPDATE_NOTIFIER=1",
+		"NO_COLOR=1",
+		"REPOWOLF_TOKEN_AGENT=unset",
+		"REPOWOLF_TOKEN_GITHUB=unset",
+		"REPOWOLF_TOKEN_GITEA=unset",
+	} {
+		if !strings.Contains(environment, expected) {
+			t.Errorf("provider environment missing %q in %q", expected, environment)
+		}
 	}
 }
 

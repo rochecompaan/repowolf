@@ -101,11 +101,29 @@ func TestRealGitDefaultPortStreamsOfflineAndDeniesDefaultMainBeforeProviderInput
 			t.Errorf("fake SSH argv missing %q in %q", expected, argv)
 		}
 	}
+	assertSSHEnvironment(t, string(mustRead(fixture.sshEnvironment)))
 	assertAuditInvocations(t, string(mustRead(fixture.server.AuditPath)), gitAuditExpectations(
 		"refs/heads/feature/task13", "refs/heads/main",
 	), auditLeakMarkers())
 	assertNoFixtureProcess(t, fixture.root)
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
+}
+
+func assertSSHEnvironment(t *testing.T, environment string) {
+	t.Helper()
+	for _, expected := range []string{
+		"GH_TOKEN=unset",
+		"GITHUB_TOKEN=unset",
+		"REPOWOLF_TOKEN_AGENT=unset",
+		"REPOWOLF_TOKEN_GITHUB=unset",
+		"REPOWOLF_TOKEN_GITEA=unset",
+		"SSH_AUTH_SOCK=/run/test-agent.sock",
+		"GIT_PROTOCOL=version=2",
+	} {
+		if !strings.Contains(environment, expected) {
+			t.Errorf("SSH environment missing %q in %q", expected, environment)
+		}
+	}
 }
 
 type gitFixture struct {
@@ -170,8 +188,10 @@ func newGitFixture(t *testing.T) *gitFixture {
 	fixture.server = testutil.StartServer(t, testutil.ServerOptions{
 		Binary: fixture.binaries.Service, PolicyPath: filepath.Join("testdata", "policy.yaml"), Certificate: certificate, GHPath: provider, SSHPath: ssh,
 		Environment: []string{
-			"REPOWOLF_TOKEN_AGENT=" + agentToken, "GH_TOKEN=" + providerCredential,
-			"TASK13_ENV_MARKER=" + environmentMarker,
+			"REPOWOLF_TOKEN_AGENT=" + agentToken, "REPOWOLF_TOKEN_GITHUB=" + providerCredential,
+			"REPOWOLF_TOKEN_GITEA=" + giteaCredential, "GH_TOKEN=" + ambientGHCredential,
+			"GITHUB_TOKEN=" + ambientGitHubCredential, "SSH_AUTH_SOCK=/run/test-agent.sock",
+			"GIT_PROTOCOL=version=2",
 			"FAKE_SSH_REPOSITORY=" + fixture.remote, "FAKE_SSH_ARGV_LOG=" + fixture.sshArgv,
 			"FAKE_SSH_ENV_LOG=" + fixture.sshEnvironment, "FAKE_SSH_STDERR=" + sshStderrMarker,
 			"FAKE_SSH_UPLOAD_INPUT=" + fixture.uploadInput, "FAKE_SSH_RECEIVE_INPUT=" + fixture.receiveInput,
