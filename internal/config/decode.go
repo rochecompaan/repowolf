@@ -141,16 +141,20 @@ func rejectNullProviderTokenEnv(document *yaml.Node) error {
 		return nil
 	}
 	root := document.Content[0]
-	for index := 0; index < len(root.Content); index += 2 {
-		if root.Content[index].Value != "providers" || root.Content[index+1].Kind != yaml.MappingNode {
-			continue
-		}
-		providers := root.Content[index+1]
-		for providerIndex := 1; providerIndex < len(providers.Content); providerIndex += 2 {
-			value, ok := effectiveMappingValue(providers.Content[providerIndex], "tokenEnv", make(map[*yaml.Node]struct{}))
-			if ok && isNullNode(value) {
-				return fmt.Errorf("tokenEnv must be a string")
-			}
+	providers, ok := effectiveMappingValue(root, "providers", make(map[*yaml.Node]struct{}))
+	if !ok {
+		return nil
+	}
+	for providers != nil && providers.Kind == yaml.AliasNode {
+		providers = providers.Alias
+	}
+	if providers == nil || providers.Kind != yaml.MappingNode {
+		return nil
+	}
+	for providerIndex := 1; providerIndex < len(providers.Content); providerIndex += 2 {
+		value, ok := effectiveMappingValue(providers.Content[providerIndex], "tokenEnv", make(map[*yaml.Node]struct{}))
+		if ok && isNullNode(value) {
+			return fmt.Errorf("tokenEnv must be a string")
 		}
 	}
 	return nil

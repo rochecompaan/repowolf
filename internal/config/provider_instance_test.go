@@ -85,6 +85,39 @@ func TestDecodeDistinguishesMergedProviderTokenEnvironmentStates(t *testing.T) {
 	}
 }
 
+func TestDecodeDistinguishesRootMergedProviderTokenEnvironmentStates(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		yaml      string
+		wantToken string
+		wantError bool
+	}{
+		{name: "root merged null", yaml: rootMergedProviderYAML("null", ""), wantError: true},
+		{name: "root merged shorthand null", yaml: rootMergedProviderYAML("~", ""), wantError: true},
+		{name: "root merged string", yaml: rootMergedProviderYAML("REPOWOLF_TOKEN_GITHUB", ""), wantToken: "REPOWOLF_TOKEN_GITHUB"},
+		{name: "root merged alias null", yaml: rootAliasMergedProviderYAML("null"), wantError: true},
+		{name: "root merged alias string", yaml: rootAliasMergedProviderYAML("REPOWOLF_TOKEN_GITHUB"), wantToken: "REPOWOLF_TOKEN_GITHUB"},
+		{name: "direct providers override root merged null", yaml: rootMergedProviderYAML("null", "REPOWOLF_TOKEN_GITHUB"), wantToken: "REPOWOLF_TOKEN_GITHUB"},
+		{name: "direct null overrides root merged providers", yaml: rootMergedProviderYAML("REPOWOLF_TOKEN_GITHUB", "null"), wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg, err := Decode(strings.NewReader(test.yaml))
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "tokenEnv") {
+					t.Fatalf("Decode() error = %v, want tokenEnv error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cfg.Providers["provider"].TokenEnv; got != test.wantToken {
+				t.Fatalf("TokenEnv = %q, want %q", got, test.wantToken)
+			}
+		})
+	}
+}
+
 func TestValidateProviderTokenEnvironmentRules(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -308,4 +341,30 @@ principals:
           - git:read
           - git:write
 `
+}
+
+func rootMergedProviderYAML(mergedValue, directValue string) string {
+	merged := providerYAML("github", "    tokenEnv: "+mergedValue+"\n")
+	yaml := "<<: &defaults\n" + indentYAML(merged, "  ")
+	if directValue == "" {
+		return yaml
+	}
+	return yaml + `providers:
+  provider:
+    kind: github
+    apiHost: github.com
+    gitHost: github.com
+    sshUser: git
+    tokenEnv: ` + directValue + `
+`
+}
+
+func rootAliasMergedProviderYAML(tokenValue string) string {
+	merged := providerYAML("github", "    tokenEnv: "+tokenValue+"\n")
+	return "tools: {}\n<<:\n  - tools: &defaults\n" + indentYAML(merged, "      ") + "  - *defaults\n"
+}
+
+func indentYAML(value, indent string) string {
+	value = strings.TrimSuffix(value, "\n")
+	return indent + strings.ReplaceAll(value, "\n", "\n"+indent) + "\n"
 }
