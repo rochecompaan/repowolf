@@ -39,6 +39,19 @@ func TestDecodeDistinguishesProviderTokenEnvironmentStates(t *testing.T) {
 	}
 }
 
+func TestDecodeRejectsAliasedNullProviderTokenEnv(t *testing.T) {
+	yaml := strings.Replace(
+		providerYAML("github", "    tokenEnv: *nullToken\n"),
+		"providers:",
+		"tools:\n  gh: &nullToken null\nproviders:",
+		1,
+	)
+	_, err := Decode(strings.NewReader(yaml))
+	if err == nil || !strings.Contains(err.Error(), "tokenEnv") {
+		t.Fatalf("Decode() error = %v, want tokenEnv error", err)
+	}
+}
+
 func TestValidateProviderTokenEnvironmentRules(t *testing.T) {
 	for _, test := range []struct {
 		name      string

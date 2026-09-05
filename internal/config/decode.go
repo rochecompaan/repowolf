@@ -152,7 +152,12 @@ func rejectNullProviderTokenEnv(document *yaml.Node) error {
 				continue
 			}
 			for fieldIndex := 0; fieldIndex < len(provider.Content); fieldIndex += 2 {
-				if provider.Content[fieldIndex].Value == "tokenEnv" && provider.Content[fieldIndex+1].Tag == "!!null" {
+				value := provider.Content[fieldIndex+1]
+				isNull := value.Tag == "!!null"
+				if value.Kind == yaml.AliasNode && value.Alias != nil {
+					isNull = value.Alias.Tag == "!!null"
+				}
+				if provider.Content[fieldIndex].Value == "tokenEnv" && isNull {
 					return fmt.Errorf("tokenEnv must be a string")
 				}
 			}
