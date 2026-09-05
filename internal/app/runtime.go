@@ -49,7 +49,7 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load TLS: %w", err)
 	}
-	tools, err := runner.ResolveTools(cfg.Tools, runner.LookPath)
+	tools, err := runner.ResolveTools(cfg.Tools, true, runner.LookPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve tools: %w", err)
 	}
