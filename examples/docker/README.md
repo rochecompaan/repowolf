@@ -122,6 +122,28 @@ REPOWOLF_REPO=rochecompaan/repowolf ./install-host-broker.sh
 ./install-host-principal.sh
 ```
 
+For a fresh install, create the broker-only provider environment file. Paste a
+GitHub token from your secret manager at the prompt. Do not put the token on a
+command line or print the file contents.
+
+```bash
+sudo bash -c '
+  set -eu
+  umask 077
+  if [ -e /run/repowolf/service.env ]; then
+    echo "service.env already exists; update it through your secret manager" >&2
+    exit 1
+  fi
+  read -r -s -p "GitHub token: " token
+  printf "\n"
+  printf "REPOWOLF_TOKEN_GITHUB_PUBLIC=%s\n" "$token" > /run/repowolf/service.env
+  unset token
+'
+```
+
+This creates `/run/repowolf/service.env` as a root-only file. If you set
+`REPOWOLF_RUNTIME_DIR`, use its `service.env` path instead.
+
 Override `REPOWOLF_REPO` to select the repository. Override `REPOWOLF_LISTEN`
 to select the bind address. Override `REPOWOLF_GH_PATH` and
 `REPOWOLF_SSH_PATH` to select the broker tools. Override
