@@ -8,3 +8,7 @@ devenv.local.yaml
 # direnv
 !.envrc
 .direnv
+.patchmill/pi-agent
+.patchmill/runs
+.patchmill/triage-runs
+.pi/todos/

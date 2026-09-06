@@ -1,0 +1,281 @@
+{
+  "pack": {
+    "name": "patchmill-recommended",
+    "version": "2026.07.2",
+    "source": {
+      "type": "github-release",
+      "repository": "obra/superpowers",
+      "tag": "v6.3.0",
+      "tarballUrl": "https://github.com/obra/superpowers/archive/refs/tags/v6.3.0.tar.gz"
+    }
+  },
+  "installedAt": "2026-09-06T08:35:01.415Z",
+  "skillDir": ".patchmill/skills",
+  "metadataFile": "patchmill-skill-pack.json",
+  "files": [
+    {
+      "path": ".patchmill/skills/brainstorming/SKILL.md",
+      "sha256": "74edf03ea6d24ef53db48677b93558d14a979bdf052ca3f57ecdca0c66791608"
+    },
+    {
+      "path": ".patchmill/skills/brainstorming/scripts/frame-template.html",
+      "sha256": "6a8a4e58bd6a44b904e2e3c57de774481d909204597e1498de53f1b2fecc4c4e"
+    },
+    {
+      "path": ".patchmill/skills/brainstorming/scripts/helper.js",
+      "sha256": "43c6d69954a46ec34a2a262bcc62a9a7e83e839c739f199cb72646d397c686e3"
+    },
+    {
+      "path": ".patchmill/skills/brainstorming/scripts/server.cjs",
+      "sha256": "2d2961ea8d11f56c5f4c3a1a68d22709efa5d7601a2246d8c880774e7e9e8412"
+    },
+    {
+      "path": ".patchmill/skills/brainstorming/scripts/start-server.sh",
+      "sha256": "cd91a7d8939e9371728d7a18f9d358968f40ad0d7f2c0f425de2b040fd5b24dd"
+    },
+    {
+      "path": ".patchmill/skills/brainstorming/scripts/stop-server.sh",
+      "sha256": "7f60f895ffe722971583a3be4873865aa01435464810ad435c49713ad3af9669"
+    },
+    {
+      "path": ".patchmill/skills/brainstorming/spec-document-reviewer-prompt.md",
+      "sha256": "95a0a195de9d984be2fffa95bab16fc8c563bc296a9cfc5e9c29cb3ece0d7457"
+    },
+    {
+      "path": ".patchmill/skills/brainstorming/visual-companion.md",
+      "sha256": "77eb44a4ec3408bb3dafb872288ecd94beb8cf21da4f2bafa54fd08255d7808b"
+    },
+    {
+      "path": ".patchmill/skills/dispatching-parallel-agents/SKILL.md",
+      "sha256": "1968923066f3b707eb01d1992cdf4c42284c3855f70253b9cd5000ff45fca13c"
+    },
+    {
+      "path": ".patchmill/skills/executing-plans/SKILL.md",
+      "sha256": "c4c3d8b628c51114cd165fb8246fe02744cd8be180032328391252e653028d9b"
+    },
+    {
+      "path": ".patchmill/skills/finishing-a-development-branch/SKILL.md",
+      "sha256": "8db5a922b242dd4e1bf824cb91c13b3e8d8e8a86d6ceaf7f0774eb9cce909d65"
+    },
+    {
+      "path": ".patchmill/skills/module-size/SKILL.md",
+      "sha256": "272283f16620955524b0d979af64767e2a58af4ec73ab3fba2c2444d9a009c0e"
+    },
+    {
+      "path": ".patchmill/skills/patchmill-issue-triage/SKILL.md",
+      "sha256": "477ab6ed5d976695e7829d45388c6b45f7e3befa978e084cd5eb9ab4f0371f84"
+    },
+    {
+      "path": ".patchmill/skills/patchmill-planning/SKILL.md",
+      "sha256": "f96979dcb298f940a8219844fc392965a56fabeba5b4742f9dd5978d2aa8d7ba"
+    },
+    {
+      "path": ".patchmill/skills/patchmill-visual-evidence/SKILL.md",
+      "sha256": "6c4fd9d169891dbc57194a28221bd5747d4d6f1efce8facda26d642edc4eb788"
+    },
+    {
+      "path": ".patchmill/skills/patchmill-visual-evidence/scripts/capture-visual-evidence.cjs",
+      "sha256": "74623e4fbc64989d16020ca9a647755216749ec1cdceca2094f74a81da094876"
+    },
+    {
+      "path": ".patchmill/skills/receiving-code-review/SKILL.md",
+      "sha256": "091df1629510af1b92fc4abd6f96732ebedb4cb2c0f3457e8f2740b0504a2438"
+    },
+    {
+      "path": ".patchmill/skills/requesting-code-review/SKILL.md",
+      "sha256": "d71cc01ba56d2325cf8af5f7c11837819b63ecd57de0bfdb812f7f3ff7751df8"
+    },
+    {
+      "path": ".patchmill/skills/requesting-code-review/code-reviewer.md",
+      "sha256": "5eca5fcfd48a50e0a526ce5ffd64bf625d6b81bb46d11795274dae451fe6ffd4"
+    },
+    {
+      "path": ".patchmill/skills/single-subagent-dev-with-codex-and-thermo-reviews/SKILL.md",
+      "sha256": "fcdd5f487b0e51b12449f22324a7758d7d1b7a1e89c999c856668cfe3bb03a03"
+    },
+    {
+      "path": ".patchmill/skills/single-subagent-dev-with-codex-and-thermo-reviews/prompts/implement-plan.md",
+      "sha256": "86d5a737650d9b3bcb929e6aacf14389d1dc2bd003f10559130b2ba8a6f51828"
+    },
+    {
+      "path": ".patchmill/skills/subagent-dev-with-codex-and-thermo-reviews/SKILL.md",
+      "sha256": "8f56de76517fec17f55b7ffcdc534bb45ba8b7b64a1dc15dbf2388f136d3d835"
+    },
+    {
+      "path": ".patchmill/skills/subagent-dev-with-codex-and-thermo-reviews/prompts/final-review.md",
+      "sha256": "8fc9f11c9a55dba64842e634ffc658c8c0fec00ec9896023987a7b05b3d78fdf"
+    },
+    {
+      "path": ".patchmill/skills/subagent-dev-with-codex-and-thermo-reviews/prompts/final-validation-review.md",
+      "sha256": "1e1a8f5ede275d8684896361c3708a4295285f8d50f0570c06b0c54c9a2e41e2"
+    },
+    {
+      "path": ".patchmill/skills/subagent-dev-with-codex-and-thermo-reviews/prompts/fix-pr-checks.md",
+      "sha256": "2922c730896b7b46181dd266863cc33d03185059464456e92a01a7629e077a79"
+    },
+    {
+      "path": ".patchmill/skills/subagent-dev-with-codex-and-thermo-reviews/prompts/fix-review-findings.md",
+      "sha256": "5fc263f3d353360bb59967f3e0b3f84bdc5b6aec819a3c6bd8e2cb786ffa856a"
+    },
+    {
+      "path": ".patchmill/skills/subagent-dev-with-codex-and-thermo-reviews/rubrics/armin-codex-review-prompt.md",
+      "sha256": "1b5a1a3499bfa1b844ec4ffe425d9c5ee022b27d2edbfa9c8f4025bb1f74071e"
+    },
+    {
+      "path": ".patchmill/skills/subagent-dev-with-codex-and-thermo-reviews/rubrics/cursor-thermo-nuclear-code-quality-review.md",
+      "sha256": "b9df382a7afe8d16418bb5a996e17d99c6095f39ccaefd6222eb9fcc824daabe"
+    },
+    {
+      "path": ".patchmill/skills/subagent-dev-with-validation-and-pr-checks/SKILL.md",
+      "sha256": "9aa542ce2f7c6fb32427765c9e5ad6c410dca4ebb58c487675754175be9dd881"
+    },
+    {
+      "path": ".patchmill/skills/subagent-driven-development/SKILL.md",
+      "sha256": "8dd1b8e698edec3700c6d89517dbe96febd3bacd3f6ea21c1a3569c62ea104b5"
+    },
+    {
+      "path": ".patchmill/skills/subagent-driven-development/implementer-prompt.md",
+      "sha256": "81dd9d5a3fb0b09b96b5829f03b9796842f3199ef7591d1ba1c2db2a515f64d0"
+    },
+    {
+      "path": ".patchmill/skills/subagent-driven-development/re-review-prompt.md",
+      "sha256": "db0d5849478bc79cbde97b9b2cf0e58b50be8b8ed18464b0252c2bf27b6440a6"
+    },
+    {
+      "path": ".patchmill/skills/subagent-driven-development/scripts/review-package",
+      "sha256": "0f6a9701102b1c4843b485afaedefc016d1e2909d9e1e542bf33dfebcbcf457d"
+    },
+    {
+      "path": ".patchmill/skills/subagent-driven-development/scripts/sdd-workspace",
+      "sha256": "017a8349cf67d3ae1d54ac72c6172c88f812572aba2d1877366ed26c9fd41781"
+    },
+    {
+      "path": ".patchmill/skills/subagent-driven-development/scripts/task-brief",
+      "sha256": "94f9da5ba45c26e5d41e05532336e68fc944f18f55f8aeb83aef0032dc226825"
+    },
+    {
+      "path": ".patchmill/skills/subagent-driven-development/task-reviewer-prompt.md",
+      "sha256": "eea23e33ec570c3041f40e9569fa711d61b8029f9eecf908345138aa1c6e61ab"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/CREATION-LOG.md",
+      "sha256": "c24733a5b1821bd6bed1fc950261f0b9f4e90097e0bbb96459d8179713730789"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/SKILL.md",
+      "sha256": "808fc5717aa88ad65efff312b11c186294d3e6ee301afb584e2f86599b137787"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/condition-based-waiting-example.ts",
+      "sha256": "40ae5ebe497fdf310200e43fe986552546d0a22837c0d39e855db1cfd33eb88e"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/condition-based-waiting.md",
+      "sha256": "e89fec8400d6cd50f43407cec9fab50976ba4d55d0ec2eb51c0bd68036b54c26"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/defense-in-depth.md",
+      "sha256": "1e175fb86fc357e58c6aebf5441e481e1b7868b4380c0456b63a17eefbd18ba7"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/find-polluter.sh",
+      "sha256": "ab54b9acc449eb77b173e994c483a511126bb0f128feb6c0335c24fe23bcae4b"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/root-cause-tracing.md",
+      "sha256": "6b0622269e098ca1399e123e553fd385f0b6412d88ef0e9c4f5a8ea9cf1cec7b"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/test-academic.md",
+      "sha256": "fe2ba480d78ac0d686dc025f41c2a32a43d642bf533f91b0c6053a04d35d6486"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/test-pressure-1.md",
+      "sha256": "0b6a915db0054577819834c79be9eb614e97bddba10d73768e1fbe91cfed048a"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/test-pressure-2.md",
+      "sha256": "b2030aeffba07050e8ad573ddf87486457c4a016a786bb326235bebd856f2016"
+    },
+    {
+      "path": ".patchmill/skills/systematic-debugging/test-pressure-3.md",
+      "sha256": "96b50a52e2c7989c9cf20fb752c47c1e9a3a70dc362f8f7989f8f5b64dac7708"
+    },
+    {
+      "path": ".patchmill/skills/test-driven-development/SKILL.md",
+      "sha256": "bf1b8216e523851a411e91d429a7c1c2a173e79d88957bc78e348218d50edd54"
+    },
+    {
+      "path": ".patchmill/skills/test-driven-development/writing-good-tests.md",
+      "sha256": "51471c853306ff92ca8bb41dcaea05f31c0e46b03651f8f3c99754b7172f4ae1"
+    },
+    {
+      "path": ".patchmill/skills/using-git-worktrees/SKILL.md",
+      "sha256": "8cfb86f121269e8f7f12361e6795c4f6738828340e28964c9229d365666c9edd"
+    },
+    {
+      "path": ".patchmill/skills/using-superpowers/SKILL.md",
+      "sha256": "30f2ab78e20ddc27ee7158ae8d4a2abe161c360981c7cc3548070913142d3dc3"
+    },
+    {
+      "path": ".patchmill/skills/using-superpowers/references/antigravity-tools.md",
+      "sha256": "4880f6de3da4e32f9659ebe7a72b9e0ebfff04e028c2ed96173f86d0387a04c0"
+    },
+    {
+      "path": ".patchmill/skills/using-superpowers/references/codex-tools.md",
+      "sha256": "1a38ad9b188c393052f58d95657a1c35ea6aafc8b5a27f198f3922912f70bbe7"
+    },
+    {
+      "path": ".patchmill/skills/using-superpowers/references/gemini-tools.md",
+      "sha256": "62b9157bcb0ee3c6784e3d0da0798ddfa5872f9e0c34bea48f3079dabea71965"
+    },
+    {
+      "path": ".patchmill/skills/using-superpowers/references/hermes-tools.md",
+      "sha256": "e2185c976a3c87503910e05e2aea58cc89bc8e569bb624b93df9958ac47a9190"
+    },
+    {
+      "path": ".patchmill/skills/using-superpowers/references/pi-tools.md",
+      "sha256": "703dbc83d23ecab9c6f388460c38abc482e9dee2fe6772a8c7a255152ad3a4d5"
+    },
+    {
+      "path": ".patchmill/skills/verification-before-completion/SKILL.md",
+      "sha256": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3"
+    },
+    {
+      "path": ".patchmill/skills/writing-plans/SKILL.md",
+      "sha256": "48508f44bbfd7d24b029fbf3a314f3cd14c9615599059366e922f47b8dc08cf2"
+    },
+    {
+      "path": ".patchmill/skills/writing-plans/plan-document-reviewer-prompt.md",
+      "sha256": "aa728b96aad603c8be28875a4305637f6c984aa81ffcadcb13e743202fa2a0c7"
+    },
+    {
+      "path": ".patchmill/skills/writing-skills/SKILL.md",
+      "sha256": "d34db5c8aed6a4e0440132bd0613aace70a693ec7819d5637ad77481d8e10d1b"
+    },
+    {
+      "path": ".patchmill/skills/writing-skills/anthropic-best-practices.md",
+      "sha256": "217629b356c09c9bd11017c9788e8fc654ca1b32c92d4a51cd490e16dd65e59a"
+    },
+    {
+      "path": ".patchmill/skills/writing-skills/examples/CLAUDE_MD_TESTING.md",
+      "sha256": "0b379a3415e185d3c434b3ad283d8aa132f3022c2a4f210f168865b5986bcef0"
+    },
+    {
+      "path": ".patchmill/skills/writing-skills/graphviz-conventions.dot",
+      "sha256": "e2890a593c91370e384b42f2f67b1a6232c9e69dddea7891a0c1c46d7b20b694"
+    },
+    {
+      "path": ".patchmill/skills/writing-skills/persuasion-principles.md",
+      "sha256": "a51bc9bf75189ea73a27b3fb504a2fdfdb966fb1f7f1cdf03203230a216ccc03"
+    },
+    {
+      "path": ".patchmill/skills/writing-skills/render-graphs.js",
+      "sha256": "fe5acd7c544eaf76c3352cd0576b772ca7741126bbe4d3e1a4e0d3172851432d"
+    },
+    {
+      "path": ".patchmill/skills/writing-skills/testing-skills-with-subagents.md",
+      "sha256": "c711346852c911b24a84aa161e0cff06a4cd7f4e2fa9e9c0a266cead5afcbade"
+    }
+  ]
+}
