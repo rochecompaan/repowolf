@@ -66,15 +66,17 @@ func (adapter *Adapter) executeIssueList(ctx context.Context, repository policy.
 		if err != nil {
 			return nil, err
 		}
+		if page.endCursor != nil {
+			if _, exists := seenCursors[*page.endCursor]; exists {
+				return nil, providerResponse(nil, "issues cursor")
+			}
+		}
 		records = append(records, page.records...)
 		if !page.hasNextPage {
 			return boundedIssueListResponse(records)
 		}
 		if len(page.records) == 0 || page.endCursor == nil || *page.endCursor == "" {
 			return nil, providerResponse(nil, "issues pagination")
-		}
-		if _, exists := seenCursors[*page.endCursor]; exists {
-			return nil, providerResponse(nil, "issues cursor")
 		}
 		seenCursors[*page.endCursor] = struct{}{}
 		cursor = page.endCursor
