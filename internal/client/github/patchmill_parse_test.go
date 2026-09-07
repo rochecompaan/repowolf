@@ -66,6 +66,7 @@ func TestParsePatchmillRepositoryView(t *testing.T) {
 		t.Fatalf("fields = %#v", parsed.fields)
 	}
 	for _, args := range [][]string{
+		{"repo", "view", ""},
 		{"repo", "view", "owner/name", "extra"},
 		{"repo", "view", "owner/name", "--repo", "other/repo"},
 	} {

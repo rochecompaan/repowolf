@@ -14,6 +14,9 @@ func parseRepository(args []string) (any, parsedFlags, operationKind, error) {
 	arguments := args[1:]
 	var slug string
 	if len(arguments) != 0 && !strings.HasPrefix(arguments[0], "--") {
+		if arguments[0] == "" {
+			return nil, parsedFlags{}, operationUnknown, fmt.Errorf("repository slug cannot be empty")
+		}
 		slug, arguments = arguments[0], arguments[1:]
 	}
 	flags, err := parseFlags(arguments, operationFlags())
