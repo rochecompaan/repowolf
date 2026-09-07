@@ -67,11 +67,12 @@ func TestPatchmillOversizedLabelChangesRejectBeforeSeenAllocation(t *testing.T) 
 	const labelCount = 100_001
 	labels := numberedLabels(labelCount)
 	request := &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeRequest{Number: 1, AddLabels: labels}}}
+	if err := ValidateGitHubRequest(request); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("ValidateGitHubRequest() = %v, want ErrInvalidRequest", err)
+	}
 	result := testing.Benchmark(func(b *testing.B) {
 		for range b.N {
-			if err := ValidateGitHubRequest(request); !errors.Is(err, ErrInvalidRequest) {
-				b.Fatalf("ValidateGitHubRequest() = %v, want ErrInvalidRequest", err)
-			}
+			_ = ValidateGitHubRequest(request)
 		}
 	})
 
