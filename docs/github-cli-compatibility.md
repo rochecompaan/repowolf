@@ -1,9 +1,9 @@
 # GitHub CLI compatibility
 
 RepoWolf provides a restricted `gh` client for approved command forms. This
-reference describes the Patchmill 0.20.0 forms that RepoWolf accepts.
+reference lists the GitHub CLI commands that RepoWolf accepts.
 
-## Patchmill command matrix
+## Supported command matrix
 
 Use the command forms in this table exactly. Brackets mark optional values.
 Commands that use a repository hint get it from the caller working directory.

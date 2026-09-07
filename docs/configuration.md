@@ -84,7 +84,7 @@ principals:
 
 ### GitHub capability command families
 
-For the exact Patchmill command forms and resource bounds, read the
+For the exact supported command forms and resource bounds, read the
 [GitHub CLI compatibility reference](github-cli-compatibility.md).
 
 | Capability | Command families it permits |
