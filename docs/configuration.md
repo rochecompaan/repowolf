@@ -91,7 +91,7 @@ For the exact Patchmill command forms and resource bounds, read the
 | --- | --- |
 | `repository:read` | `gh auth status`, `gh api user --jq .login`, and `gh repo view` |
 | `issues:read` | `gh issue list`, `gh issue view`, and `gh label list` |
-| `issues:write` | `gh issue create`, `gh issue edit`, `gh issue comment`, and `gh label create` |
+| `issues:write` | `gh issue create`, `gh issue edit`, `gh issue comment`, `gh issue close`, `gh issue reopen`, and `gh label create` |
 | `pull_requests:read` | `gh pr list` and `gh pr view` |
 | `pull_requests:write` | `gh pr create`, `gh pr edit`, `gh pr comment`, `gh pr close`, `gh pr reopen`, and `gh pr ready` |
 | `actions:read` | `gh run list` and `gh run view` |
