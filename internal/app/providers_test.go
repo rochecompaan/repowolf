@@ -116,8 +116,8 @@ func providerInstanceFixture(t *testing.T) (config.Config, *credentials.Snapshot
 	t.Helper()
 	cfg := config.Config{
 		Providers: map[string]config.Provider{
-			"github-a":  {Kind: config.ProviderGitHub, APIHost: "github-a.invalid", TokenEnv: "REPOWOLF_TOKEN_GITHUB_A"},
-			"github-b":  {Kind: config.ProviderGitHub, APIHost: "github-b.invalid"},
+			"github-a":  {Kind: config.ProviderGitHub, APIHost: "safe.invalid", GitHost: "safe.invalid", SSHUser: "git", SSHPort: 22, TokenEnv: "REPOWOLF_TOKEN_GITHUB_A"},
+			"github-b":  {Kind: config.ProviderGitHub, APIHost: "safe.invalid", GitHost: "safe.invalid", SSHUser: "git", SSHPort: 22},
 			"gitea-lab": {Kind: config.ProviderGitea, APIHost: "gitea.invalid", TokenEnv: "REPOWOLF_TOKEN_GITEA"},
 		},
 		Limits: config.Limits{OperationTimeout: time.Minute},
@@ -138,7 +138,7 @@ func providerInstanceFixture(t *testing.T) (config.Config, *credentials.Snapshot
 }
 
 func repositoryViewResult() runner.Result {
-	return runner.Result{Stdout: []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","private":false,"html_url":"https://safe.invalid/repo","default_branch":"main"}`)}
+	return runner.Result{Stdout: []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","private":false,"html_url":"https://safe.invalid/owner/repo","ssh_url":"git@safe.invalid:owner/repo.git","default_branch":"main"}`)}
 }
 
 func assertGitHubCommandEnvironment(t *testing.T, command runner.Command, token string) {
