@@ -37,7 +37,7 @@ func repository() policy.ResolvedRepository {
 	return policy.ResolvedRepository{
 		ID:         "project",
 		Repository: config.Repository{Owner: "owner", Name: "repo"},
-		Provider:   config.Provider{Kind: config.ProviderGitHub, APIHost: "github.example"},
+		Provider:   config.Provider{Kind: config.ProviderGitHub, APIHost: "github.example", GitHost: "github.example", SSHUser: "git", SSHPort: 22},
 	}
 }
 
@@ -260,7 +260,7 @@ func TestAllTypedOperationsExecuteWithoutClientCommandSurface(t *testing.T) {
 	comment := `{"id":1,"user":{"login":"me"},"body":"body","html_url":"https://safe.example/c","created_at":"c","updated_at":"u"}`
 	run := `{"id":1,"name":"CI","display_title":"run","status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"0123456789012345678901234567890123456789","html_url":"https://safe.example/r","created_at":"c","updated_at":"u","run_attempt":1,"jobs_url":"https://safe.example/jobs"}`
 	responses := map[string][]string{
-		"repository_view": {`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","ssh_url":"git@github.com:owner/repo.git","default_branch":"main"}`},
+		"repository_view": {`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://github.example/owner/repo","ssh_url":"git@github.example:owner/repo.git","default_branch":"main"}`},
 		"issue_list":      {`{"items":[]}`}, "issue_view": {issue}, "issue_create": {issue},
 		"issue_edit": {`{"number":1}`, issue}, "issue_comment": {`{"number":1}`, comment}, "issue_close": {`{"number":1}`, issue}, "issue_reopen": {`{"number":1}`, issue},
 		"pull_list": {`[]`}, "pull_view": {pull}, "pull_create": {pull}, "pull_edit": {pull}, "pull_comment": {pull, comment}, "pull_close": {pull}, "pull_reopen": {pull},
@@ -298,7 +298,7 @@ func TestAllTypedOperationsExecuteWithoutClientCommandSurface(t *testing.T) {
 }
 
 func TestAdapterRejectsRawOutputAboveCommandBudget(t *testing.T) {
-	raw := []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","ssh_url":"git@github.com:owner/repo.git","default_branch":"main"}`)
+	raw := []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://github.example/owner/repo","ssh_url":"git@github.example:owner/repo.git","default_branch":"main"}`)
 	padding := miB - len(raw) + 1
 	raw = append(raw, make([]byte, padding)...)
 	for i := len(raw) - padding; i < len(raw); i++ {
@@ -316,7 +316,7 @@ func TestAdapterRejectsRawOutputAboveCommandBudget(t *testing.T) {
 }
 
 func TestAdapterBuildsPinnedRepositoryCommandAndNormalizes(t *testing.T) {
-	caller := &fakeCaller{results: []runner.Result{{Stdout: []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","ssh_url":"git@github.com:owner/repo.git","default_branch":"main"}`)}}}
+	caller := &fakeCaller{results: []runner.Result{{Stdout: []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://github.example/owner/repo","ssh_url":"git@github.example:owner/repo.git","default_branch":"main"}`)}}}
 	adapter, err := New(AdapterOptions{Path: "/pinned/gh", Environment: []string{"GH_TOKEN=secret"}, Timeout: time.Minute, Caller: caller})
 	if err != nil {
 		t.Fatal(err)

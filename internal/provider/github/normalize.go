@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"unicode/utf8"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	"github.com/rochecompaan/repowolf/internal/policy"
 )
 
 type apiUser struct {
@@ -106,6 +108,14 @@ type apiCheckRun struct {
 }
 
 func normalize(request *repowolfv1.GitHubRequest, kind string, raw []byte) (*repowolfv1.GitHubResponse, error) {
+	return normalizeWithRepository(nil, request, kind, raw)
+}
+
+func normalizeResolved(repository policy.ResolvedRepository, request *repowolfv1.GitHubRequest, kind string, raw []byte) (*repowolfv1.GitHubResponse, error) {
+	return normalizeWithRepository(&repository, request, kind, raw)
+}
+
+func normalizeWithRepository(repository *policy.ResolvedRepository, request *repowolfv1.GitHubRequest, kind string, raw []byte) (*repowolfv1.GitHubResponse, error) {
 	switch kind {
 	case "current_user":
 		var value apiUser
@@ -122,13 +132,25 @@ func normalize(request *repowolfv1.GitHubRequest, kind string, raw []byte) (*rep
 		if err != nil {
 			return nil, err
 		}
+		if repository != nil {
+			if err := repositoryTarget(record, *repository); err != nil {
+				return nil, err
+			}
+		}
 		return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewResult{Repository: record}}}, nil
 	case "label_create":
 		var value apiLabel
 		if err := decode(raw, &value); err != nil {
 			return nil, err
 		}
-		return labelCreateResponse(value)
+		response, err := labelCreateResponse(value)
+		if err != nil {
+			return nil, err
+		}
+		if operation := request.GetLabelCreate(); operation == nil || response.GetLabelCreate().GetLabel().GetName() != operation.Name {
+			return nil, providerResponse(nil, "label name")
+		}
+		return response, nil
 	case "issue_list":
 		var value struct {
 			Items *[]apiIssue `json:"items"`
@@ -219,6 +241,9 @@ func normalize(request *repowolfv1.GitHubRequest, kind string, raw []byte) (*rep
 }
 
 func decode(raw []byte, value any) error {
+	if !utf8.Valid(raw) {
+		return providerResponse(nil, "json")
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	if err := decoder.Decode(value); err != nil {
 		return providerResponse(err, "json")

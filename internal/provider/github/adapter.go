@@ -83,7 +83,7 @@ func (adapter *Adapter) Execute(ctx context.Context, repository policy.ResolvedR
 			return nil, err
 		}
 	}
-	response, err := normalize(request, plan.normalize, result.Stdout)
+	response, err := normalizeResolved(repository, request, plan.normalize, result.Stdout)
 	if err != nil {
 		return nil, err
 	}
