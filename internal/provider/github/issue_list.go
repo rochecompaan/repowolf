@@ -10,6 +10,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const maximumIssueListPages = 11
+
 const issueListQuery = `query IssueList($owner: String!, $name: String!, $states: [IssueState!], $cursor: String, $first: Int!) {
   repository(owner: $owner, name: $name) {
     issues(first: $first, after: $cursor, states: $states, orderBy: {field: CREATED_AT, direction: ASC}) {
@@ -48,8 +50,13 @@ func (adapter *Adapter) executeIssueList(ctx context.Context, repository policy.
 	records := make([]*repowolfv1.GitHubIssueRecord, 0, operation.Limit)
 	var cursor *string
 	seenCursors := make(map[string]struct{})
+	pages := 0
 
 	for len(records) < int(operation.Limit) {
+		if pages >= maximumIssueListPages {
+			return nil, runner.ErrOutputLimit
+		}
+		pages++
 		first := min(100, int(operation.Limit)-len(records))
 		raw, err := adapter.callIssueGraphQLPage(ctx, repository, operation.State, cursor, first, budget)
 		if err != nil {

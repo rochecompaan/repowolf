@@ -200,6 +200,27 @@ func TestIssueListAggregateBudget(t *testing.T) {
 	}
 }
 
+// Regression: short nonempty pages with advancing cursors must not cause more
+// than 11 provider calls for one issue-list operation.
+func TestIssueListRejectsTwelfthPage(t *testing.T) {
+	caller := &scriptedIssueListCaller{call: func(_ context.Context, _ runner.Command, index int) (runner.Result, error) {
+		if index >= 11 {
+			return runner.Result{}, errors.New("twelfth provider call")
+		}
+		return runner.Result{Stdout: graphQLIssuePage(
+			[]map[string]any{graphQLIssueFixture(index + 1)}, true, fmt.Sprintf("cursor-%d", index+1),
+		)}, nil
+	}}
+
+	response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueListRequest(repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_OPEN, 1_001))
+	if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
+		t.Fatalf("Execute() = %#v, %v, want output limit", response, err)
+	}
+	if len(caller.commands) != 11 {
+		t.Fatalf("commands = %d, want 11", len(caller.commands))
+	}
+}
+
 // Regression: cancellation between GraphQL pages must prevent another
 // provider invocation.
 func TestIssueListStopsOnCancellation(t *testing.T) {
