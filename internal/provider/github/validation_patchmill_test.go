@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unsafe"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 )
@@ -63,22 +64,22 @@ func TestPatchmillRequestValidation(t *testing.T) {
 }
 
 func TestPatchmillOversizedLabelChangesRejectBeforeSeenAllocation(t *testing.T) {
-	labels := numberedLabels(101)
-	request := func(number uint64) *repowolfv1.GitHubRequest {
-		return &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeRequest{Number: number, AddLabels: labels}}}
-	}
-	allocations := testing.AllocsPerRun(100, func() {
-		if err := ValidateGitHubRequest(request(1)); !errors.Is(err, ErrInvalidRequest) {
-			t.Fatalf("ValidateGitHubRequest() = %v, want ErrInvalidRequest", err)
+	const labelCount = 100_001
+	labels := numberedLabels(labelCount)
+	request := &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeRequest{Number: 1, AddLabels: labels}}}
+	result := testing.Benchmark(func(b *testing.B) {
+		for range b.N {
+			if err := ValidateGitHubRequest(request); !errors.Is(err, ErrInvalidRequest) {
+				b.Fatalf("ValidateGitHubRequest() = %v, want ErrInvalidRequest", err)
+			}
 		}
 	})
-	baseline := testing.AllocsPerRun(100, func() {
-		if err := ValidateGitHubRequest(request(0)); !errors.Is(err, ErrInvalidRequest) {
-			t.Fatalf("ValidateGitHubRequest() = %v, want ErrInvalidRequest", err)
-		}
-	})
-	if allocations > baseline {
-		t.Fatalf("oversized label validation allocations = %v, baseline = %v", allocations, baseline)
+
+	// A seen map sized from AddLabels needs at least one string-header slot per
+	// label. Rejecting the oversized list first must stay below that lower bound.
+	seenMapLowerBound := int64(labelCount) * int64(unsafe.Sizeof(""))
+	if allocated := result.AllocedBytesPerOp(); allocated >= seenMapLowerBound {
+		t.Fatalf("oversized label validation allocated %d bytes/op, want less than seen-map lower bound %d", allocated, seenMapLowerBound)
 	}
 }
 
