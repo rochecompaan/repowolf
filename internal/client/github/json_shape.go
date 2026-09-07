@@ -9,7 +9,6 @@ func githubJSONShape(kind operationKind, value any) any {
 		}
 		result := cloneObject(object)
 		result["name"] = result["repository"]
-		delete(result, "repository")
 		return result
 	case operationIssueList:
 		issues, ok := value.([]any)

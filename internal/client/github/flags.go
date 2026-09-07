@@ -87,7 +87,7 @@ func fieldSet(names ...string) map[string]struct{} {
 }
 
 var responseFields = map[operationKind]map[string]struct{}{
-	operationRepositoryView: fieldSet("name", "owner", "nameWithOwner", "description", "private", "url", "defaultBranch", "sshUrl"),
+	operationRepositoryView: fieldSet("repository", "name", "owner", "nameWithOwner", "description", "private", "url", "defaultBranch", "sshUrl"),
 	operationIssueList:      fieldSet("number", "title", "body", "state", "author", "assignees", "labels", "url", "createdAt", "updatedAt"),
 	operationIssueView:      issueFields(true), operationIssueCreate: issueFields(false), operationIssueEdit: issueFields(false),
 	operationIssueClose: issueFields(false), operationIssueReopen: issueFields(false), operationIssueLabelChange: issueFields(false),
