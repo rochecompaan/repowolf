@@ -211,7 +211,15 @@ func decodePageLink(raw string, expected *expectedLinkTarget) (int, string, erro
 }
 
 func validExpectedLinkTarget(parsed *url.URL, query url.Values, expected *expectedLinkTarget) bool {
-	if !strings.EqualFold(parsed.Host, expected.host) || parsed.EscapedPath() != expected.path || len(query) != 2 {
+	host := expected.host
+	path := parsed.EscapedPath()
+	if strings.EqualFold(host, "github.com") {
+		host = "api.github.com"
+	} else {
+		// gh api adds this REST prefix for configured enterprise hosts.
+		path = strings.TrimPrefix(path, "/api/v3")
+	}
+	if !strings.EqualFold(parsed.Host, host) || !validLabelLinkPath(path, expected.path) || len(query) != 2 {
 		return false
 	}
 	perPage := query["per_page"]
@@ -220,6 +228,20 @@ func validExpectedLinkTarget(parsed *url.URL, query url.Values, expected *expect
 	}
 	value, err := strconv.Atoi(perPage[0])
 	return err == nil && value == expected.perPage
+}
+
+// GitHub may identify the repository by numeric ID in pagination metadata.
+// The ID is never used to construct a request or select a repository.
+func validLabelLinkPath(path, repositoryPath string) bool {
+	if path == repositoryPath {
+		return true
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) != 4 || parts[0] != "" || parts[1] != "repositories" || parts[3] != "labels" {
+		return false
+	}
+	id, err := strconv.ParseUint(parts[2], 10, 64)
+	return err == nil && id > 0 && strconv.FormatUint(id, 10) == parts[2]
 }
 
 func validatePageRelations(relations map[string]int, expectedPage int) error {
