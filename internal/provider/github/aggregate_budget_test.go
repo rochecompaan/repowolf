@@ -113,6 +113,38 @@ func TestIssueViewCommentBudget(t *testing.T) {
 	}
 }
 
+// Regression: all included headers and label JSON share one exact 8 MiB raw
+// output budget rather than receiving an independent allowance per page.
+func TestLabelListAggregateBudget(t *testing.T) {
+	base := labelPage(t, 1, 1, false)
+	for _, test := range []struct {
+		name string
+		size int
+		want error
+	}{
+		{"exact limit", maximumPaginatedReadBytes, nil},
+		{"one byte over", maximumPaginatedReadBytes + 1, runner.ErrOutputLimit},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			raw := append(append([]byte{}, base...), []byte(strings.Repeat(" ", test.size-len(base)))...)
+			caller := &fakeCaller{results: []runner.Result{{Stdout: raw}}}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), labelListRequest(1))
+			if test.want == nil {
+				if err != nil || len(response.GetLabelList().GetLabels()) != 1 {
+					t.Fatalf("Execute() = %#v, %v", response, err)
+				}
+				if caller.commands[0].StdoutLimit != maximumPaginatedReadBytes {
+					t.Fatalf("stdout limit = %d", caller.commands[0].StdoutLimit)
+				}
+				return
+			}
+			if response != nil || !errors.Is(err, test.want) {
+				t.Fatalf("Execute() = %#v, %v, want %v", response, err, test.want)
+			}
+		})
+	}
+}
+
 func testAdapter(t *testing.T, caller Caller) *Adapter {
 	t.Helper()
 	adapter, err := New(AdapterOptions{Path: "/pinned/gh", Environment: []string{"GH_TOKEN=secret"}, Timeout: time.Minute, Caller: caller})

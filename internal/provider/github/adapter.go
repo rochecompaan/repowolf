@@ -53,6 +53,9 @@ func (adapter *Adapter) Execute(ctx context.Context, repository policy.ResolvedR
 	if repository.Provider.Kind != config.ProviderGitHub {
 		return nil, policy.ErrDenied
 	}
+	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_LabelList); ok {
+		return adapter.executeLabelList(ctx, repository, request)
+	}
 	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueList); ok {
 		return adapter.executeIssueList(ctx, repository, request)
 	}

@@ -18,8 +18,8 @@ type typedCommandContract struct {
 func TestAllTypedOperationsProduceExactPinnedCommandContracts(t *testing.T) {
 	contracts := allTypedCommandContracts()
 	operations := validOperations()
-	if len(operations) != 20 || len(contracts) != 20 {
-		t.Fatalf("operations/contracts = %d/%d, want 20/20", len(operations), len(contracts))
+	if len(operations) != 21 || len(contracts) != 21 {
+		t.Fatalf("operations/contracts = %d/%d, want 21/21", len(operations), len(contracts))
 	}
 	for _, operation := range operations {
 		t.Run(operation.name, func(t *testing.T) {
@@ -64,6 +64,7 @@ func allTypedCommandContracts() map[string]typedCommandContract {
 	}
 	return map[string]typedCommandContract{
 		"repository_view": {result(repositoryJSON), []runner.Command{expectedAPI("GET", base, nil, miB)}},
+		"label_list":      {result(includedResponse(nil, `[]`)), []runner.Command{expectedLabelPage(base+"/labels?page=1&per_page=1", maximumPaginatedReadBytes)}},
 		"issue_list":      {result(`{"data":{"repository":{"issues":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}`), []runner.Command{expectedIssueListGraphQL("OPEN", 1)}},
 		"issue_view":      {result(issue), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 2*miB)}},
 		"issue_create":    {result(issue), []runner.Command{expectedAPI("POST", base+"/issues", []byte(`{"assignees":null,"body":"body","labels":null,"title":"title"}`), 2*miB)}},
