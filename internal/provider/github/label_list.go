@@ -36,7 +36,7 @@ func (adapter *Adapter) executeLabelList(
 	labels := make([]*repowolfv1.GitHubLabelRecord, 0, limit)
 
 	for page := 1; page <= maximumLabelListPages; page++ {
-		perPage := min(labelListPageSize, limit-len(labels))
+		perPage := labelListPageSize
 		included, err := adapter.callLabelPage(ctx, repository, page, perPage, budget)
 		if err != nil {
 			return nil, err
@@ -44,6 +44,9 @@ func (adapter *Adapter) executeLabelList(
 		records, err := normalizeLabelPage(included.body, perPage)
 		if err != nil {
 			return nil, err
+		}
+		if len(records) > limit-len(labels) {
+			return nil, runner.ErrOutputLimit
 		}
 		labels = append(labels, records...)
 		if !included.hasNext {

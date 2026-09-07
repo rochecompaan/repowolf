@@ -16,27 +16,50 @@ import (
 // Regression: label listing uses fixed, locally generated REST pages and stops
 // only when GitHub's included response metadata reports no next page.
 func TestLabelListPagination(t *testing.T) {
-	t.Run("short terminal page", func(t *testing.T) {
-		first := labelPage(t, 1, 100, true)
-		last := labelPage(t, 101, 1, false)
-		caller := &fakeCaller{results: []runner.Result{{Stdout: first}, {Stdout: last}}}
-
-		response, err := testAdapter(t, caller).Execute(context.Background(), repository(), labelListRequest(101))
-		if err != nil {
-			t.Fatal(err)
-		}
-		labels := response.GetLabelList().GetLabels()
-		if len(labels) != 101 || labels[0].GetName() != "label-1" || labels[100].GetName() != "label-101" {
-			t.Fatalf("labels = %d, first/last = %q/%q", len(labels), labels[0].GetName(), labels[100].GetName())
-		}
-		want := []runner.Command{
-			expectedLabelPage("/repos/owner/repo/labels?page=1&per_page=100", maximumPaginatedReadBytes),
-			expectedLabelPage("/repos/owner/repo/labels?page=2&per_page=1", maximumPaginatedReadBytes-len(first)),
-		}
-		if !reflect.DeepEqual(caller.commands, want) {
-			t.Fatalf("commands = %#v\nwant %#v", caller.commands, want)
-		}
-	})
+	for _, total := range []int{101, 102, 201} {
+		t.Run(fmt.Sprintf("limit 101 with %d labels", total), func(t *testing.T) {
+			var pages [][]byte
+			caller := &scriptedIssueListCaller{call: func(_ context.Context, command runner.Command, index int) (runner.Result, error) {
+				if index >= 2 {
+					t.Fatal("called beyond requested limit")
+				}
+				page, perPage, start, count := restPageWindow(t, command, total)
+				var headers []string
+				if start+count < total {
+					headers = []string{fmt.Sprintf(`Link: <https://github.example/api/v3/repositories/41881900/labels?page=%d&per_page=%d>; rel="next"`, page+1, perPage)}
+				}
+				raw := []byte(includedResponse(headers, labelBody(t, start+1, count)))
+				pages = append(pages, raw)
+				return runner.Result{Stdout: raw}, nil
+			}}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), labelListRequest(101))
+			if total > 101 {
+				if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
+					t.Fatalf("Execute() = %v, %v, want output limit", response, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				labels := response.GetLabelList().GetLabels()
+				if len(labels) != 101 {
+					t.Fatalf("labels = %d", len(labels))
+				}
+				for index, label := range labels {
+					if label.GetName() != fmt.Sprintf("label-%d", index+1) {
+						t.Fatalf("label %d = %q", index, label.GetName())
+					}
+				}
+			}
+			want := []runner.Command{
+				expectedLabelPage("/repos/owner/repo/labels?page=1&per_page=100", maximumPaginatedReadBytes),
+				expectedLabelPage("/repos/owner/repo/labels?page=2&per_page=100", maximumPaginatedReadBytes-len(pages[0])),
+			}
+			if !reflect.DeepEqual(caller.commands, want) {
+				t.Fatalf("commands = %#v, want %#v", caller.commands, want)
+			}
+		})
+	}
 
 	t.Run("invalid label names are rejected", func(t *testing.T) {
 		for _, name := range []string{"", "bad\x00name", strings.Repeat("x", 51)} {

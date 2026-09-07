@@ -1292,9 +1292,9 @@ Do not follow the URL from the header. Validate its page relation, then build th
 
 - [ ] **Step 5: Implement the ten-page loop**
 
-Fetch at most `min(100, remainingRecords)` labels per page. Normalize only nonempty label names.
+Fetch labels with a stable `per_page=100` on every page so REST offsets never shift. Normalize only nonempty label names.
 
-Reject more records than requested. Reject `hasNext` after the requested limit or page ten.
+Reject pages above 100 records and enforce the requested total record limit independently before appending. Reject `hasNext` after the requested limit or page ten.
 
 Dispatch `LabelList` to `executeLabelList` from `Adapter.Execute`.
 
