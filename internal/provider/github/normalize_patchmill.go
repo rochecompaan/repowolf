@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/policy"
@@ -85,44 +86,44 @@ func normalizeIssueGraphQLPage(raw []byte, first int) (issueGraphQLPage, error) 
 }
 
 func graphQLIssueRecord(value graphQLIssue) (*repowolfv1.GitHubIssueRecord, error) {
-	number, err := requiredID(value.Number, "issue.number")
+	issueNumber, err := requiredID(value.Number, "issue.number")
+	if err != nil || number(issueNumber) != nil {
+		return nil, providerResponse(err, "issue.number")
+	}
+	issueTitle, err := graphQLIssueText(value.Title, "issue.title", title)
 	if err != nil {
 		return nil, err
 	}
-	title, err := required(value.Title, "issue.title")
-	if err != nil {
-		return nil, err
-	}
-	body, err := required(value.Body, "issue.body")
+	issueBody, err := graphQLIssueText(value.Body, "issue.body", func(text string) error { return body(text, false) })
 	if err != nil {
 		return nil, err
 	}
 	state, err := required(value.State, "issue.state")
-	if err != nil {
-		return nil, err
+	if err != nil || state != "OPEN" && state != "CLOSED" {
+		return nil, providerResponse(err, "issue.state")
 	}
 	author, err := userLogin(value.Author, "issue.author")
-	if err != nil {
-		return nil, err
+	if err != nil || !githubLogin(author) {
+		return nil, providerResponse(err, "issue.author")
 	}
 	labels, err := graphQLIssueLabels(value.Labels)
 	if err != nil {
 		return nil, err
 	}
-	createdAt, err := required(value.CreatedAt, "issue.createdAt")
+	createdAt, err := graphQLIssueText(value.CreatedAt, "issue.createdAt", nil)
 	if err != nil {
 		return nil, err
 	}
-	updatedAt, err := required(value.UpdatedAt, "issue.updatedAt")
+	updatedAt, err := graphQLIssueText(value.UpdatedAt, "issue.updatedAt", nil)
 	if err != nil {
 		return nil, err
 	}
-	link, err := required(value.URL, "issue.url")
+	link, err := graphQLIssueText(value.URL, "issue.url", nil)
 	if err != nil {
 		return nil, err
 	}
 	return &repowolfv1.GitHubIssueRecord{
-		Number: number, Title: title, Body: &body, State: strings.ToLower(state), Author: author,
+		Number: issueNumber, Title: issueTitle, Body: &issueBody, State: strings.ToLower(state), Author: author,
 		Assignees: []string{}, Labels: labels, Url: link, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}, nil
 }
@@ -131,10 +132,31 @@ func graphQLIssueLabels(connection *graphQLLabelConnection) ([]string, error) {
 	if connection == nil || connection.Nodes == nil || connection.PageInfo == nil || connection.PageInfo.HasNextPage == nil {
 		return nil, providerResponse(nil, "issue.labels")
 	}
-	if *connection.PageInfo.HasNextPage {
+	if *connection.PageInfo.HasNextPage || len(*connection.Nodes) > 100 {
 		return nil, providerResponse(nil, "issue labels pagination")
 	}
-	return labelNames(connection.Nodes)
+	names, err := labelNames(connection.Nodes)
+	if err != nil || labels(names) != nil {
+		return nil, providerResponse(err, "issue.labels")
+	}
+	return names, nil
+}
+
+// Domain validators supply title/body bounds; other required text has no
+// field-specific cap beyond the existing raw and normalized response budgets.
+func graphQLIssueText(value *string, field string, validate func(string) error) (string, error) {
+	text, err := required(value, field)
+	if err != nil || !utf8.ValidString(text) || strings.IndexByte(text, 0) >= 0 {
+		return "", providerResponse(err, field)
+	}
+	if validate == nil {
+		if text == "" {
+			return "", providerResponse(nil, field)
+		}
+	} else if err := validate(text); err != nil {
+		return "", providerResponse(err, field)
+	}
+	return text, nil
 }
 
 func currentUserResponse(value apiUser) (*repowolfv1.GitHubResponse, error) {
