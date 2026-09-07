@@ -95,5 +95,5 @@ func validLabelColor(value string) bool {
 }
 
 func validLabelDescription(value string) bool {
-	return value != "" && utf8.ValidString(value) && strings.IndexByte(value, 0) < 0 && utf8.RuneCountInString(value) <= 100
+	return utf8.ValidString(value) && strings.IndexByte(value, 0) < 0 && utf8.RuneCountInString(value) <= 100
 }
