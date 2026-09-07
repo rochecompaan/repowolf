@@ -26,8 +26,17 @@ func (adapter *Adapter) plan(repository policy.ResolvedRepository, request *repo
 	var method, endpoint, normalizer string
 	var input any
 	switch operation := request.Operation.(type) {
+	case *repowolfv1.GitHubRequest_CurrentUser:
+		method, endpoint, normalizer = "GET", "/user", "current_user"
 	case *repowolfv1.GitHubRequest_RepositoryView:
 		method, endpoint, normalizer = "GET", base, "repository"
+	case *repowolfv1.GitHubRequest_LabelCreate:
+		method, endpoint, normalizer = "POST", base+"/labels", "label_create"
+		input = map[string]any{
+			"name":        operation.LabelCreate.Name,
+			"color":       operation.LabelCreate.Color,
+			"description": operation.LabelCreate.Description,
+		}
 	case *repowolfv1.GitHubRequest_IssueList:
 		query := "repo:" + repository.Repository.Owner + "/" + repository.Repository.Name + " is:issue"
 		if operation.IssueList.State != repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_ALL {
@@ -162,8 +171,11 @@ func runStatus(value repowolfv1.GitHubRunStatus) string {
 	return map[repowolfv1.GitHubRunStatus]string{1: "queued", 2: "in_progress", 3: "completed", 4: "success", 5: "failure", 6: "cancelled", 7: "skipped", 8: "timed_out", 9: "action_required", 10: "neutral", 11: "stale", 12: "startup_failure", 13: "requested", 14: "waiting", 15: "pending"}[value]
 }
 func outputLimit(normalizer string) int {
-	if normalizer == "repository" {
+	if normalizer == "repository" || normalizer == "current_user" {
 		return miB
+	}
+	if normalizer == "label_create" {
+		return maximumMutationBytes
 	}
 	if normalizer == "issue" || normalizer == "pull" || normalizer == "comment" || normalizer == "run" {
 		return 2 * miB

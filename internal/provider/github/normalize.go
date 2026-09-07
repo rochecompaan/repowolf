@@ -77,6 +77,7 @@ type apiRepository struct {
 	Private       *bool    `json:"private"`
 	URL           *string  `json:"html_url"`
 	DefaultBranch *string  `json:"default_branch"`
+	SSHURL        *string  `json:"ssh_url"`
 }
 type apiStatus struct {
 	Context     *string `json:"context"`
@@ -106,6 +107,12 @@ type apiCheckRun struct {
 
 func normalize(request *repowolfv1.GitHubRequest, kind string, raw []byte) (*repowolfv1.GitHubResponse, error) {
 	switch kind {
+	case "current_user":
+		var value apiUser
+		if err := decode(raw, &value); err != nil {
+			return nil, err
+		}
+		return currentUserResponse(value)
 	case "repository":
 		var value apiRepository
 		if err := decode(raw, &value); err != nil {
@@ -116,6 +123,12 @@ func normalize(request *repowolfv1.GitHubRequest, kind string, raw []byte) (*rep
 			return nil, err
 		}
 		return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewResult{Repository: record}}}, nil
+	case "label_create":
+		var value apiLabel
+		if err := decode(raw, &value); err != nil {
+			return nil, err
+		}
+		return labelCreateResponse(value)
 	case "issue_list":
 		var value struct {
 			Items *[]apiIssue `json:"items"`

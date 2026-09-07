@@ -27,7 +27,11 @@ func repositoryRecord(value apiRepository) (*repowolfv1.GitHubRepositoryRecord, 
 	if e != nil {
 		return nil, e
 	}
-	return &repowolfv1.GitHubRepositoryRecord{Repository: name, Owner: owner, NameWithOwner: full, Description: value.Description, Private: private, Url: link, DefaultBranch: branch}, nil
+	sshURL, e := required(value.SSHURL, "ssh_url")
+	if e != nil {
+		return nil, e
+	}
+	return &repowolfv1.GitHubRepositoryRecord{Repository: name, Owner: owner, NameWithOwner: full, Description: value.Description, Private: private, Url: link, DefaultBranch: branch, SshUrl: sshURL}, nil
 }
 func issueRecord(value apiIssue, includeBody bool) (*repowolfv1.GitHubIssueRecord, error) {
 	number, e := requiredID(value.Number, "number")

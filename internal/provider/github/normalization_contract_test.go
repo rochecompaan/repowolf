@@ -82,7 +82,7 @@ func TestNormalizationRejectsTrailingDocumentsAndWrongTypes(t *testing.T) {
 		valid string
 		wrong string
 	}{
-		{"repository", request(&repowolfv1.GitHubRequest_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewRequest{}}), "repository", `{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","default_branch":"main"}`, `{"name":5}`},
+		{"repository", request(&repowolfv1.GitHubRequest_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewRequest{}}), "repository", `{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","ssh_url":"git@github.com:owner/repo.git","default_branch":"main"}`, `{"name":5}`},
 		{"issue list", request(&repowolfv1.GitHubRequest_IssueList{IssueList: &repowolfv1.GitHubIssueListRequest{}}), "issue_list", `{"items":[` + issue + `]}`, `[]`},
 		{"issue", request(&repowolfv1.GitHubRequest_IssueView{IssueView: &repowolfv1.GitHubIssueViewRequest{Number: 1}}), "issue", issue, strings.Replace(issue, `"number":1`, `"number":"1"`, 1)},
 		{"comment", request(&repowolfv1.GitHubRequest_IssueComment{IssueComment: &repowolfv1.GitHubIssueCommentRequest{Number: 1, Body: "body"}}), "comment", `{"id":1,"user":{"login":"me"},"body":"body","html_url":"https://safe.example/c","created_at":"c","updated_at":"u"}`, `{"id":"1"}`},
