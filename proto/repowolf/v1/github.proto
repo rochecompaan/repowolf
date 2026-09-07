@@ -53,7 +53,10 @@ message GitHubStringList {
 
 message GitHubRepositoryViewRequest {}
 message GitHubIssueListRequest { GitHubIssueState state = 1; uint64 limit = 2; }
-message GitHubIssueViewRequest { uint64 number = 1; }
+message GitHubIssueViewRequest {
+  uint64 number = 1;
+  bool include_comments = 2;
+}
 message GitHubIssueCreateRequest {
   string title = 1;
   optional string body = 2;
@@ -102,6 +105,18 @@ message GitHubRunListRequest {
 }
 message GitHubRunViewRequest { uint64 run_id = 1; }
 message GitHubStatusViewRequest { string object_id = 1; }
+message GitHubCurrentUserRequest {}
+message GitHubLabelListRequest { uint64 limit = 1; }
+message GitHubLabelCreateRequest {
+  string name = 1;
+  string color = 2;
+  string description = 3;
+}
+message GitHubIssueLabelChangeRequest {
+  uint64 number = 1;
+  repeated string add_labels = 2;
+  repeated string remove_labels = 3;
+}
 
 message GitHubRequest {
   RequestContext context = 1;
@@ -126,9 +141,15 @@ message GitHubRequest {
     GitHubRunListRequest run_list = 27;
     GitHubRunViewRequest run_view = 28;
     GitHubStatusViewRequest status_view = 29;
+    GitHubCurrentUserRequest current_user = 30;
+    GitHubLabelListRequest label_list = 31;
+    GitHubLabelCreateRequest label_create = 32;
+    GitHubIssueLabelChangeRequest issue_label_change = 33;
   }
 }
 
+message GitHubUserRecord { string login = 1; }
+message GitHubLabelRecord { string name = 1; }
 message GitHubRepositoryRecord {
   string repository = 1;
   string owner = 2;
@@ -137,6 +158,7 @@ message GitHubRepositoryRecord {
   bool private = 5;
   string url = 6;
   string default_branch = 7;
+  string ssh_url = 8;
 }
 message GitHubIssueRecord {
   uint64 number = 1;
@@ -149,6 +171,7 @@ message GitHubIssueRecord {
   string url = 8;
   string created_at = 9;
   string updated_at = 10;
+  repeated GitHubCommentRecord comments = 11;
 }
 message GitHubCommentRecord {
   uint64 id = 1;
@@ -231,6 +254,10 @@ message GitHubPullChecksResult { repeated GitHubCheckRecord checks = 1; }
 message GitHubRunListResult { repeated GitHubRunRecord runs = 1; }
 message GitHubRunViewResult { GitHubRunRecord run = 1; }
 message GitHubStatusViewResult { GitHubStatusSummary status = 1; }
+message GitHubCurrentUserResult { GitHubUserRecord user = 1; }
+message GitHubLabelListResult { repeated GitHubLabelRecord labels = 1; }
+message GitHubLabelCreateResult { GitHubLabelRecord label = 1; }
+message GitHubIssueLabelChangeResult { GitHubIssueRecord issue = 1; }
 
 message GitHubResponse {
   ResponseMeta meta = 1;
@@ -255,5 +282,9 @@ message GitHubResponse {
     GitHubRunListResult run_list = 27;
     GitHubRunViewResult run_view = 28;
     GitHubStatusViewResult status_view = 29;
+    GitHubCurrentUserResult current_user = 30;
+    GitHubLabelListResult label_list = 31;
+    GitHubLabelCreateResult label_create = 32;
+    GitHubIssueLabelChangeResult issue_label_change = 33;
   }
 }

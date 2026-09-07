@@ -346,10 +346,11 @@ func (x *GitHubIssueListRequest) GetLimit() uint64 {
 }
 
 type GitHubIssueViewRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Number        uint64                 `protobuf:"varint,1,opt,name=number,proto3" json:"number,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Number          uint64                 `protobuf:"varint,1,opt,name=number,proto3" json:"number,omitempty"`
+	IncludeComments bool                   `protobuf:"varint,2,opt,name=include_comments,json=includeComments,proto3" json:"include_comments,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GitHubIssueViewRequest) Reset() {
@@ -387,6 +388,13 @@ func (x *GitHubIssueViewRequest) GetNumber() uint64 {
 		return x.Number
 	}
 	return 0
+}
+
+func (x *GitHubIssueViewRequest) GetIncludeComments() bool {
+	if x != nil {
+		return x.IncludeComments
+	}
+	return false
 }
 
 type GitHubIssueCreateRequest struct {
@@ -1305,6 +1313,206 @@ func (x *GitHubStatusViewRequest) GetObjectId() string {
 	return ""
 }
 
+type GitHubCurrentUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubCurrentUserRequest) Reset() {
+	*x = GitHubCurrentUserRequest{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubCurrentUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubCurrentUserRequest) ProtoMessage() {}
+
+func (x *GitHubCurrentUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubCurrentUserRequest.ProtoReflect.Descriptor instead.
+func (*GitHubCurrentUserRequest) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{21}
+}
+
+type GitHubLabelListRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Limit         uint64                 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubLabelListRequest) Reset() {
+	*x = GitHubLabelListRequest{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubLabelListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubLabelListRequest) ProtoMessage() {}
+
+func (x *GitHubLabelListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubLabelListRequest.ProtoReflect.Descriptor instead.
+func (*GitHubLabelListRequest) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GitHubLabelListRequest) GetLimit() uint64 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type GitHubLabelCreateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Color         string                 `protobuf:"bytes,2,opt,name=color,proto3" json:"color,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubLabelCreateRequest) Reset() {
+	*x = GitHubLabelCreateRequest{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubLabelCreateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubLabelCreateRequest) ProtoMessage() {}
+
+func (x *GitHubLabelCreateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubLabelCreateRequest.ProtoReflect.Descriptor instead.
+func (*GitHubLabelCreateRequest) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *GitHubLabelCreateRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GitHubLabelCreateRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *GitHubLabelCreateRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type GitHubIssueLabelChangeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Number        uint64                 `protobuf:"varint,1,opt,name=number,proto3" json:"number,omitempty"`
+	AddLabels     []string               `protobuf:"bytes,2,rep,name=add_labels,json=addLabels,proto3" json:"add_labels,omitempty"`
+	RemoveLabels  []string               `protobuf:"bytes,3,rep,name=remove_labels,json=removeLabels,proto3" json:"remove_labels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubIssueLabelChangeRequest) Reset() {
+	*x = GitHubIssueLabelChangeRequest{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubIssueLabelChangeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubIssueLabelChangeRequest) ProtoMessage() {}
+
+func (x *GitHubIssueLabelChangeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubIssueLabelChangeRequest.ProtoReflect.Descriptor instead.
+func (*GitHubIssueLabelChangeRequest) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *GitHubIssueLabelChangeRequest) GetNumber() uint64 {
+	if x != nil {
+		return x.Number
+	}
+	return 0
+}
+
+func (x *GitHubIssueLabelChangeRequest) GetAddLabels() []string {
+	if x != nil {
+		return x.AddLabels
+	}
+	return nil
+}
+
+func (x *GitHubIssueLabelChangeRequest) GetRemoveLabels() []string {
+	if x != nil {
+		return x.RemoveLabels
+	}
+	return nil
+}
+
 type GitHubRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Context *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -1330,6 +1538,10 @@ type GitHubRequest struct {
 	//	*GitHubRequest_RunList
 	//	*GitHubRequest_RunView
 	//	*GitHubRequest_StatusView
+	//	*GitHubRequest_CurrentUser
+	//	*GitHubRequest_LabelList
+	//	*GitHubRequest_LabelCreate
+	//	*GitHubRequest_IssueLabelChange
 	Operation     isGitHubRequest_Operation `protobuf_oneof:"operation"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1337,7 +1549,7 @@ type GitHubRequest struct {
 
 func (x *GitHubRequest) Reset() {
 	*x = GitHubRequest{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[21]
+	mi := &file_repowolf_v1_github_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1349,7 +1561,7 @@ func (x *GitHubRequest) String() string {
 func (*GitHubRequest) ProtoMessage() {}
 
 func (x *GitHubRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[21]
+	mi := &file_repowolf_v1_github_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1362,7 +1574,7 @@ func (x *GitHubRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubRequest.ProtoReflect.Descriptor instead.
 func (*GitHubRequest) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{21}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GitHubRequest) GetContext() *RequestContext {
@@ -1559,6 +1771,42 @@ func (x *GitHubRequest) GetStatusView() *GitHubStatusViewRequest {
 	return nil
 }
 
+func (x *GitHubRequest) GetCurrentUser() *GitHubCurrentUserRequest {
+	if x != nil {
+		if x, ok := x.Operation.(*GitHubRequest_CurrentUser); ok {
+			return x.CurrentUser
+		}
+	}
+	return nil
+}
+
+func (x *GitHubRequest) GetLabelList() *GitHubLabelListRequest {
+	if x != nil {
+		if x, ok := x.Operation.(*GitHubRequest_LabelList); ok {
+			return x.LabelList
+		}
+	}
+	return nil
+}
+
+func (x *GitHubRequest) GetLabelCreate() *GitHubLabelCreateRequest {
+	if x != nil {
+		if x, ok := x.Operation.(*GitHubRequest_LabelCreate); ok {
+			return x.LabelCreate
+		}
+	}
+	return nil
+}
+
+func (x *GitHubRequest) GetIssueLabelChange() *GitHubIssueLabelChangeRequest {
+	if x != nil {
+		if x, ok := x.Operation.(*GitHubRequest_IssueLabelChange); ok {
+			return x.IssueLabelChange
+		}
+	}
+	return nil
+}
+
 type isGitHubRequest_Operation interface {
 	isGitHubRequest_Operation()
 }
@@ -1643,6 +1891,22 @@ type GitHubRequest_StatusView struct {
 	StatusView *GitHubStatusViewRequest `protobuf:"bytes,29,opt,name=status_view,json=statusView,proto3,oneof"`
 }
 
+type GitHubRequest_CurrentUser struct {
+	CurrentUser *GitHubCurrentUserRequest `protobuf:"bytes,30,opt,name=current_user,json=currentUser,proto3,oneof"`
+}
+
+type GitHubRequest_LabelList struct {
+	LabelList *GitHubLabelListRequest `protobuf:"bytes,31,opt,name=label_list,json=labelList,proto3,oneof"`
+}
+
+type GitHubRequest_LabelCreate struct {
+	LabelCreate *GitHubLabelCreateRequest `protobuf:"bytes,32,opt,name=label_create,json=labelCreate,proto3,oneof"`
+}
+
+type GitHubRequest_IssueLabelChange struct {
+	IssueLabelChange *GitHubIssueLabelChangeRequest `protobuf:"bytes,33,opt,name=issue_label_change,json=issueLabelChange,proto3,oneof"`
+}
+
 func (*GitHubRequest_RepositoryView) isGitHubRequest_Operation() {}
 
 func (*GitHubRequest_IssueList) isGitHubRequest_Operation() {}
@@ -1683,6 +1947,102 @@ func (*GitHubRequest_RunView) isGitHubRequest_Operation() {}
 
 func (*GitHubRequest_StatusView) isGitHubRequest_Operation() {}
 
+func (*GitHubRequest_CurrentUser) isGitHubRequest_Operation() {}
+
+func (*GitHubRequest_LabelList) isGitHubRequest_Operation() {}
+
+func (*GitHubRequest_LabelCreate) isGitHubRequest_Operation() {}
+
+func (*GitHubRequest_IssueLabelChange) isGitHubRequest_Operation() {}
+
+type GitHubUserRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Login         string                 `protobuf:"bytes,1,opt,name=login,proto3" json:"login,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubUserRecord) Reset() {
+	*x = GitHubUserRecord{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubUserRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubUserRecord) ProtoMessage() {}
+
+func (x *GitHubUserRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubUserRecord.ProtoReflect.Descriptor instead.
+func (*GitHubUserRecord) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *GitHubUserRecord) GetLogin() string {
+	if x != nil {
+		return x.Login
+	}
+	return ""
+}
+
+type GitHubLabelRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubLabelRecord) Reset() {
+	*x = GitHubLabelRecord{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubLabelRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubLabelRecord) ProtoMessage() {}
+
+func (x *GitHubLabelRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubLabelRecord.ProtoReflect.Descriptor instead.
+func (*GitHubLabelRecord) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GitHubLabelRecord) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 type GitHubRepositoryRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Repository    string                 `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
@@ -1692,13 +2052,14 @@ type GitHubRepositoryRecord struct {
 	Private       bool                   `protobuf:"varint,5,opt,name=private,proto3" json:"private,omitempty"`
 	Url           string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
 	DefaultBranch string                 `protobuf:"bytes,7,opt,name=default_branch,json=defaultBranch,proto3" json:"default_branch,omitempty"`
+	SshUrl        string                 `protobuf:"bytes,8,opt,name=ssh_url,json=sshUrl,proto3" json:"ssh_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GitHubRepositoryRecord) Reset() {
 	*x = GitHubRepositoryRecord{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[22]
+	mi := &file_repowolf_v1_github_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1710,7 +2071,7 @@ func (x *GitHubRepositoryRecord) String() string {
 func (*GitHubRepositoryRecord) ProtoMessage() {}
 
 func (x *GitHubRepositoryRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[22]
+	mi := &file_repowolf_v1_github_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1723,7 +2084,7 @@ func (x *GitHubRepositoryRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubRepositoryRecord.ProtoReflect.Descriptor instead.
 func (*GitHubRepositoryRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{22}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GitHubRepositoryRecord) GetRepository() string {
@@ -1775,6 +2136,13 @@ func (x *GitHubRepositoryRecord) GetDefaultBranch() string {
 	return ""
 }
 
+func (x *GitHubRepositoryRecord) GetSshUrl() string {
+	if x != nil {
+		return x.SshUrl
+	}
+	return ""
+}
+
 type GitHubIssueRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Number        uint64                 `protobuf:"varint,1,opt,name=number,proto3" json:"number,omitempty"`
@@ -1787,13 +2155,14 @@ type GitHubIssueRecord struct {
 	Url           string                 `protobuf:"bytes,8,opt,name=url,proto3" json:"url,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     string                 `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Comments      []*GitHubCommentRecord `protobuf:"bytes,11,rep,name=comments,proto3" json:"comments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GitHubIssueRecord) Reset() {
 	*x = GitHubIssueRecord{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[23]
+	mi := &file_repowolf_v1_github_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1805,7 +2174,7 @@ func (x *GitHubIssueRecord) String() string {
 func (*GitHubIssueRecord) ProtoMessage() {}
 
 func (x *GitHubIssueRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[23]
+	mi := &file_repowolf_v1_github_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1818,7 +2187,7 @@ func (x *GitHubIssueRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubIssueRecord.ProtoReflect.Descriptor instead.
 func (*GitHubIssueRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{23}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GitHubIssueRecord) GetNumber() uint64 {
@@ -1891,6 +2260,13 @@ func (x *GitHubIssueRecord) GetUpdatedAt() string {
 	return ""
 }
 
+func (x *GitHubIssueRecord) GetComments() []*GitHubCommentRecord {
+	if x != nil {
+		return x.Comments
+	}
+	return nil
+}
+
 type GitHubCommentRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1905,7 +2281,7 @@ type GitHubCommentRecord struct {
 
 func (x *GitHubCommentRecord) Reset() {
 	*x = GitHubCommentRecord{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[24]
+	mi := &file_repowolf_v1_github_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1917,7 +2293,7 @@ func (x *GitHubCommentRecord) String() string {
 func (*GitHubCommentRecord) ProtoMessage() {}
 
 func (x *GitHubCommentRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[24]
+	mi := &file_repowolf_v1_github_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1930,7 +2306,7 @@ func (x *GitHubCommentRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubCommentRecord.ProtoReflect.Descriptor instead.
 func (*GitHubCommentRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{24}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GitHubCommentRecord) GetId() uint64 {
@@ -1996,7 +2372,7 @@ type GitHubPullRecord struct {
 
 func (x *GitHubPullRecord) Reset() {
 	*x = GitHubPullRecord{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[25]
+	mi := &file_repowolf_v1_github_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2008,7 +2384,7 @@ func (x *GitHubPullRecord) String() string {
 func (*GitHubPullRecord) ProtoMessage() {}
 
 func (x *GitHubPullRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[25]
+	mi := &file_repowolf_v1_github_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2021,7 +2397,7 @@ func (x *GitHubPullRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullRecord.ProtoReflect.Descriptor instead.
 func (*GitHubPullRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{25}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GitHubPullRecord) GetNumber() uint64 {
@@ -2130,7 +2506,7 @@ type GitHubCheckRecord struct {
 
 func (x *GitHubCheckRecord) Reset() {
 	*x = GitHubCheckRecord{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[26]
+	mi := &file_repowolf_v1_github_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2142,7 +2518,7 @@ func (x *GitHubCheckRecord) String() string {
 func (*GitHubCheckRecord) ProtoMessage() {}
 
 func (x *GitHubCheckRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[26]
+	mi := &file_repowolf_v1_github_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2155,7 +2531,7 @@ func (x *GitHubCheckRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubCheckRecord.ProtoReflect.Descriptor instead.
 func (*GitHubCheckRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{26}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GitHubCheckRecord) GetName() string {
@@ -2228,7 +2604,7 @@ type GitHubRunRecord struct {
 
 func (x *GitHubRunRecord) Reset() {
 	*x = GitHubRunRecord{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[27]
+	mi := &file_repowolf_v1_github_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2240,7 +2616,7 @@ func (x *GitHubRunRecord) String() string {
 func (*GitHubRunRecord) ProtoMessage() {}
 
 func (x *GitHubRunRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[27]
+	mi := &file_repowolf_v1_github_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2253,7 +2629,7 @@ func (x *GitHubRunRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubRunRecord.ProtoReflect.Descriptor instead.
 func (*GitHubRunRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{27}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GitHubRunRecord) GetId() uint64 {
@@ -2361,7 +2737,7 @@ type GitHubStatusRecord struct {
 
 func (x *GitHubStatusRecord) Reset() {
 	*x = GitHubStatusRecord{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[28]
+	mi := &file_repowolf_v1_github_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2373,7 +2749,7 @@ func (x *GitHubStatusRecord) String() string {
 func (*GitHubStatusRecord) ProtoMessage() {}
 
 func (x *GitHubStatusRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[28]
+	mi := &file_repowolf_v1_github_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2386,7 +2762,7 @@ func (x *GitHubStatusRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubStatusRecord.ProtoReflect.Descriptor instead.
 func (*GitHubStatusRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{28}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GitHubStatusRecord) GetName() string {
@@ -2442,7 +2818,7 @@ type GitHubStatusSummary struct {
 
 func (x *GitHubStatusSummary) Reset() {
 	*x = GitHubStatusSummary{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[29]
+	mi := &file_repowolf_v1_github_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2454,7 +2830,7 @@ func (x *GitHubStatusSummary) String() string {
 func (*GitHubStatusSummary) ProtoMessage() {}
 
 func (x *GitHubStatusSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[29]
+	mi := &file_repowolf_v1_github_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2467,7 +2843,7 @@ func (x *GitHubStatusSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubStatusSummary.ProtoReflect.Descriptor instead.
 func (*GitHubStatusSummary) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{29}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GitHubStatusSummary) GetState() string {
@@ -2500,7 +2876,7 @@ type GitHubRepositoryViewResult struct {
 
 func (x *GitHubRepositoryViewResult) Reset() {
 	*x = GitHubRepositoryViewResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[30]
+	mi := &file_repowolf_v1_github_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2512,7 +2888,7 @@ func (x *GitHubRepositoryViewResult) String() string {
 func (*GitHubRepositoryViewResult) ProtoMessage() {}
 
 func (x *GitHubRepositoryViewResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[30]
+	mi := &file_repowolf_v1_github_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2525,7 +2901,7 @@ func (x *GitHubRepositoryViewResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubRepositoryViewResult.ProtoReflect.Descriptor instead.
 func (*GitHubRepositoryViewResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{30}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GitHubRepositoryViewResult) GetRepository() *GitHubRepositoryRecord {
@@ -2544,7 +2920,7 @@ type GitHubIssueListResult struct {
 
 func (x *GitHubIssueListResult) Reset() {
 	*x = GitHubIssueListResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[31]
+	mi := &file_repowolf_v1_github_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2556,7 +2932,7 @@ func (x *GitHubIssueListResult) String() string {
 func (*GitHubIssueListResult) ProtoMessage() {}
 
 func (x *GitHubIssueListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[31]
+	mi := &file_repowolf_v1_github_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2569,7 +2945,7 @@ func (x *GitHubIssueListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubIssueListResult.ProtoReflect.Descriptor instead.
 func (*GitHubIssueListResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{31}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GitHubIssueListResult) GetIssues() []*GitHubIssueRecord {
@@ -2588,7 +2964,7 @@ type GitHubIssueViewResult struct {
 
 func (x *GitHubIssueViewResult) Reset() {
 	*x = GitHubIssueViewResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[32]
+	mi := &file_repowolf_v1_github_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2600,7 +2976,7 @@ func (x *GitHubIssueViewResult) String() string {
 func (*GitHubIssueViewResult) ProtoMessage() {}
 
 func (x *GitHubIssueViewResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[32]
+	mi := &file_repowolf_v1_github_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2613,7 +2989,7 @@ func (x *GitHubIssueViewResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubIssueViewResult.ProtoReflect.Descriptor instead.
 func (*GitHubIssueViewResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{32}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GitHubIssueViewResult) GetIssue() *GitHubIssueRecord {
@@ -2632,7 +3008,7 @@ type GitHubIssueCreateResult struct {
 
 func (x *GitHubIssueCreateResult) Reset() {
 	*x = GitHubIssueCreateResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[33]
+	mi := &file_repowolf_v1_github_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2644,7 +3020,7 @@ func (x *GitHubIssueCreateResult) String() string {
 func (*GitHubIssueCreateResult) ProtoMessage() {}
 
 func (x *GitHubIssueCreateResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[33]
+	mi := &file_repowolf_v1_github_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2657,7 +3033,7 @@ func (x *GitHubIssueCreateResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubIssueCreateResult.ProtoReflect.Descriptor instead.
 func (*GitHubIssueCreateResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{33}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GitHubIssueCreateResult) GetIssue() *GitHubIssueRecord {
@@ -2676,7 +3052,7 @@ type GitHubIssueEditResult struct {
 
 func (x *GitHubIssueEditResult) Reset() {
 	*x = GitHubIssueEditResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[34]
+	mi := &file_repowolf_v1_github_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2688,7 +3064,7 @@ func (x *GitHubIssueEditResult) String() string {
 func (*GitHubIssueEditResult) ProtoMessage() {}
 
 func (x *GitHubIssueEditResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[34]
+	mi := &file_repowolf_v1_github_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2701,7 +3077,7 @@ func (x *GitHubIssueEditResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubIssueEditResult.ProtoReflect.Descriptor instead.
 func (*GitHubIssueEditResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{34}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GitHubIssueEditResult) GetIssue() *GitHubIssueRecord {
@@ -2720,7 +3096,7 @@ type GitHubIssueCommentResult struct {
 
 func (x *GitHubIssueCommentResult) Reset() {
 	*x = GitHubIssueCommentResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[35]
+	mi := &file_repowolf_v1_github_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2732,7 +3108,7 @@ func (x *GitHubIssueCommentResult) String() string {
 func (*GitHubIssueCommentResult) ProtoMessage() {}
 
 func (x *GitHubIssueCommentResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[35]
+	mi := &file_repowolf_v1_github_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2745,7 +3121,7 @@ func (x *GitHubIssueCommentResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubIssueCommentResult.ProtoReflect.Descriptor instead.
 func (*GitHubIssueCommentResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{35}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GitHubIssueCommentResult) GetComment() *GitHubCommentRecord {
@@ -2764,7 +3140,7 @@ type GitHubIssueCloseResult struct {
 
 func (x *GitHubIssueCloseResult) Reset() {
 	*x = GitHubIssueCloseResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[36]
+	mi := &file_repowolf_v1_github_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2776,7 +3152,7 @@ func (x *GitHubIssueCloseResult) String() string {
 func (*GitHubIssueCloseResult) ProtoMessage() {}
 
 func (x *GitHubIssueCloseResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[36]
+	mi := &file_repowolf_v1_github_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2789,7 +3165,7 @@ func (x *GitHubIssueCloseResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubIssueCloseResult.ProtoReflect.Descriptor instead.
 func (*GitHubIssueCloseResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{36}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GitHubIssueCloseResult) GetIssue() *GitHubIssueRecord {
@@ -2808,7 +3184,7 @@ type GitHubIssueReopenResult struct {
 
 func (x *GitHubIssueReopenResult) Reset() {
 	*x = GitHubIssueReopenResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[37]
+	mi := &file_repowolf_v1_github_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2820,7 +3196,7 @@ func (x *GitHubIssueReopenResult) String() string {
 func (*GitHubIssueReopenResult) ProtoMessage() {}
 
 func (x *GitHubIssueReopenResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[37]
+	mi := &file_repowolf_v1_github_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2833,7 +3209,7 @@ func (x *GitHubIssueReopenResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubIssueReopenResult.ProtoReflect.Descriptor instead.
 func (*GitHubIssueReopenResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{37}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GitHubIssueReopenResult) GetIssue() *GitHubIssueRecord {
@@ -2852,7 +3228,7 @@ type GitHubPullListResult struct {
 
 func (x *GitHubPullListResult) Reset() {
 	*x = GitHubPullListResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[38]
+	mi := &file_repowolf_v1_github_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2864,7 +3240,7 @@ func (x *GitHubPullListResult) String() string {
 func (*GitHubPullListResult) ProtoMessage() {}
 
 func (x *GitHubPullListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[38]
+	mi := &file_repowolf_v1_github_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2877,7 +3253,7 @@ func (x *GitHubPullListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullListResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullListResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{38}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *GitHubPullListResult) GetPulls() []*GitHubPullRecord {
@@ -2896,7 +3272,7 @@ type GitHubPullViewResult struct {
 
 func (x *GitHubPullViewResult) Reset() {
 	*x = GitHubPullViewResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[39]
+	mi := &file_repowolf_v1_github_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2908,7 +3284,7 @@ func (x *GitHubPullViewResult) String() string {
 func (*GitHubPullViewResult) ProtoMessage() {}
 
 func (x *GitHubPullViewResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[39]
+	mi := &file_repowolf_v1_github_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2921,7 +3297,7 @@ func (x *GitHubPullViewResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullViewResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullViewResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{39}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GitHubPullViewResult) GetPull() *GitHubPullRecord {
@@ -2940,7 +3316,7 @@ type GitHubPullCreateResult struct {
 
 func (x *GitHubPullCreateResult) Reset() {
 	*x = GitHubPullCreateResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[40]
+	mi := &file_repowolf_v1_github_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2952,7 +3328,7 @@ func (x *GitHubPullCreateResult) String() string {
 func (*GitHubPullCreateResult) ProtoMessage() {}
 
 func (x *GitHubPullCreateResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[40]
+	mi := &file_repowolf_v1_github_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2965,7 +3341,7 @@ func (x *GitHubPullCreateResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullCreateResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullCreateResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{40}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GitHubPullCreateResult) GetPull() *GitHubPullRecord {
@@ -2984,7 +3360,7 @@ type GitHubPullEditResult struct {
 
 func (x *GitHubPullEditResult) Reset() {
 	*x = GitHubPullEditResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[41]
+	mi := &file_repowolf_v1_github_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2996,7 +3372,7 @@ func (x *GitHubPullEditResult) String() string {
 func (*GitHubPullEditResult) ProtoMessage() {}
 
 func (x *GitHubPullEditResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[41]
+	mi := &file_repowolf_v1_github_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3009,7 +3385,7 @@ func (x *GitHubPullEditResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullEditResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullEditResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{41}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GitHubPullEditResult) GetPull() *GitHubPullRecord {
@@ -3028,7 +3404,7 @@ type GitHubPullCommentResult struct {
 
 func (x *GitHubPullCommentResult) Reset() {
 	*x = GitHubPullCommentResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[42]
+	mi := &file_repowolf_v1_github_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3040,7 +3416,7 @@ func (x *GitHubPullCommentResult) String() string {
 func (*GitHubPullCommentResult) ProtoMessage() {}
 
 func (x *GitHubPullCommentResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[42]
+	mi := &file_repowolf_v1_github_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3053,7 +3429,7 @@ func (x *GitHubPullCommentResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullCommentResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullCommentResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{42}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GitHubPullCommentResult) GetComment() *GitHubCommentRecord {
@@ -3072,7 +3448,7 @@ type GitHubPullCloseResult struct {
 
 func (x *GitHubPullCloseResult) Reset() {
 	*x = GitHubPullCloseResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[43]
+	mi := &file_repowolf_v1_github_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3084,7 +3460,7 @@ func (x *GitHubPullCloseResult) String() string {
 func (*GitHubPullCloseResult) ProtoMessage() {}
 
 func (x *GitHubPullCloseResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[43]
+	mi := &file_repowolf_v1_github_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3097,7 +3473,7 @@ func (x *GitHubPullCloseResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullCloseResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullCloseResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{43}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GitHubPullCloseResult) GetPull() *GitHubPullRecord {
@@ -3116,7 +3492,7 @@ type GitHubPullReopenResult struct {
 
 func (x *GitHubPullReopenResult) Reset() {
 	*x = GitHubPullReopenResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[44]
+	mi := &file_repowolf_v1_github_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3128,7 +3504,7 @@ func (x *GitHubPullReopenResult) String() string {
 func (*GitHubPullReopenResult) ProtoMessage() {}
 
 func (x *GitHubPullReopenResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[44]
+	mi := &file_repowolf_v1_github_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3141,7 +3517,7 @@ func (x *GitHubPullReopenResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullReopenResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullReopenResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{44}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GitHubPullReopenResult) GetPull() *GitHubPullRecord {
@@ -3160,7 +3536,7 @@ type GitHubPullReadyResult struct {
 
 func (x *GitHubPullReadyResult) Reset() {
 	*x = GitHubPullReadyResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[45]
+	mi := &file_repowolf_v1_github_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3172,7 +3548,7 @@ func (x *GitHubPullReadyResult) String() string {
 func (*GitHubPullReadyResult) ProtoMessage() {}
 
 func (x *GitHubPullReadyResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[45]
+	mi := &file_repowolf_v1_github_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3185,7 +3561,7 @@ func (x *GitHubPullReadyResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullReadyResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullReadyResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{45}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *GitHubPullReadyResult) GetPull() *GitHubPullRecord {
@@ -3204,7 +3580,7 @@ type GitHubPullChecksResult struct {
 
 func (x *GitHubPullChecksResult) Reset() {
 	*x = GitHubPullChecksResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[46]
+	mi := &file_repowolf_v1_github_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3216,7 +3592,7 @@ func (x *GitHubPullChecksResult) String() string {
 func (*GitHubPullChecksResult) ProtoMessage() {}
 
 func (x *GitHubPullChecksResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[46]
+	mi := &file_repowolf_v1_github_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3229,7 +3605,7 @@ func (x *GitHubPullChecksResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullChecksResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullChecksResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{46}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *GitHubPullChecksResult) GetChecks() []*GitHubCheckRecord {
@@ -3248,7 +3624,7 @@ type GitHubRunListResult struct {
 
 func (x *GitHubRunListResult) Reset() {
 	*x = GitHubRunListResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[47]
+	mi := &file_repowolf_v1_github_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3260,7 +3636,7 @@ func (x *GitHubRunListResult) String() string {
 func (*GitHubRunListResult) ProtoMessage() {}
 
 func (x *GitHubRunListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[47]
+	mi := &file_repowolf_v1_github_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3273,7 +3649,7 @@ func (x *GitHubRunListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubRunListResult.ProtoReflect.Descriptor instead.
 func (*GitHubRunListResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{47}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *GitHubRunListResult) GetRuns() []*GitHubRunRecord {
@@ -3292,7 +3668,7 @@ type GitHubRunViewResult struct {
 
 func (x *GitHubRunViewResult) Reset() {
 	*x = GitHubRunViewResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[48]
+	mi := &file_repowolf_v1_github_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3304,7 +3680,7 @@ func (x *GitHubRunViewResult) String() string {
 func (*GitHubRunViewResult) ProtoMessage() {}
 
 func (x *GitHubRunViewResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[48]
+	mi := &file_repowolf_v1_github_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3317,7 +3693,7 @@ func (x *GitHubRunViewResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubRunViewResult.ProtoReflect.Descriptor instead.
 func (*GitHubRunViewResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{48}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GitHubRunViewResult) GetRun() *GitHubRunRecord {
@@ -3336,7 +3712,7 @@ type GitHubStatusViewResult struct {
 
 func (x *GitHubStatusViewResult) Reset() {
 	*x = GitHubStatusViewResult{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[49]
+	mi := &file_repowolf_v1_github_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3348,7 +3724,7 @@ func (x *GitHubStatusViewResult) String() string {
 func (*GitHubStatusViewResult) ProtoMessage() {}
 
 func (x *GitHubStatusViewResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[49]
+	mi := &file_repowolf_v1_github_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3361,12 +3737,188 @@ func (x *GitHubStatusViewResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubStatusViewResult.ProtoReflect.Descriptor instead.
 func (*GitHubStatusViewResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{49}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *GitHubStatusViewResult) GetStatus() *GitHubStatusSummary {
 	if x != nil {
 		return x.Status
+	}
+	return nil
+}
+
+type GitHubCurrentUserResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *GitHubUserRecord      `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubCurrentUserResult) Reset() {
+	*x = GitHubCurrentUserResult{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubCurrentUserResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubCurrentUserResult) ProtoMessage() {}
+
+func (x *GitHubCurrentUserResult) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubCurrentUserResult.ProtoReflect.Descriptor instead.
+func (*GitHubCurrentUserResult) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *GitHubCurrentUserResult) GetUser() *GitHubUserRecord {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
+type GitHubLabelListResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Labels        []*GitHubLabelRecord   `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubLabelListResult) Reset() {
+	*x = GitHubLabelListResult{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubLabelListResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubLabelListResult) ProtoMessage() {}
+
+func (x *GitHubLabelListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubLabelListResult.ProtoReflect.Descriptor instead.
+func (*GitHubLabelListResult) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *GitHubLabelListResult) GetLabels() []*GitHubLabelRecord {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+type GitHubLabelCreateResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Label         *GitHubLabelRecord     `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubLabelCreateResult) Reset() {
+	*x = GitHubLabelCreateResult{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubLabelCreateResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubLabelCreateResult) ProtoMessage() {}
+
+func (x *GitHubLabelCreateResult) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubLabelCreateResult.ProtoReflect.Descriptor instead.
+func (*GitHubLabelCreateResult) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *GitHubLabelCreateResult) GetLabel() *GitHubLabelRecord {
+	if x != nil {
+		return x.Label
+	}
+	return nil
+}
+
+type GitHubIssueLabelChangeResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issue         *GitHubIssueRecord     `protobuf:"bytes,1,opt,name=issue,proto3" json:"issue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubIssueLabelChangeResult) Reset() {
+	*x = GitHubIssueLabelChangeResult{}
+	mi := &file_repowolf_v1_github_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubIssueLabelChangeResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubIssueLabelChangeResult) ProtoMessage() {}
+
+func (x *GitHubIssueLabelChangeResult) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_github_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubIssueLabelChangeResult.ProtoReflect.Descriptor instead.
+func (*GitHubIssueLabelChangeResult) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *GitHubIssueLabelChangeResult) GetIssue() *GitHubIssueRecord {
+	if x != nil {
+		return x.Issue
 	}
 	return nil
 }
@@ -3396,6 +3948,10 @@ type GitHubResponse struct {
 	//	*GitHubResponse_RunList
 	//	*GitHubResponse_RunView
 	//	*GitHubResponse_StatusView
+	//	*GitHubResponse_CurrentUser
+	//	*GitHubResponse_LabelList
+	//	*GitHubResponse_LabelCreate
+	//	*GitHubResponse_IssueLabelChange
 	Result        isGitHubResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3403,7 +3959,7 @@ type GitHubResponse struct {
 
 func (x *GitHubResponse) Reset() {
 	*x = GitHubResponse{}
-	mi := &file_repowolf_v1_github_proto_msgTypes[50]
+	mi := &file_repowolf_v1_github_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3415,7 +3971,7 @@ func (x *GitHubResponse) String() string {
 func (*GitHubResponse) ProtoMessage() {}
 
 func (x *GitHubResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_github_proto_msgTypes[50]
+	mi := &file_repowolf_v1_github_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3428,7 +3984,7 @@ func (x *GitHubResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubResponse.ProtoReflect.Descriptor instead.
 func (*GitHubResponse) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{50}
+	return file_repowolf_v1_github_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *GitHubResponse) GetMeta() *ResponseMeta {
@@ -3625,6 +4181,42 @@ func (x *GitHubResponse) GetStatusView() *GitHubStatusViewResult {
 	return nil
 }
 
+func (x *GitHubResponse) GetCurrentUser() *GitHubCurrentUserResult {
+	if x != nil {
+		if x, ok := x.Result.(*GitHubResponse_CurrentUser); ok {
+			return x.CurrentUser
+		}
+	}
+	return nil
+}
+
+func (x *GitHubResponse) GetLabelList() *GitHubLabelListResult {
+	if x != nil {
+		if x, ok := x.Result.(*GitHubResponse_LabelList); ok {
+			return x.LabelList
+		}
+	}
+	return nil
+}
+
+func (x *GitHubResponse) GetLabelCreate() *GitHubLabelCreateResult {
+	if x != nil {
+		if x, ok := x.Result.(*GitHubResponse_LabelCreate); ok {
+			return x.LabelCreate
+		}
+	}
+	return nil
+}
+
+func (x *GitHubResponse) GetIssueLabelChange() *GitHubIssueLabelChangeResult {
+	if x != nil {
+		if x, ok := x.Result.(*GitHubResponse_IssueLabelChange); ok {
+			return x.IssueLabelChange
+		}
+	}
+	return nil
+}
+
 type isGitHubResponse_Result interface {
 	isGitHubResponse_Result()
 }
@@ -3709,6 +4301,22 @@ type GitHubResponse_StatusView struct {
 	StatusView *GitHubStatusViewResult `protobuf:"bytes,29,opt,name=status_view,json=statusView,proto3,oneof"`
 }
 
+type GitHubResponse_CurrentUser struct {
+	CurrentUser *GitHubCurrentUserResult `protobuf:"bytes,30,opt,name=current_user,json=currentUser,proto3,oneof"`
+}
+
+type GitHubResponse_LabelList struct {
+	LabelList *GitHubLabelListResult `protobuf:"bytes,31,opt,name=label_list,json=labelList,proto3,oneof"`
+}
+
+type GitHubResponse_LabelCreate struct {
+	LabelCreate *GitHubLabelCreateResult `protobuf:"bytes,32,opt,name=label_create,json=labelCreate,proto3,oneof"`
+}
+
+type GitHubResponse_IssueLabelChange struct {
+	IssueLabelChange *GitHubIssueLabelChangeResult `protobuf:"bytes,33,opt,name=issue_label_change,json=issueLabelChange,proto3,oneof"`
+}
+
 func (*GitHubResponse_RepositoryView) isGitHubResponse_Result() {}
 
 func (*GitHubResponse_IssueList) isGitHubResponse_Result() {}
@@ -3749,6 +4357,14 @@ func (*GitHubResponse_RunView) isGitHubResponse_Result() {}
 
 func (*GitHubResponse_StatusView) isGitHubResponse_Result() {}
 
+func (*GitHubResponse_CurrentUser) isGitHubResponse_Result() {}
+
+func (*GitHubResponse_LabelList) isGitHubResponse_Result() {}
+
+func (*GitHubResponse_LabelCreate) isGitHubResponse_Result() {}
+
+func (*GitHubResponse_IssueLabelChange) isGitHubResponse_Result() {}
+
 var File_repowolf_v1_github_proto protoreflect.FileDescriptor
 
 const file_repowolf_v1_github_proto_rawDesc = "" +
@@ -3759,9 +4375,10 @@ const file_repowolf_v1_github_proto_rawDesc = "" +
 	"\x1bGitHubRepositoryViewRequest\"c\n" +
 	"\x16GitHubIssueListRequest\x123\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1d.repowolf.v1.GitHubIssueStateR\x05state\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x04R\x05limit\"0\n" +
+	"\x05limit\x18\x02 \x01(\x04R\x05limit\"[\n" +
 	"\x16GitHubIssueViewRequest\x12\x16\n" +
-	"\x06number\x18\x01 \x01(\x04R\x06number\"\x88\x01\n" +
+	"\x06number\x18\x01 \x01(\x04R\x06number\x12)\n" +
+	"\x10include_comments\x18\x02 \x01(\bR\x0fincludeComments\"\x88\x01\n" +
 	"\x18GitHubIssueCreateRequest\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x17\n" +
 	"\x04body\x18\x02 \x01(\tH\x00R\x04body\x88\x01\x01\x12\x16\n" +
@@ -3831,7 +4448,19 @@ const file_repowolf_v1_github_proto_rawDesc = "" +
 	"\x14GitHubRunViewRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\x04R\x05runId\"6\n" +
 	"\x17GitHubStatusViewRequest\x12\x1b\n" +
-	"\tobject_id\x18\x01 \x01(\tR\bobjectId\"\xef\v\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\"\x1a\n" +
+	"\x18GitHubCurrentUserRequest\".\n" +
+	"\x16GitHubLabelListRequest\x12\x14\n" +
+	"\x05limit\x18\x01 \x01(\x04R\x05limit\"f\n" +
+	"\x18GitHubLabelCreateRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05color\x18\x02 \x01(\tR\x05color\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\"{\n" +
+	"\x1dGitHubIssueLabelChangeRequest\x12\x16\n" +
+	"\x06number\x18\x01 \x01(\x04R\x06number\x12\x1d\n" +
+	"\n" +
+	"add_labels\x18\x02 \x03(\tR\taddLabels\x12#\n" +
+	"\rremove_labels\x18\x03 \x03(\tR\fremoveLabels\"\xa9\x0e\n" +
 	"\rGitHubRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.repowolf.v1.RequestContextR\acontext\x12S\n" +
 	"\x0frepository_view\x18\n" +
@@ -3864,8 +4493,17 @@ const file_repowolf_v1_github_proto_rawDesc = "" +
 	"\brun_list\x18\x1b \x01(\v2!.repowolf.v1.GitHubRunListRequestH\x00R\arunList\x12>\n" +
 	"\brun_view\x18\x1c \x01(\v2!.repowolf.v1.GitHubRunViewRequestH\x00R\arunView\x12G\n" +
 	"\vstatus_view\x18\x1d \x01(\v2$.repowolf.v1.GitHubStatusViewRequestH\x00R\n" +
-	"statusViewB\v\n" +
-	"\toperation\"\x80\x02\n" +
+	"statusView\x12J\n" +
+	"\fcurrent_user\x18\x1e \x01(\v2%.repowolf.v1.GitHubCurrentUserRequestH\x00R\vcurrentUser\x12D\n" +
+	"\n" +
+	"label_list\x18\x1f \x01(\v2#.repowolf.v1.GitHubLabelListRequestH\x00R\tlabelList\x12J\n" +
+	"\flabel_create\x18  \x01(\v2%.repowolf.v1.GitHubLabelCreateRequestH\x00R\vlabelCreate\x12Z\n" +
+	"\x12issue_label_change\x18! \x01(\v2*.repowolf.v1.GitHubIssueLabelChangeRequestH\x00R\x10issueLabelChangeB\v\n" +
+	"\toperation\"(\n" +
+	"\x10GitHubUserRecord\x12\x14\n" +
+	"\x05login\x18\x01 \x01(\tR\x05login\"'\n" +
+	"\x11GitHubLabelRecord\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x99\x02\n" +
 	"\x16GitHubRepositoryRecord\x12\x1e\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\tR\n" +
@@ -3875,8 +4513,9 @@ const file_repowolf_v1_github_proto_rawDesc = "" +
 	"\vdescription\x18\x04 \x01(\tH\x00R\vdescription\x88\x01\x01\x12\x18\n" +
 	"\aprivate\x18\x05 \x01(\bR\aprivate\x12\x10\n" +
 	"\x03url\x18\x06 \x01(\tR\x03url\x12%\n" +
-	"\x0edefault_branch\x18\a \x01(\tR\rdefaultBranchB\x0e\n" +
-	"\f_description\"\x97\x02\n" +
+	"\x0edefault_branch\x18\a \x01(\tR\rdefaultBranch\x12\x17\n" +
+	"\assh_url\x18\b \x01(\tR\x06sshUrlB\x0e\n" +
+	"\f_description\"\xd5\x02\n" +
 	"\x11GitHubIssueRecord\x12\x16\n" +
 	"\x06number\x18\x01 \x01(\x04R\x06number\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x17\n" +
@@ -3890,7 +4529,8 @@ const file_repowolf_v1_github_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\tR\tupdatedAtB\a\n" +
+	" \x01(\tR\tupdatedAt\x12<\n" +
+	"\bcomments\x18\v \x03(\v2 .repowolf.v1.GitHubCommentRecordR\bcommentsB\a\n" +
 	"\x05_body\"\xa1\x01\n" +
 	"\x13GitHubCommentRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12\x16\n" +
@@ -4020,7 +4660,15 @@ const file_repowolf_v1_github_proto_rawDesc = "" +
 	"\x13GitHubRunViewResult\x12.\n" +
 	"\x03run\x18\x01 \x01(\v2\x1c.repowolf.v1.GitHubRunRecordR\x03run\"R\n" +
 	"\x16GitHubStatusViewResult\x128\n" +
-	"\x06status\x18\x01 \x01(\v2 .repowolf.v1.GitHubStatusSummaryR\x06status\"\xd1\v\n" +
+	"\x06status\x18\x01 \x01(\v2 .repowolf.v1.GitHubStatusSummaryR\x06status\"L\n" +
+	"\x17GitHubCurrentUserResult\x121\n" +
+	"\x04user\x18\x01 \x01(\v2\x1d.repowolf.v1.GitHubUserRecordR\x04user\"O\n" +
+	"\x15GitHubLabelListResult\x126\n" +
+	"\x06labels\x18\x01 \x03(\v2\x1e.repowolf.v1.GitHubLabelRecordR\x06labels\"O\n" +
+	"\x17GitHubLabelCreateResult\x124\n" +
+	"\x05label\x18\x01 \x01(\v2\x1e.repowolf.v1.GitHubLabelRecordR\x05label\"T\n" +
+	"\x1cGitHubIssueLabelChangeResult\x124\n" +
+	"\x05issue\x18\x01 \x01(\v2\x1e.repowolf.v1.GitHubIssueRecordR\x05issue\"\x87\x0e\n" +
 	"\x0eGitHubResponse\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.repowolf.v1.ResponseMetaR\x04meta\x12R\n" +
 	"\x0frepository_view\x18\n" +
@@ -4053,7 +4701,12 @@ const file_repowolf_v1_github_proto_rawDesc = "" +
 	"\brun_list\x18\x1b \x01(\v2 .repowolf.v1.GitHubRunListResultH\x00R\arunList\x12=\n" +
 	"\brun_view\x18\x1c \x01(\v2 .repowolf.v1.GitHubRunViewResultH\x00R\arunView\x12F\n" +
 	"\vstatus_view\x18\x1d \x01(\v2#.repowolf.v1.GitHubStatusViewResultH\x00R\n" +
-	"statusViewB\b\n" +
+	"statusView\x12I\n" +
+	"\fcurrent_user\x18\x1e \x01(\v2$.repowolf.v1.GitHubCurrentUserResultH\x00R\vcurrentUser\x12C\n" +
+	"\n" +
+	"label_list\x18\x1f \x01(\v2\".repowolf.v1.GitHubLabelListResultH\x00R\tlabelList\x12I\n" +
+	"\flabel_create\x18  \x01(\v2$.repowolf.v1.GitHubLabelCreateResultH\x00R\vlabelCreate\x12Y\n" +
+	"\x12issue_label_change\x18! \x01(\v2).repowolf.v1.GitHubIssueLabelChangeResultH\x00R\x10issueLabelChangeB\b\n" +
 	"\x06result*\x92\x01\n" +
 	"\x10GitHubIssueState\x12#\n" +
 	"\x1fGIT_HUB_ISSUE_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
@@ -4099,64 +4752,74 @@ func file_repowolf_v1_github_proto_rawDescGZIP() []byte {
 }
 
 var file_repowolf_v1_github_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_repowolf_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
+var file_repowolf_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 61)
 var file_repowolf_v1_github_proto_goTypes = []any{
-	(GitHubIssueState)(0),               // 0: repowolf.v1.GitHubIssueState
-	(GitHubPullState)(0),                // 1: repowolf.v1.GitHubPullState
-	(GitHubRunStatus)(0),                // 2: repowolf.v1.GitHubRunStatus
-	(*GitHubStringList)(nil),            // 3: repowolf.v1.GitHubStringList
-	(*GitHubRepositoryViewRequest)(nil), // 4: repowolf.v1.GitHubRepositoryViewRequest
-	(*GitHubIssueListRequest)(nil),      // 5: repowolf.v1.GitHubIssueListRequest
-	(*GitHubIssueViewRequest)(nil),      // 6: repowolf.v1.GitHubIssueViewRequest
-	(*GitHubIssueCreateRequest)(nil),    // 7: repowolf.v1.GitHubIssueCreateRequest
-	(*GitHubIssueEditRequest)(nil),      // 8: repowolf.v1.GitHubIssueEditRequest
-	(*GitHubIssueCommentRequest)(nil),   // 9: repowolf.v1.GitHubIssueCommentRequest
-	(*GitHubIssueCloseRequest)(nil),     // 10: repowolf.v1.GitHubIssueCloseRequest
-	(*GitHubIssueReopenRequest)(nil),    // 11: repowolf.v1.GitHubIssueReopenRequest
-	(*GitHubPullListRequest)(nil),       // 12: repowolf.v1.GitHubPullListRequest
-	(*GitHubPullViewRequest)(nil),       // 13: repowolf.v1.GitHubPullViewRequest
-	(*GitHubPullCreateRequest)(nil),     // 14: repowolf.v1.GitHubPullCreateRequest
-	(*GitHubPullEditRequest)(nil),       // 15: repowolf.v1.GitHubPullEditRequest
-	(*GitHubPullCommentRequest)(nil),    // 16: repowolf.v1.GitHubPullCommentRequest
-	(*GitHubPullCloseRequest)(nil),      // 17: repowolf.v1.GitHubPullCloseRequest
-	(*GitHubPullReopenRequest)(nil),     // 18: repowolf.v1.GitHubPullReopenRequest
-	(*GitHubPullReadyRequest)(nil),      // 19: repowolf.v1.GitHubPullReadyRequest
-	(*GitHubPullChecksRequest)(nil),     // 20: repowolf.v1.GitHubPullChecksRequest
-	(*GitHubRunListRequest)(nil),        // 21: repowolf.v1.GitHubRunListRequest
-	(*GitHubRunViewRequest)(nil),        // 22: repowolf.v1.GitHubRunViewRequest
-	(*GitHubStatusViewRequest)(nil),     // 23: repowolf.v1.GitHubStatusViewRequest
-	(*GitHubRequest)(nil),               // 24: repowolf.v1.GitHubRequest
-	(*GitHubRepositoryRecord)(nil),      // 25: repowolf.v1.GitHubRepositoryRecord
-	(*GitHubIssueRecord)(nil),           // 26: repowolf.v1.GitHubIssueRecord
-	(*GitHubCommentRecord)(nil),         // 27: repowolf.v1.GitHubCommentRecord
-	(*GitHubPullRecord)(nil),            // 28: repowolf.v1.GitHubPullRecord
-	(*GitHubCheckRecord)(nil),           // 29: repowolf.v1.GitHubCheckRecord
-	(*GitHubRunRecord)(nil),             // 30: repowolf.v1.GitHubRunRecord
-	(*GitHubStatusRecord)(nil),          // 31: repowolf.v1.GitHubStatusRecord
-	(*GitHubStatusSummary)(nil),         // 32: repowolf.v1.GitHubStatusSummary
-	(*GitHubRepositoryViewResult)(nil),  // 33: repowolf.v1.GitHubRepositoryViewResult
-	(*GitHubIssueListResult)(nil),       // 34: repowolf.v1.GitHubIssueListResult
-	(*GitHubIssueViewResult)(nil),       // 35: repowolf.v1.GitHubIssueViewResult
-	(*GitHubIssueCreateResult)(nil),     // 36: repowolf.v1.GitHubIssueCreateResult
-	(*GitHubIssueEditResult)(nil),       // 37: repowolf.v1.GitHubIssueEditResult
-	(*GitHubIssueCommentResult)(nil),    // 38: repowolf.v1.GitHubIssueCommentResult
-	(*GitHubIssueCloseResult)(nil),      // 39: repowolf.v1.GitHubIssueCloseResult
-	(*GitHubIssueReopenResult)(nil),     // 40: repowolf.v1.GitHubIssueReopenResult
-	(*GitHubPullListResult)(nil),        // 41: repowolf.v1.GitHubPullListResult
-	(*GitHubPullViewResult)(nil),        // 42: repowolf.v1.GitHubPullViewResult
-	(*GitHubPullCreateResult)(nil),      // 43: repowolf.v1.GitHubPullCreateResult
-	(*GitHubPullEditResult)(nil),        // 44: repowolf.v1.GitHubPullEditResult
-	(*GitHubPullCommentResult)(nil),     // 45: repowolf.v1.GitHubPullCommentResult
-	(*GitHubPullCloseResult)(nil),       // 46: repowolf.v1.GitHubPullCloseResult
-	(*GitHubPullReopenResult)(nil),      // 47: repowolf.v1.GitHubPullReopenResult
-	(*GitHubPullReadyResult)(nil),       // 48: repowolf.v1.GitHubPullReadyResult
-	(*GitHubPullChecksResult)(nil),      // 49: repowolf.v1.GitHubPullChecksResult
-	(*GitHubRunListResult)(nil),         // 50: repowolf.v1.GitHubRunListResult
-	(*GitHubRunViewResult)(nil),         // 51: repowolf.v1.GitHubRunViewResult
-	(*GitHubStatusViewResult)(nil),      // 52: repowolf.v1.GitHubStatusViewResult
-	(*GitHubResponse)(nil),              // 53: repowolf.v1.GitHubResponse
-	(*RequestContext)(nil),              // 54: repowolf.v1.RequestContext
-	(*ResponseMeta)(nil),                // 55: repowolf.v1.ResponseMeta
+	(GitHubIssueState)(0),                 // 0: repowolf.v1.GitHubIssueState
+	(GitHubPullState)(0),                  // 1: repowolf.v1.GitHubPullState
+	(GitHubRunStatus)(0),                  // 2: repowolf.v1.GitHubRunStatus
+	(*GitHubStringList)(nil),              // 3: repowolf.v1.GitHubStringList
+	(*GitHubRepositoryViewRequest)(nil),   // 4: repowolf.v1.GitHubRepositoryViewRequest
+	(*GitHubIssueListRequest)(nil),        // 5: repowolf.v1.GitHubIssueListRequest
+	(*GitHubIssueViewRequest)(nil),        // 6: repowolf.v1.GitHubIssueViewRequest
+	(*GitHubIssueCreateRequest)(nil),      // 7: repowolf.v1.GitHubIssueCreateRequest
+	(*GitHubIssueEditRequest)(nil),        // 8: repowolf.v1.GitHubIssueEditRequest
+	(*GitHubIssueCommentRequest)(nil),     // 9: repowolf.v1.GitHubIssueCommentRequest
+	(*GitHubIssueCloseRequest)(nil),       // 10: repowolf.v1.GitHubIssueCloseRequest
+	(*GitHubIssueReopenRequest)(nil),      // 11: repowolf.v1.GitHubIssueReopenRequest
+	(*GitHubPullListRequest)(nil),         // 12: repowolf.v1.GitHubPullListRequest
+	(*GitHubPullViewRequest)(nil),         // 13: repowolf.v1.GitHubPullViewRequest
+	(*GitHubPullCreateRequest)(nil),       // 14: repowolf.v1.GitHubPullCreateRequest
+	(*GitHubPullEditRequest)(nil),         // 15: repowolf.v1.GitHubPullEditRequest
+	(*GitHubPullCommentRequest)(nil),      // 16: repowolf.v1.GitHubPullCommentRequest
+	(*GitHubPullCloseRequest)(nil),        // 17: repowolf.v1.GitHubPullCloseRequest
+	(*GitHubPullReopenRequest)(nil),       // 18: repowolf.v1.GitHubPullReopenRequest
+	(*GitHubPullReadyRequest)(nil),        // 19: repowolf.v1.GitHubPullReadyRequest
+	(*GitHubPullChecksRequest)(nil),       // 20: repowolf.v1.GitHubPullChecksRequest
+	(*GitHubRunListRequest)(nil),          // 21: repowolf.v1.GitHubRunListRequest
+	(*GitHubRunViewRequest)(nil),          // 22: repowolf.v1.GitHubRunViewRequest
+	(*GitHubStatusViewRequest)(nil),       // 23: repowolf.v1.GitHubStatusViewRequest
+	(*GitHubCurrentUserRequest)(nil),      // 24: repowolf.v1.GitHubCurrentUserRequest
+	(*GitHubLabelListRequest)(nil),        // 25: repowolf.v1.GitHubLabelListRequest
+	(*GitHubLabelCreateRequest)(nil),      // 26: repowolf.v1.GitHubLabelCreateRequest
+	(*GitHubIssueLabelChangeRequest)(nil), // 27: repowolf.v1.GitHubIssueLabelChangeRequest
+	(*GitHubRequest)(nil),                 // 28: repowolf.v1.GitHubRequest
+	(*GitHubUserRecord)(nil),              // 29: repowolf.v1.GitHubUserRecord
+	(*GitHubLabelRecord)(nil),             // 30: repowolf.v1.GitHubLabelRecord
+	(*GitHubRepositoryRecord)(nil),        // 31: repowolf.v1.GitHubRepositoryRecord
+	(*GitHubIssueRecord)(nil),             // 32: repowolf.v1.GitHubIssueRecord
+	(*GitHubCommentRecord)(nil),           // 33: repowolf.v1.GitHubCommentRecord
+	(*GitHubPullRecord)(nil),              // 34: repowolf.v1.GitHubPullRecord
+	(*GitHubCheckRecord)(nil),             // 35: repowolf.v1.GitHubCheckRecord
+	(*GitHubRunRecord)(nil),               // 36: repowolf.v1.GitHubRunRecord
+	(*GitHubStatusRecord)(nil),            // 37: repowolf.v1.GitHubStatusRecord
+	(*GitHubStatusSummary)(nil),           // 38: repowolf.v1.GitHubStatusSummary
+	(*GitHubRepositoryViewResult)(nil),    // 39: repowolf.v1.GitHubRepositoryViewResult
+	(*GitHubIssueListResult)(nil),         // 40: repowolf.v1.GitHubIssueListResult
+	(*GitHubIssueViewResult)(nil),         // 41: repowolf.v1.GitHubIssueViewResult
+	(*GitHubIssueCreateResult)(nil),       // 42: repowolf.v1.GitHubIssueCreateResult
+	(*GitHubIssueEditResult)(nil),         // 43: repowolf.v1.GitHubIssueEditResult
+	(*GitHubIssueCommentResult)(nil),      // 44: repowolf.v1.GitHubIssueCommentResult
+	(*GitHubIssueCloseResult)(nil),        // 45: repowolf.v1.GitHubIssueCloseResult
+	(*GitHubIssueReopenResult)(nil),       // 46: repowolf.v1.GitHubIssueReopenResult
+	(*GitHubPullListResult)(nil),          // 47: repowolf.v1.GitHubPullListResult
+	(*GitHubPullViewResult)(nil),          // 48: repowolf.v1.GitHubPullViewResult
+	(*GitHubPullCreateResult)(nil),        // 49: repowolf.v1.GitHubPullCreateResult
+	(*GitHubPullEditResult)(nil),          // 50: repowolf.v1.GitHubPullEditResult
+	(*GitHubPullCommentResult)(nil),       // 51: repowolf.v1.GitHubPullCommentResult
+	(*GitHubPullCloseResult)(nil),         // 52: repowolf.v1.GitHubPullCloseResult
+	(*GitHubPullReopenResult)(nil),        // 53: repowolf.v1.GitHubPullReopenResult
+	(*GitHubPullReadyResult)(nil),         // 54: repowolf.v1.GitHubPullReadyResult
+	(*GitHubPullChecksResult)(nil),        // 55: repowolf.v1.GitHubPullChecksResult
+	(*GitHubRunListResult)(nil),           // 56: repowolf.v1.GitHubRunListResult
+	(*GitHubRunViewResult)(nil),           // 57: repowolf.v1.GitHubRunViewResult
+	(*GitHubStatusViewResult)(nil),        // 58: repowolf.v1.GitHubStatusViewResult
+	(*GitHubCurrentUserResult)(nil),       // 59: repowolf.v1.GitHubCurrentUserResult
+	(*GitHubLabelListResult)(nil),         // 60: repowolf.v1.GitHubLabelListResult
+	(*GitHubLabelCreateResult)(nil),       // 61: repowolf.v1.GitHubLabelCreateResult
+	(*GitHubIssueLabelChangeResult)(nil),  // 62: repowolf.v1.GitHubIssueLabelChangeResult
+	(*GitHubResponse)(nil),                // 63: repowolf.v1.GitHubResponse
+	(*RequestContext)(nil),                // 64: repowolf.v1.RequestContext
+	(*ResponseMeta)(nil),                  // 65: repowolf.v1.ResponseMeta
 }
 var file_repowolf_v1_github_proto_depIdxs = []int32{
 	0,  // 0: repowolf.v1.GitHubIssueListRequest.state:type_name -> repowolf.v1.GitHubIssueState
@@ -4164,7 +4827,7 @@ var file_repowolf_v1_github_proto_depIdxs = []int32{
 	3,  // 2: repowolf.v1.GitHubIssueEditRequest.assignees:type_name -> repowolf.v1.GitHubStringList
 	1,  // 3: repowolf.v1.GitHubPullListRequest.state:type_name -> repowolf.v1.GitHubPullState
 	2,  // 4: repowolf.v1.GitHubRunListRequest.status:type_name -> repowolf.v1.GitHubRunStatus
-	54, // 5: repowolf.v1.GitHubRequest.context:type_name -> repowolf.v1.RequestContext
+	64, // 5: repowolf.v1.GitHubRequest.context:type_name -> repowolf.v1.RequestContext
 	4,  // 6: repowolf.v1.GitHubRequest.repository_view:type_name -> repowolf.v1.GitHubRepositoryViewRequest
 	5,  // 7: repowolf.v1.GitHubRequest.issue_list:type_name -> repowolf.v1.GitHubIssueListRequest
 	6,  // 8: repowolf.v1.GitHubRequest.issue_view:type_name -> repowolf.v1.GitHubIssueViewRequest
@@ -4185,55 +4848,68 @@ var file_repowolf_v1_github_proto_depIdxs = []int32{
 	21, // 23: repowolf.v1.GitHubRequest.run_list:type_name -> repowolf.v1.GitHubRunListRequest
 	22, // 24: repowolf.v1.GitHubRequest.run_view:type_name -> repowolf.v1.GitHubRunViewRequest
 	23, // 25: repowolf.v1.GitHubRequest.status_view:type_name -> repowolf.v1.GitHubStatusViewRequest
-	31, // 26: repowolf.v1.GitHubStatusSummary.statuses:type_name -> repowolf.v1.GitHubStatusRecord
-	25, // 27: repowolf.v1.GitHubRepositoryViewResult.repository:type_name -> repowolf.v1.GitHubRepositoryRecord
-	26, // 28: repowolf.v1.GitHubIssueListResult.issues:type_name -> repowolf.v1.GitHubIssueRecord
-	26, // 29: repowolf.v1.GitHubIssueViewResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
-	26, // 30: repowolf.v1.GitHubIssueCreateResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
-	26, // 31: repowolf.v1.GitHubIssueEditResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
-	27, // 32: repowolf.v1.GitHubIssueCommentResult.comment:type_name -> repowolf.v1.GitHubCommentRecord
-	26, // 33: repowolf.v1.GitHubIssueCloseResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
-	26, // 34: repowolf.v1.GitHubIssueReopenResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
-	28, // 35: repowolf.v1.GitHubPullListResult.pulls:type_name -> repowolf.v1.GitHubPullRecord
-	28, // 36: repowolf.v1.GitHubPullViewResult.pull:type_name -> repowolf.v1.GitHubPullRecord
-	28, // 37: repowolf.v1.GitHubPullCreateResult.pull:type_name -> repowolf.v1.GitHubPullRecord
-	28, // 38: repowolf.v1.GitHubPullEditResult.pull:type_name -> repowolf.v1.GitHubPullRecord
-	27, // 39: repowolf.v1.GitHubPullCommentResult.comment:type_name -> repowolf.v1.GitHubCommentRecord
-	28, // 40: repowolf.v1.GitHubPullCloseResult.pull:type_name -> repowolf.v1.GitHubPullRecord
-	28, // 41: repowolf.v1.GitHubPullReopenResult.pull:type_name -> repowolf.v1.GitHubPullRecord
-	28, // 42: repowolf.v1.GitHubPullReadyResult.pull:type_name -> repowolf.v1.GitHubPullRecord
-	29, // 43: repowolf.v1.GitHubPullChecksResult.checks:type_name -> repowolf.v1.GitHubCheckRecord
-	30, // 44: repowolf.v1.GitHubRunListResult.runs:type_name -> repowolf.v1.GitHubRunRecord
-	30, // 45: repowolf.v1.GitHubRunViewResult.run:type_name -> repowolf.v1.GitHubRunRecord
-	32, // 46: repowolf.v1.GitHubStatusViewResult.status:type_name -> repowolf.v1.GitHubStatusSummary
-	55, // 47: repowolf.v1.GitHubResponse.meta:type_name -> repowolf.v1.ResponseMeta
-	33, // 48: repowolf.v1.GitHubResponse.repository_view:type_name -> repowolf.v1.GitHubRepositoryViewResult
-	34, // 49: repowolf.v1.GitHubResponse.issue_list:type_name -> repowolf.v1.GitHubIssueListResult
-	35, // 50: repowolf.v1.GitHubResponse.issue_view:type_name -> repowolf.v1.GitHubIssueViewResult
-	36, // 51: repowolf.v1.GitHubResponse.issue_create:type_name -> repowolf.v1.GitHubIssueCreateResult
-	37, // 52: repowolf.v1.GitHubResponse.issue_edit:type_name -> repowolf.v1.GitHubIssueEditResult
-	38, // 53: repowolf.v1.GitHubResponse.issue_comment:type_name -> repowolf.v1.GitHubIssueCommentResult
-	39, // 54: repowolf.v1.GitHubResponse.issue_close:type_name -> repowolf.v1.GitHubIssueCloseResult
-	40, // 55: repowolf.v1.GitHubResponse.issue_reopen:type_name -> repowolf.v1.GitHubIssueReopenResult
-	41, // 56: repowolf.v1.GitHubResponse.pull_list:type_name -> repowolf.v1.GitHubPullListResult
-	42, // 57: repowolf.v1.GitHubResponse.pull_view:type_name -> repowolf.v1.GitHubPullViewResult
-	43, // 58: repowolf.v1.GitHubResponse.pull_create:type_name -> repowolf.v1.GitHubPullCreateResult
-	44, // 59: repowolf.v1.GitHubResponse.pull_edit:type_name -> repowolf.v1.GitHubPullEditResult
-	45, // 60: repowolf.v1.GitHubResponse.pull_comment:type_name -> repowolf.v1.GitHubPullCommentResult
-	46, // 61: repowolf.v1.GitHubResponse.pull_close:type_name -> repowolf.v1.GitHubPullCloseResult
-	47, // 62: repowolf.v1.GitHubResponse.pull_reopen:type_name -> repowolf.v1.GitHubPullReopenResult
-	48, // 63: repowolf.v1.GitHubResponse.pull_ready:type_name -> repowolf.v1.GitHubPullReadyResult
-	49, // 64: repowolf.v1.GitHubResponse.pull_checks:type_name -> repowolf.v1.GitHubPullChecksResult
-	50, // 65: repowolf.v1.GitHubResponse.run_list:type_name -> repowolf.v1.GitHubRunListResult
-	51, // 66: repowolf.v1.GitHubResponse.run_view:type_name -> repowolf.v1.GitHubRunViewResult
-	52, // 67: repowolf.v1.GitHubResponse.status_view:type_name -> repowolf.v1.GitHubStatusViewResult
-	24, // 68: repowolf.v1.GitHubService.Execute:input_type -> repowolf.v1.GitHubRequest
-	53, // 69: repowolf.v1.GitHubService.Execute:output_type -> repowolf.v1.GitHubResponse
-	69, // [69:70] is the sub-list for method output_type
-	68, // [68:69] is the sub-list for method input_type
-	68, // [68:68] is the sub-list for extension type_name
-	68, // [68:68] is the sub-list for extension extendee
-	0,  // [0:68] is the sub-list for field type_name
+	24, // 26: repowolf.v1.GitHubRequest.current_user:type_name -> repowolf.v1.GitHubCurrentUserRequest
+	25, // 27: repowolf.v1.GitHubRequest.label_list:type_name -> repowolf.v1.GitHubLabelListRequest
+	26, // 28: repowolf.v1.GitHubRequest.label_create:type_name -> repowolf.v1.GitHubLabelCreateRequest
+	27, // 29: repowolf.v1.GitHubRequest.issue_label_change:type_name -> repowolf.v1.GitHubIssueLabelChangeRequest
+	33, // 30: repowolf.v1.GitHubIssueRecord.comments:type_name -> repowolf.v1.GitHubCommentRecord
+	37, // 31: repowolf.v1.GitHubStatusSummary.statuses:type_name -> repowolf.v1.GitHubStatusRecord
+	31, // 32: repowolf.v1.GitHubRepositoryViewResult.repository:type_name -> repowolf.v1.GitHubRepositoryRecord
+	32, // 33: repowolf.v1.GitHubIssueListResult.issues:type_name -> repowolf.v1.GitHubIssueRecord
+	32, // 34: repowolf.v1.GitHubIssueViewResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
+	32, // 35: repowolf.v1.GitHubIssueCreateResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
+	32, // 36: repowolf.v1.GitHubIssueEditResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
+	33, // 37: repowolf.v1.GitHubIssueCommentResult.comment:type_name -> repowolf.v1.GitHubCommentRecord
+	32, // 38: repowolf.v1.GitHubIssueCloseResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
+	32, // 39: repowolf.v1.GitHubIssueReopenResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
+	34, // 40: repowolf.v1.GitHubPullListResult.pulls:type_name -> repowolf.v1.GitHubPullRecord
+	34, // 41: repowolf.v1.GitHubPullViewResult.pull:type_name -> repowolf.v1.GitHubPullRecord
+	34, // 42: repowolf.v1.GitHubPullCreateResult.pull:type_name -> repowolf.v1.GitHubPullRecord
+	34, // 43: repowolf.v1.GitHubPullEditResult.pull:type_name -> repowolf.v1.GitHubPullRecord
+	33, // 44: repowolf.v1.GitHubPullCommentResult.comment:type_name -> repowolf.v1.GitHubCommentRecord
+	34, // 45: repowolf.v1.GitHubPullCloseResult.pull:type_name -> repowolf.v1.GitHubPullRecord
+	34, // 46: repowolf.v1.GitHubPullReopenResult.pull:type_name -> repowolf.v1.GitHubPullRecord
+	34, // 47: repowolf.v1.GitHubPullReadyResult.pull:type_name -> repowolf.v1.GitHubPullRecord
+	35, // 48: repowolf.v1.GitHubPullChecksResult.checks:type_name -> repowolf.v1.GitHubCheckRecord
+	36, // 49: repowolf.v1.GitHubRunListResult.runs:type_name -> repowolf.v1.GitHubRunRecord
+	36, // 50: repowolf.v1.GitHubRunViewResult.run:type_name -> repowolf.v1.GitHubRunRecord
+	38, // 51: repowolf.v1.GitHubStatusViewResult.status:type_name -> repowolf.v1.GitHubStatusSummary
+	29, // 52: repowolf.v1.GitHubCurrentUserResult.user:type_name -> repowolf.v1.GitHubUserRecord
+	30, // 53: repowolf.v1.GitHubLabelListResult.labels:type_name -> repowolf.v1.GitHubLabelRecord
+	30, // 54: repowolf.v1.GitHubLabelCreateResult.label:type_name -> repowolf.v1.GitHubLabelRecord
+	32, // 55: repowolf.v1.GitHubIssueLabelChangeResult.issue:type_name -> repowolf.v1.GitHubIssueRecord
+	65, // 56: repowolf.v1.GitHubResponse.meta:type_name -> repowolf.v1.ResponseMeta
+	39, // 57: repowolf.v1.GitHubResponse.repository_view:type_name -> repowolf.v1.GitHubRepositoryViewResult
+	40, // 58: repowolf.v1.GitHubResponse.issue_list:type_name -> repowolf.v1.GitHubIssueListResult
+	41, // 59: repowolf.v1.GitHubResponse.issue_view:type_name -> repowolf.v1.GitHubIssueViewResult
+	42, // 60: repowolf.v1.GitHubResponse.issue_create:type_name -> repowolf.v1.GitHubIssueCreateResult
+	43, // 61: repowolf.v1.GitHubResponse.issue_edit:type_name -> repowolf.v1.GitHubIssueEditResult
+	44, // 62: repowolf.v1.GitHubResponse.issue_comment:type_name -> repowolf.v1.GitHubIssueCommentResult
+	45, // 63: repowolf.v1.GitHubResponse.issue_close:type_name -> repowolf.v1.GitHubIssueCloseResult
+	46, // 64: repowolf.v1.GitHubResponse.issue_reopen:type_name -> repowolf.v1.GitHubIssueReopenResult
+	47, // 65: repowolf.v1.GitHubResponse.pull_list:type_name -> repowolf.v1.GitHubPullListResult
+	48, // 66: repowolf.v1.GitHubResponse.pull_view:type_name -> repowolf.v1.GitHubPullViewResult
+	49, // 67: repowolf.v1.GitHubResponse.pull_create:type_name -> repowolf.v1.GitHubPullCreateResult
+	50, // 68: repowolf.v1.GitHubResponse.pull_edit:type_name -> repowolf.v1.GitHubPullEditResult
+	51, // 69: repowolf.v1.GitHubResponse.pull_comment:type_name -> repowolf.v1.GitHubPullCommentResult
+	52, // 70: repowolf.v1.GitHubResponse.pull_close:type_name -> repowolf.v1.GitHubPullCloseResult
+	53, // 71: repowolf.v1.GitHubResponse.pull_reopen:type_name -> repowolf.v1.GitHubPullReopenResult
+	54, // 72: repowolf.v1.GitHubResponse.pull_ready:type_name -> repowolf.v1.GitHubPullReadyResult
+	55, // 73: repowolf.v1.GitHubResponse.pull_checks:type_name -> repowolf.v1.GitHubPullChecksResult
+	56, // 74: repowolf.v1.GitHubResponse.run_list:type_name -> repowolf.v1.GitHubRunListResult
+	57, // 75: repowolf.v1.GitHubResponse.run_view:type_name -> repowolf.v1.GitHubRunViewResult
+	58, // 76: repowolf.v1.GitHubResponse.status_view:type_name -> repowolf.v1.GitHubStatusViewResult
+	59, // 77: repowolf.v1.GitHubResponse.current_user:type_name -> repowolf.v1.GitHubCurrentUserResult
+	60, // 78: repowolf.v1.GitHubResponse.label_list:type_name -> repowolf.v1.GitHubLabelListResult
+	61, // 79: repowolf.v1.GitHubResponse.label_create:type_name -> repowolf.v1.GitHubLabelCreateResult
+	62, // 80: repowolf.v1.GitHubResponse.issue_label_change:type_name -> repowolf.v1.GitHubIssueLabelChangeResult
+	28, // 81: repowolf.v1.GitHubService.Execute:input_type -> repowolf.v1.GitHubRequest
+	63, // 82: repowolf.v1.GitHubService.Execute:output_type -> repowolf.v1.GitHubResponse
+	82, // [82:83] is the sub-list for method output_type
+	81, // [81:82] is the sub-list for method input_type
+	81, // [81:81] is the sub-list for extension type_name
+	81, // [81:81] is the sub-list for extension extendee
+	0,  // [0:81] is the sub-list for field type_name
 }
 
 func init() { file_repowolf_v1_github_proto_init() }
@@ -4249,7 +4925,7 @@ func file_repowolf_v1_github_proto_init() {
 	file_repowolf_v1_github_proto_msgTypes[11].OneofWrappers = []any{}
 	file_repowolf_v1_github_proto_msgTypes[12].OneofWrappers = []any{}
 	file_repowolf_v1_github_proto_msgTypes[18].OneofWrappers = []any{}
-	file_repowolf_v1_github_proto_msgTypes[21].OneofWrappers = []any{
+	file_repowolf_v1_github_proto_msgTypes[25].OneofWrappers = []any{
 		(*GitHubRequest_RepositoryView)(nil),
 		(*GitHubRequest_IssueList)(nil),
 		(*GitHubRequest_IssueView)(nil),
@@ -4270,14 +4946,18 @@ func file_repowolf_v1_github_proto_init() {
 		(*GitHubRequest_RunList)(nil),
 		(*GitHubRequest_RunView)(nil),
 		(*GitHubRequest_StatusView)(nil),
+		(*GitHubRequest_CurrentUser)(nil),
+		(*GitHubRequest_LabelList)(nil),
+		(*GitHubRequest_LabelCreate)(nil),
+		(*GitHubRequest_IssueLabelChange)(nil),
 	}
-	file_repowolf_v1_github_proto_msgTypes[22].OneofWrappers = []any{}
-	file_repowolf_v1_github_proto_msgTypes[23].OneofWrappers = []any{}
-	file_repowolf_v1_github_proto_msgTypes[25].OneofWrappers = []any{}
-	file_repowolf_v1_github_proto_msgTypes[26].OneofWrappers = []any{}
-	file_repowolf_v1_github_proto_msgTypes[27].OneofWrappers = []any{}
 	file_repowolf_v1_github_proto_msgTypes[28].OneofWrappers = []any{}
-	file_repowolf_v1_github_proto_msgTypes[50].OneofWrappers = []any{
+	file_repowolf_v1_github_proto_msgTypes[29].OneofWrappers = []any{}
+	file_repowolf_v1_github_proto_msgTypes[31].OneofWrappers = []any{}
+	file_repowolf_v1_github_proto_msgTypes[32].OneofWrappers = []any{}
+	file_repowolf_v1_github_proto_msgTypes[33].OneofWrappers = []any{}
+	file_repowolf_v1_github_proto_msgTypes[34].OneofWrappers = []any{}
+	file_repowolf_v1_github_proto_msgTypes[60].OneofWrappers = []any{
 		(*GitHubResponse_RepositoryView)(nil),
 		(*GitHubResponse_IssueList)(nil),
 		(*GitHubResponse_IssueView)(nil),
@@ -4298,6 +4978,10 @@ func file_repowolf_v1_github_proto_init() {
 		(*GitHubResponse_RunList)(nil),
 		(*GitHubResponse_RunView)(nil),
 		(*GitHubResponse_StatusView)(nil),
+		(*GitHubResponse_CurrentUser)(nil),
+		(*GitHubResponse_LabelList)(nil),
+		(*GitHubResponse_LabelCreate)(nil),
+		(*GitHubResponse_IssueLabelChange)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -4305,7 +4989,7 @@ func file_repowolf_v1_github_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_repowolf_v1_github_proto_rawDesc), len(file_repowolf_v1_github_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   51,
+			NumMessages:   61,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
