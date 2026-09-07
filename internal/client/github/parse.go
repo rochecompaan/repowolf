@@ -20,6 +20,8 @@ type operationKind byte
 const (
 	operationUnknown operationKind = iota
 	operationRepositoryView
+	operationAuthStatus
+	operationCurrentUserLogin
 	operationIssueList
 	operationIssueView
 	operationIssueCreate
@@ -65,6 +67,10 @@ func parseArgs(args []string, cwd string) (command, error) {
 	var kind operationKind
 	var err error
 	switch args[0] {
+	case "auth":
+		operation, flags, kind, err = parseAuth(args[1:])
+	case "api":
+		operation, flags, kind, err = parseAPI(args[1:])
 	case "repo":
 		operation, flags, kind, err = parseRepository(args[1:])
 	case "issue":
@@ -110,15 +116,6 @@ func validateArgv(args []string) error {
 	return nil
 }
 
-func parseRepository(args []string) (any, parsedFlags, operationKind, error) {
-	if len(args) == 0 || args[0] != "view" {
-		return nil, parsedFlags{}, operationUnknown, fmt.Errorf("unsupported repository operation")
-	}
-	flags, err := parseFlags(args[1:], operationFlags())
-	operation := &repowolfv1.GitHubRequest_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewRequest{}}
-	return operation, flags, operationRepositoryView, err
-}
-
 func selectedFields(kind operationKind, value string) ([]string, error) {
 	if value == "" {
 		return nil, nil
@@ -143,6 +140,8 @@ func selectedFields(kind operationKind, value string) ([]string, error) {
 
 func assignOperation(request *repowolfv1.GitHubRequest, operation any) error {
 	switch value := operation.(type) {
+	case *repowolfv1.GitHubRequest_CurrentUser:
+		request.Operation = value
 	case *repowolfv1.GitHubRequest_RepositoryView:
 		request.Operation = value
 	case *repowolfv1.GitHubRequest_IssueList:

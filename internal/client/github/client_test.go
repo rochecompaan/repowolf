@@ -153,6 +153,14 @@ func TestRunUsesRealTLSBearerAuthenticationAndRendering(t *testing.T) {
 	if statusCode != 1 || stdout.Len() != 0 || stderr.String() != "gh: GitHub operation failed\n" {
 		t.Fatalf("denied Run() = %d, stdout=%q stderr=%q", statusCode, stdout.String(), stderr.String())
 	}
+
+	service.response = &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_CurrentUser{CurrentUser: &repowolfv1.GitHubCurrentUserResult{User: &repowolfv1.GitHubUserRecord{Login: "octocat"}}}}
+	stdout.Reset()
+	stderr.Reset()
+	statusCode = Run(context.Background(), []string{"auth", "status"}, &stdout, &stderr)
+	if statusCode != 0 || stdout.Len() != 0 || stderr.String() != "Logged in to github.com as octocat\n" {
+		t.Fatalf("auth Run() = %d, stdout=%q stderr=%q", statusCode, stdout.String(), stderr.String())
+	}
 }
 
 func TestRunFailsAtSafeBoundaries(t *testing.T) {
@@ -181,6 +189,56 @@ func TestRunFailsAtSafeBoundaries(t *testing.T) {
 			t.Fatalf("Run() = %d, stderr=%q", statusCode, stderr.String())
 		}
 	})
+}
+
+func TestRunVersionIsLocal(t *testing.T) {
+	setRunEnv(t, "", "", "", "")
+	var stdout, stderr bytes.Buffer
+	status := Run(context.Background(), []string{"--version"}, &stdout, &stderr)
+	if status != 0 || stdout.String() != "gh version repowolf\n" || stderr.Len() != 0 {
+		t.Fatalf("status=%d stdout=%q stderr=%q", status, stdout.String(), stderr.String())
+	}
+}
+
+func TestRunRejectsVersionArguments(t *testing.T) {
+	setRunEnv(t, "", "", "", "")
+	var stdout, stderr bytes.Buffer
+	status := Run(context.Background(), []string{"--version", "extra"}, &stdout, &stderr)
+	if status != 2 {
+		t.Fatalf("status=%d, want 2", status)
+	}
+}
+
+func TestPatchmillIdentityRendering(t *testing.T) {
+	response := &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_CurrentUser{CurrentUser: &repowolfv1.GitHubCurrentUserResult{User: &repowolfv1.GitHubUserRecord{Login: "octocat"}}}}
+	for _, test := range []struct {
+		kind operationKind
+		want string
+	}{
+		{operationAuthStatus, "Logged in to github.com as octocat\n"},
+		{operationCurrentUserLogin, "octocat\n"},
+	} {
+		output, err := render(command{kind: test.kind}, response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(output) != test.want {
+			t.Fatalf("output = %q, want %q", output, test.want)
+		}
+	}
+}
+
+func TestPatchmillRepositoryRendering(t *testing.T) {
+	response := &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewResult{Repository: &repowolfv1.GitHubRepositoryRecord{
+		Repository: "repowolf", Url: "https://github.com/owner/repowolf", SshUrl: "git@github.com:owner/repowolf.git",
+	}}}}
+	output, err := render(command{kind: operationRepositoryView, fields: []string{"name", "sshUrl", "url"}}, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "{\"name\":\"repowolf\",\"sshUrl\":\"git@github.com:owner/repowolf.git\",\"url\":\"https://github.com/owner/repowolf\"}\n"; string(output) != want {
+		t.Fatalf("output = %q, want %q", output, want)
+	}
 }
 
 const testClientToken = "rw1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"

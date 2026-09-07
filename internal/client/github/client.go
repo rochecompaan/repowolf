@@ -15,6 +15,13 @@ const operationTimeout = 2 * time.Minute
 
 // Run parses, executes, and renders one restricted gh command.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "--version" {
+		if err := writeExact(stdout, []byte("gh version repowolf\n")); err != nil {
+			writeDiagnostic(stderr, "gh: GitHub operation failed\n")
+			return 1
+		}
+		return 0
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		writeDiagnostic(stderr, "gh: unsupported or invalid command\n")
@@ -42,7 +49,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	operationContext, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
-	if err := executeCommand(operationContext, repowolfv1.NewGitHubServiceClient(connection), parsed, stdout); err != nil {
+	successWriter := stdout
+	if parsed.kind == operationAuthStatus {
+		successWriter = stderr
+	}
+	if err := executeCommand(operationContext, repowolfv1.NewGitHubServiceClient(connection), parsed, successWriter); err != nil {
 		if errors.Is(operationContext.Err(), context.Canceled) {
 			return interrupted(operationContext, stderr)
 		}

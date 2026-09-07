@@ -21,6 +21,8 @@ func normalizedResult(kind operationKind, response *repowolfv1.GitHubResponse) (
 	switch kind {
 	case operationRepositoryView:
 		value = response.GetRepositoryView().GetRepository()
+	case operationAuthStatus, operationCurrentUserLogin:
+		value = response.GetCurrentUser().GetUser()
 	case operationIssueList:
 		value = response.GetIssueList().GetIssues()
 	case operationIssueView:
@@ -65,13 +67,19 @@ func normalizedResult(kind operationKind, response *repowolfv1.GitHubResponse) (
 	if isNilResult(value) {
 		return nil, fmt.Errorf("GitHub response did not match request")
 	}
-	return normalizeJSON(value)
+	normalized, err := normalizeJSON(value)
+	if err != nil {
+		return nil, err
+	}
+	return shapeJSON(kind, normalized), nil
 }
 
 func responseMatches(kind operationKind, response *repowolfv1.GitHubResponse) bool {
 	switch kind {
 	case operationRepositoryView:
 		return response.GetRepositoryView() != nil
+	case operationAuthStatus, operationCurrentUserLogin:
+		return response.GetCurrentUser() != nil
 	case operationIssueList:
 		return response.GetIssueList() != nil
 	case operationIssueView:

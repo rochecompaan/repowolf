@@ -102,6 +102,10 @@ func renderNative(kind operationKind, value any) ([]byte, error) {
 		return nil, fmt.Errorf("invalid typed object response")
 	}
 	switch kind {
+	case operationAuthStatus:
+		fmt.Fprintf(&output, "Logged in to github.com as %s\n", cell(object["login"]))
+	case operationCurrentUserLogin:
+		fmt.Fprintln(&output, cell(object["login"]))
 	case operationRepositoryView:
 		writeFields(&output, object, []fieldLabel{{"name", "nameWithOwner"}, {"description", "description"}, {"url", "url"}, {"default branch", "defaultBranch"}})
 	case operationIssueView, operationIssueCreate, operationIssueEdit, operationIssueClose, operationIssueReopen:
