@@ -22,10 +22,14 @@ func ValidateGitHubRequest(request *repowolfv1.GitHubRequest) error {
 	}
 	var err error
 	switch operation := request.Operation.(type) {
+	case *repowolfv1.GitHubRequest_CurrentUser:
+		err = validateCurrentUser(operation.CurrentUser)
 	case *repowolfv1.GitHubRequest_RepositoryView:
 		if operation.RepositoryView == nil {
 			err = invalid("operation")
 		}
+	case *repowolfv1.GitHubRequest_LabelList:
+		err = validateLabelList(operation.LabelList)
 	case *repowolfv1.GitHubRequest_IssueList:
 		err = validateIssueList(operation.IssueList)
 	case *repowolfv1.GitHubRequest_IssueView:
@@ -40,6 +44,10 @@ func ValidateGitHubRequest(request *repowolfv1.GitHubRequest) error {
 		err = number(operation.IssueClose.GetNumber())
 	case *repowolfv1.GitHubRequest_IssueReopen:
 		err = number(operation.IssueReopen.GetNumber())
+	case *repowolfv1.GitHubRequest_LabelCreate:
+		err = validateLabelCreate(operation.LabelCreate)
+	case *repowolfv1.GitHubRequest_IssueLabelChange:
+		err = validateIssueLabelChange(operation.IssueLabelChange)
 	case *repowolfv1.GitHubRequest_PullList:
 		err = validatePullList(operation.PullList)
 	case *repowolfv1.GitHubRequest_PullView:
@@ -74,7 +82,7 @@ func validateIssueList(value *repowolfv1.GitHubIssueListRequest) error {
 	if value == nil || value.State < repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_OPEN || value.State > repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_ALL {
 		return invalid("state")
 	}
-	return limit(value.Limit)
+	return limit(value.Limit, maximumIssueListLimit)
 }
 func validateIssueCreate(value *repowolfv1.GitHubIssueCreateRequest) error {
 	if value == nil {
@@ -127,7 +135,7 @@ func validatePullList(value *repowolfv1.GitHubPullListRequest) error {
 	if value == nil || value.State < repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_OPEN || value.State > repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_ALL {
 		return invalid("state")
 	}
-	if err := limit(value.Limit); err != nil {
+	if err := limit(value.Limit, maximumListLimit); err != nil {
 		return err
 	}
 	for _, item := range []*string{value.Base, value.Head} {
@@ -192,7 +200,7 @@ func validateRunList(value *repowolfv1.GitHubRunListRequest) error {
 	if value == nil {
 		return invalid("operation")
 	}
-	if err := limit(value.Limit); err != nil {
+	if err := limit(value.Limit, maximumListLimit); err != nil {
 		return err
 	}
 	if value.Branch != nil {
@@ -211,8 +219,8 @@ func number(value uint64) error {
 	}
 	return nil
 }
-func limit(value uint64) error {
-	if value == 0 || value > maximumListLimit {
+func limit(value, maximum uint64) error {
+	if value == 0 || value > maximum {
 		return invalid("limit")
 	}
 	return nil

@@ -9,8 +9,35 @@ import (
 	"testing"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/runner"
 )
+
+func TestPatchmillOperationMappings(t *testing.T) {
+	patchmillOperations := []struct {
+		request    *repowolfv1.GitHubRequest
+		capability config.Capability
+		name       string
+	}{
+		{&repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_CurrentUser{CurrentUser: &repowolfv1.GitHubCurrentUserRequest{}}}, config.RepositoryRead, "github.current_user"},
+		{&repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_LabelList{LabelList: &repowolfv1.GitHubLabelListRequest{Limit: 1000}}}, config.IssuesRead, "github.label_list"},
+		{&repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_LabelCreate{LabelCreate: &repowolfv1.GitHubLabelCreateRequest{Name: "patchmill:ready", Color: "1a2b3c", Description: "Ready"}}}, config.IssuesWrite, "github.label_create"},
+		{&repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeRequest{Number: 18, AddLabels: []string{"patchmill:ready"}}}}, config.IssuesWrite, "github.issue_label_change"},
+	}
+
+	for _, test := range patchmillOperations {
+		t.Run(test.name, func(t *testing.T) {
+			capability, err := Capability(test.request)
+			if err != nil || capability != test.capability {
+				t.Fatalf("Capability() = %q, %v; want %q, nil", capability, err, test.capability)
+			}
+			name, err := OperationName(test.request)
+			if err != nil || name != test.name {
+				t.Fatalf("OperationName() = %q, %v; want %q, nil", name, err, test.name)
+			}
+		})
+	}
+}
 
 func TestTypedTextAndNameLimitsUseUTF8Bytes(t *testing.T) {
 	pullState := repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_OPEN

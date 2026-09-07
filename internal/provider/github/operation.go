@@ -16,10 +16,16 @@ func Capability(request *repowolfv1.GitHubRequest) (config.Capability, error) {
 		return "", ErrInvalidRequest
 	}
 	switch request.Operation.(type) {
+	case *repowolfv1.GitHubRequest_CurrentUser:
+		return config.RepositoryRead, nil
 	case *repowolfv1.GitHubRequest_RepositoryView:
 		return config.RepositoryRead, nil
+	case *repowolfv1.GitHubRequest_LabelList:
+		return config.IssuesRead, nil
 	case *repowolfv1.GitHubRequest_IssueList, *repowolfv1.GitHubRequest_IssueView:
 		return config.IssuesRead, nil
+	case *repowolfv1.GitHubRequest_LabelCreate, *repowolfv1.GitHubRequest_IssueLabelChange:
+		return config.IssuesWrite, nil
 	case *repowolfv1.GitHubRequest_IssueCreate, *repowolfv1.GitHubRequest_IssueEdit,
 		*repowolfv1.GitHubRequest_IssueComment, *repowolfv1.GitHubRequest_IssueClose,
 		*repowolfv1.GitHubRequest_IssueReopen:
@@ -45,8 +51,12 @@ func OperationName(request *repowolfv1.GitHubRequest) (string, error) {
 		return "", ErrInvalidRequest
 	}
 	switch request.Operation.(type) {
+	case *repowolfv1.GitHubRequest_CurrentUser:
+		return "github.current_user", nil
 	case *repowolfv1.GitHubRequest_RepositoryView:
 		return "github.repository_view", nil
+	case *repowolfv1.GitHubRequest_LabelList:
+		return "github.label_list", nil
 	case *repowolfv1.GitHubRequest_IssueList:
 		return "github.issue_list", nil
 	case *repowolfv1.GitHubRequest_IssueView:
@@ -61,6 +71,10 @@ func OperationName(request *repowolfv1.GitHubRequest) (string, error) {
 		return "github.issue_close", nil
 	case *repowolfv1.GitHubRequest_IssueReopen:
 		return "github.issue_reopen", nil
+	case *repowolfv1.GitHubRequest_LabelCreate:
+		return "github.label_create", nil
+	case *repowolfv1.GitHubRequest_IssueLabelChange:
+		return "github.issue_label_change", nil
 	case *repowolfv1.GitHubRequest_PullList:
 		return "github.pull_list", nil
 	case *repowolfv1.GitHubRequest_PullView:

@@ -55,3 +55,25 @@ func TestInvalidRequestNeverCallsProvider(t *testing.T) {
 		t.Fatalf("provider calls = %d", len(caller.commands))
 	}
 }
+
+func TestInvalidPatchmillRequestsAreInert(t *testing.T) {
+	requests := []struct {
+		name    string
+		request *repowolfv1.GitHubRequest
+	}{
+		{"current user", &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_CurrentUser{}}},
+		{"label list", &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_LabelList{LabelList: &repowolfv1.GitHubLabelListRequest{Limit: 1001}}}},
+		{"label create", &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_LabelCreate{LabelCreate: &repowolfv1.GitHubLabelCreateRequest{Name: "label", Color: "invalid"}}}},
+		{"issue label change", &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeRequest{Number: 1}}}},
+	}
+
+	for _, test := range requests {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &fakeCaller{}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), test.request)
+			if response != nil || err == nil || len(caller.commands) != 0 {
+				t.Fatalf("Execute() = %#v, %v, calls = %d", response, err, len(caller.commands))
+			}
+		})
+	}
+}
