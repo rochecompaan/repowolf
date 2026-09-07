@@ -46,17 +46,14 @@ func (adapter *Adapter) executeLabelList(
 			return nil, err
 		}
 		if len(records) > limit-len(labels) {
-			return nil, runner.ErrOutputLimit
+			records = records[:limit-len(labels)]
 		}
 		labels = append(labels, records...)
-		if !included.hasNext {
+		if len(labels) >= limit || !included.hasNext {
 			return boundedLabelListResponse(labels)
 		}
 		if len(records) < perPage {
 			return nil, providerResponse(nil, "labels pagination")
-		}
-		if len(labels) >= limit || page == maximumLabelListPages {
-			return nil, runner.ErrOutputLimit
 		}
 	}
 	return nil, runner.ErrOutputLimit
@@ -104,7 +101,7 @@ func normalizeLabelPage(raw []byte, maximum int) ([]*repowolfv1.GitHubLabelRecor
 
 func boundedLabelListResponse(labels []*repowolfv1.GitHubLabelRecord) (*repowolfv1.GitHubResponse, error) {
 	response := &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_LabelList{LabelList: &repowolfv1.GitHubLabelListResult{Labels: labels}}}
-	if proto.Size(response) > maximumResponseBytes {
+	if proto.Size(response) > maximumPaginatedReadBytes {
 		return nil, runner.ErrOutputLimit
 	}
 	return response, nil
@@ -114,10 +111,6 @@ type expectedLinkTarget struct {
 	host    string
 	path    string
 	perPage int
-}
-
-func decodeIncludedPage(raw []byte, expectedPage int) (includedPage, error) {
-	return decodeIncludedPageForTarget(raw, expectedPage, nil)
 }
 
 func decodeIncludedRepositoryPage(raw []byte, expectedPage, perPage int, host, path string) (includedPage, error) {

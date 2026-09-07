@@ -36,7 +36,7 @@ func (adapter *Adapter) callBudgeted(ctx context.Context, command runner.Command
 	if err != nil {
 		return runner.Result{}, err
 	}
-	command.StdoutLimit = remaining
+	command.StdoutLimit = min(command.StdoutLimit, remaining)
 	result, err := adapter.call(ctx, command)
 	if err != nil {
 		return result, err

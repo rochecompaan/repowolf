@@ -129,3 +129,17 @@ func TestIssueListGraphQLActorLogins(t *testing.T) {
 		})
 	}
 }
+
+// GraphQL returns a null author for deleted users; REST substitutes the
+// "ghost" placeholder, and one such issue must not break the whole list.
+func TestIssueListGraphQLGhostAuthor(t *testing.T) {
+	value := graphQLIssueFixture(1)
+	value["author"] = nil
+	page, err := normalizeIssueGraphQLPage(graphQLIssuePage([]map[string]any{value}, false, "last"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := page.records[0].GetAuthor(); got != "ghost" {
+		t.Fatalf("author = %q, want %q", got, "ghost")
+	}
+}

@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -14,7 +13,8 @@ import (
 )
 
 // Regression: label listing uses fixed, locally generated REST pages and stops
-// only when GitHub's included response metadata reports no next page.
+// at the requested limit or when GitHub's included response metadata reports
+// no next page, truncating extra records like gh.
 func TestLabelListPagination(t *testing.T) {
 	for _, total := range []int{101, 102, 201} {
 		t.Run(fmt.Sprintf("limit 101 with %d labels", total), func(t *testing.T) {
@@ -33,22 +33,16 @@ func TestLabelListPagination(t *testing.T) {
 				return runner.Result{Stdout: raw}, nil
 			}}
 			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), labelListRequest(101))
-			if total > 101 {
-				if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
-					t.Fatalf("Execute() = %v, %v, want output limit", response, err)
-				}
-			} else {
-				if err != nil {
-					t.Fatal(err)
-				}
-				labels := response.GetLabelList().GetLabels()
-				if len(labels) != 101 {
-					t.Fatalf("labels = %d", len(labels))
-				}
-				for index, label := range labels {
-					if label.GetName() != fmt.Sprintf("label-%d", index+1) {
-						t.Fatalf("label %d = %q", index, label.GetName())
-					}
+			if err != nil {
+				t.Fatal(err)
+			}
+			labels := response.GetLabelList().GetLabels()
+			if len(labels) != 101 {
+				t.Fatalf("labels = %d", len(labels))
+			}
+			for index, label := range labels {
+				if label.GetName() != fmt.Sprintf("label-%d", index+1) {
+					t.Fatalf("label %d = %q", index, label.GetName())
 				}
 			}
 			want := []runner.Command{
@@ -147,9 +141,9 @@ func TestLabelListRejectsPaginationMetadata(t *testing.T) {
 	}
 }
 
-// Regression: label pagination fails closed at either the requested record
-// bound or the ten-page provider-call bound without returning partial data.
-func TestLabelListOverflow(t *testing.T) {
+// Label listing truncates at the requested limit like gh and never issues an
+// eleventh provider call.
+func TestLabelListTruncation(t *testing.T) {
 	t.Run("page ten advertises next", func(t *testing.T) {
 		results := make([]runner.Result, 10)
 		for page := 1; page <= 10; page++ {
@@ -158,8 +152,11 @@ func TestLabelListOverflow(t *testing.T) {
 		caller := &fakeCaller{results: results}
 
 		response, err := testAdapter(t, caller).Execute(context.Background(), repository(), labelListRequest(1000))
-		if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
-			t.Fatalf("Execute() = %#v, %v, want output limit", response, err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := len(response.GetLabelList().GetLabels()); got != 1000 {
+			t.Fatalf("labels = %d, want 1000", got)
 		}
 		if len(caller.commands) != 10 {
 			t.Fatalf("commands = %d, want no eleventh call", len(caller.commands))
@@ -169,8 +166,12 @@ func TestLabelListOverflow(t *testing.T) {
 	t.Run("page returns more than requested", func(t *testing.T) {
 		caller := &fakeCaller{results: []runner.Result{{Stdout: labelPage(t, 1, 2, false)}}}
 		response, err := testAdapter(t, caller).Execute(context.Background(), repository(), labelListRequest(1))
-		if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
-			t.Fatalf("Execute() = %#v, %v, want output limit", response, err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		labels := response.GetLabelList().GetLabels()
+		if len(labels) != 1 || labels[0].GetName() != "label-1" {
+			t.Fatalf("labels = %#v, want only label-1", labels)
 		}
 	})
 }

@@ -10,7 +10,8 @@ import (
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 )
 
-const maxRenderedBytes = 1 << 20
+// Bounded paginated reads may return up to the provider's 8 MiB read budget.
+const maxRenderedBytes = 8 << 20
 
 func render(parsed command, response *repowolfv1.GitHubResponse) ([]byte, error) {
 	value, err := normalizedResult(parsed.kind, response)
@@ -63,7 +64,7 @@ func absentJSONValue(field string) any {
 		return false
 	case "number", "id":
 		return 0
-	case "assignees", "labels", "statuses":
+	case "assignees", "comments", "labels", "statuses":
 		return []any{}
 	default:
 		return nil

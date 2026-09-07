@@ -192,3 +192,34 @@ func TestPatchmillJSONRendering(t *testing.T) {
 		})
 	}
 }
+
+// gh renders an issue without comments as an empty array, not null.
+func TestRenderEmptyCommentsAsEmptyArray(t *testing.T) {
+	issue := &repowolfv1.GitHubIssueRecord{Author: "octocat"}
+	response := &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueView{IssueView: &repowolfv1.GitHubIssueViewResult{Issue: issue}}}
+	got, err := render(command{kind: operationIssueView, fields: []string{"comments"}}, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "{\"comments\":[]}\n" {
+		t.Fatalf("render() = %q, want %q", got, "{\"comments\":[]}\n")
+	}
+}
+
+// Issue lists inside the provider read budget must render without tripping a
+// smaller client-side cap.
+func TestRenderLargeIssueList(t *testing.T) {
+	body := strings.Repeat("x", 65_536)
+	issues := make([]*repowolfv1.GitHubIssueRecord, 24)
+	for index := range issues {
+		issues[index] = &repowolfv1.GitHubIssueRecord{Number: uint64(index + 1), Body: &body}
+	}
+	response := &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueList{IssueList: &repowolfv1.GitHubIssueListResult{Issues: issues}}}
+	got, err := render(command{kind: operationIssueList, fields: []string{"number", "body"}}, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) <= 1<<20 {
+		t.Fatalf("rendered %d bytes, want more than 1 MiB to prove the cap moved", len(got))
+	}
+}

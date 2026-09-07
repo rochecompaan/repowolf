@@ -55,7 +55,7 @@ func New(options Options) (*Server, error) {
 	service.grpc = grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(options.TLSConfig.Clone())),
 		grpc.MaxRecvMsgSize(messageLimitBytes),
-		grpc.MaxSendMsgSize(messageLimitBytes),
+		grpc.MaxSendMsgSize(responseLimitBytes),
 		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionIdle: 30 * time.Minute, Time: 2 * time.Hour, Timeout: 20 * time.Second}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{MinTime: time.Minute, PermitWithoutStream: false}),
 		grpc.ChainUnaryInterceptor(service.unaryInterceptors()...),

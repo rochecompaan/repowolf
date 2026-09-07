@@ -80,8 +80,12 @@ func TestIssueViewCommentOverflow(t *testing.T) {
 		t.Run(fmt.Sprint(total), func(t *testing.T) {
 			used := 0
 			caller := &scriptedIssueViewCaller{call: func(_ context.Context, command runner.Command, index int) (runner.Result, error) {
-				if command.StdoutLimit != maximumPaginatedReadBytes-used {
-					t.Fatalf("remaining budget = %d", command.StdoutLimit)
+				want := maximumPaginatedReadBytes - used
+				if index == 0 {
+					want = min(2*miB, want)
+				}
+				if command.StdoutLimit != want {
+					t.Fatalf("stdout limit = %d, want %d", command.StdoutLimit, want)
 				}
 				var raw []byte
 				if index == 0 {

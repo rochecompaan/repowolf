@@ -143,7 +143,7 @@ func normalizeIssueCommentPage(raw []byte, maximum int) ([]*repowolfv1.GitHubCom
 
 func boundedIssueViewResponse(record *repowolfv1.GitHubIssueRecord) (*repowolfv1.GitHubResponse, error) {
 	response := issueViewResponse(record)
-	if proto.Size(response) > maximumResponseBytes {
+	if proto.Size(response) > maximumPaginatedReadBytes {
 		return nil, runner.ErrOutputLimit
 	}
 	return response, nil

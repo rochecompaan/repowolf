@@ -103,9 +103,13 @@ func graphQLIssueRecord(value graphQLIssue) (*repowolfv1.GitHubIssueRecord, erro
 	if err != nil || state != "OPEN" && state != "CLOSED" {
 		return nil, providerResponse(err, "issue.state")
 	}
-	author, err := userLogin(value.Author, "issue.author")
-	if err != nil || !graphQLActorLogin(author) {
-		return nil, providerResponse(err, "issue.author")
+	// GraphQL nulls the author for deleted users; REST substitutes "ghost".
+	author := "ghost"
+	if value.Author != nil {
+		author, err = userLogin(value.Author, "issue.author")
+		if err != nil || !graphQLActorLogin(author) {
+			return nil, providerResponse(err, "issue.author")
+		}
 	}
 	labels, err := graphQLIssueLabels(value.Labels)
 	if err != nil {

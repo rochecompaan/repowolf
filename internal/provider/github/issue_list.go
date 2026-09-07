@@ -119,7 +119,7 @@ func (adapter *Adapter) callIssueGraphQLPage(
 
 func boundedIssueListResponse(records []*repowolfv1.GitHubIssueRecord) (*repowolfv1.GitHubResponse, error) {
 	response := issueListResponse(records)
-	if proto.Size(response) > maximumResponseBytes {
+	if proto.Size(response) > maximumPaginatedReadBytes {
 		return nil, runner.ErrOutputLimit
 	}
 	return response, nil

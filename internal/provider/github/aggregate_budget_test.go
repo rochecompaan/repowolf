@@ -113,7 +113,7 @@ func TestPreflightedMutationsShareExactAggregateStdoutBudget(t *testing.T) {
 func TestIssueViewCommentBudget(t *testing.T) {
 	issue := issueViewFixture()
 	comments := commentPage(t, commentFixture(1))
-	issueSize := 4 * miB
+	issueSize := 2 * miB
 	issue = append(issue, []byte(strings.Repeat(" ", issueSize-len(issue)))...)
 
 	for _, test := range []struct {
@@ -132,7 +132,7 @@ func TestIssueViewCommentBudget(t *testing.T) {
 				if err != nil || len(response.GetIssueView().GetIssue().GetComments()) != 1 {
 					t.Fatalf("Execute() = %#v, %v", response, err)
 				}
-				if caller.commands[0].StdoutLimit != maximumPaginatedReadBytes || caller.commands[1].StdoutLimit != test.size-issueSize {
+				if caller.commands[0].StdoutLimit != 2*miB || caller.commands[1].StdoutLimit != test.size-issueSize {
 					t.Fatalf("stdout limits = %d, %d", caller.commands[0].StdoutLimit, caller.commands[1].StdoutLimit)
 				}
 				return
@@ -190,4 +190,19 @@ func paddedJSON(value string, size int) []byte {
 		panic("fixture exceeds requested size")
 	}
 	return []byte(value + strings.Repeat(" ", size-len(value)))
+}
+
+// Regression: the shared read budget must not loosen the 2 MiB per-call cap
+// on the comments-path issue view.
+func TestIssueViewCommentPathKeepsPerCallCap(t *testing.T) {
+	issue := issueViewFixture()
+	issue = append(issue, []byte(strings.Repeat(" ", 2*miB-len(issue)+1))...)
+	caller := &fakeCaller{results: []runner.Result{{Stdout: issue}}}
+	response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
+	if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
+		t.Fatalf("Execute() = %#v, %v, want output limit", response, err)
+	}
+	if len(caller.commands) != 1 || caller.commands[0].StdoutLimit != 2*miB {
+		t.Fatalf("commands = %d, first stdout limit = %d, want 1 command capped at 2 MiB", len(caller.commands), caller.commands[0].StdoutLimit)
+	}
 }

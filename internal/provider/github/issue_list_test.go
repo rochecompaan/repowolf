@@ -126,7 +126,6 @@ func TestIssueListRejectsPaginationMetadata(t *testing.T) {
 		{"missing nodes", []string{`{"data":{"repository":{"issues":{"pageInfo":` + validPageInfo + `}}}}`}, 1},
 		{"missing page info", []string{`{"data":{"repository":{"issues":{"nodes":[]}}}}`}, 1},
 		{"missing has next page", []string{page(`[]`, `{"endCursor":"cursor-1"}`)}, 1},
-		{"missing author", []string{page(`[{`+strings.Replace(validScalars, `,"author":{"login":"octocat"}`, ``, 1)+`}]`, validPageInfo)}, 1},
 		{"missing author login", []string{page(`[{`+strings.Replace(validScalars, `"author":{"login":"octocat"}`, `"author":{}`, 1)+`}]`, validPageInfo)}, 1},
 		{"missing labels", []string{page(`[{`+strings.Replace(validScalars, `,`+validLabels, ``, 1)+`}]`, validPageInfo)}, 1},
 		{"missing label nodes", []string{page(`[{`+strings.Replace(validScalars, validLabels, `"labels":{"pageInfo":{"hasNextPage":false}}`, 1)+`}]`, validPageInfo)}, 1},
@@ -291,4 +290,36 @@ func issueListCommandBody(t *testing.T, command runner.Command) struct {
 		t.Fatalf("variables = %#v, want only five typed variables", body.Variables)
 	}
 	return body
+}
+
+// Bounded issue lists may normalize up to the shared 8 MiB read budget; the
+// 1 MiB single-response cap must not reject accepted list sizes and bodies.
+func TestIssueListLargeBodiesWithinReadBudget(t *testing.T) {
+	nodes := make([]map[string]any, 24)
+	for index := range nodes {
+		node := graphQLIssueFixture(index + 1)
+		node["body"] = strings.Repeat("x", maximumBodyBytes)
+		nodes[index] = node
+	}
+	caller := &fakeCaller{results: []runner.Result{{Stdout: graphQLIssuePage(nodes, false, "last")}}}
+	response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueListRequest(repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_ALL, 24))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(response.GetIssueList().GetIssues()); got != 24 {
+		t.Fatalf("issues = %d, want 24", got)
+	}
+}
+
+// The read budget remains the ceiling: normalized responses above it fail closed.
+func TestBoundedIssueListResponseKeepsReadBudgetCeiling(t *testing.T) {
+	body := strings.Repeat("x", maximumBodyBytes)
+	records := make([]*repowolfv1.GitHubIssueRecord, 130)
+	for index := range records {
+		records[index] = &repowolfv1.GitHubIssueRecord{Number: uint64(index + 1), Title: "title", Body: &body, State: "open", Author: "octocat"}
+	}
+	response, err := boundedIssueListResponse(records)
+	if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
+		t.Fatalf("boundedIssueListResponse() = %#v, %v, want output limit", response, err)
+	}
 }
