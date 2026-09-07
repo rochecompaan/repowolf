@@ -3,6 +3,7 @@ package github
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -29,6 +30,9 @@ const (
 	operationIssueComment
 	operationIssueClose
 	operationIssueReopen
+	operationLabelList
+	operationLabelCreate
+	operationIssueLabelChange
 	operationPullList
 	operationPullView
 	operationPullCreate
@@ -75,6 +79,8 @@ func parseArgs(args []string, cwd string) (command, error) {
 		operation, flags, kind, err = parseRepository(args[1:])
 	case "issue":
 		operation, flags, kind, err = parseIssue(args[1:])
+	case "label":
+		operation, flags, kind, err = parseLabel(args[1:])
 	case "pr":
 		operation, flags, kind, err = parsePull(args[1:], cwd)
 	case "run":
@@ -98,6 +104,9 @@ func parseArgs(args []string, cwd string) (command, error) {
 	request := &repowolfv1.GitHubRequest{Context: &repowolfv1.RequestContext{Repository: repository}}
 	if err := assignOperation(request, operation); err != nil {
 		return command{}, err
+	}
+	if view := request.GetIssueView(); view != nil {
+		view.IncludeComments = slices.Contains(fields, "comments")
 	}
 	return command{request: request, kind: kind, fields: fields}, nil
 }
@@ -157,6 +166,12 @@ func assignOperation(request *repowolfv1.GitHubRequest, operation any) error {
 	case *repowolfv1.GitHubRequest_IssueClose:
 		request.Operation = value
 	case *repowolfv1.GitHubRequest_IssueReopen:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_LabelList:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_LabelCreate:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_IssueLabelChange:
 		request.Operation = value
 	case *repowolfv1.GitHubRequest_PullList:
 		request.Operation = value

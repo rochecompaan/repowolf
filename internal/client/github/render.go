@@ -19,7 +19,7 @@ func render(parsed command, response *repowolfv1.GitHubResponse) ([]byte, error)
 	}
 	var output []byte
 	if len(parsed.fields) != 0 {
-		output, err = renderJSON(value, parsed.fields)
+		output, err = renderJSON(githubJSONShape(parsed.kind, value), parsed.fields)
 	} else {
 		output, err = renderNative(parsed.kind, value)
 	}
@@ -108,7 +108,7 @@ func renderNative(kind operationKind, value any) ([]byte, error) {
 		fmt.Fprintln(&output, cell(object["login"]))
 	case operationRepositoryView:
 		writeFields(&output, object, []fieldLabel{{"name", "nameWithOwner"}, {"description", "description"}, {"url", "url"}, {"default branch", "defaultBranch"}})
-	case operationIssueView, operationIssueCreate, operationIssueEdit, operationIssueClose, operationIssueReopen:
+	case operationIssueView, operationIssueCreate, operationIssueEdit, operationIssueLabelChange, operationIssueClose, operationIssueReopen:
 		writeFields(&output, object, []fieldLabel{{"title", "title"}, {"state", "state"}, {"author", "author"}, {"labels", "labels"}, {"assignees", "assignees"}, {"number", "number"}, {"url", "url"}})
 		writeBody(&output, object["body"])
 	case operationPullView, operationPullCreate, operationPullEdit, operationPullClose, operationPullReopen, operationPullReady:
@@ -116,6 +116,8 @@ func renderNative(kind operationKind, value any) ([]byte, error) {
 		writeBody(&output, object["body"])
 	case operationIssueComment, operationPullComment:
 		fmt.Fprintln(&output, cell(object["url"]))
+	case operationLabelCreate:
+		return nil, nil
 	case operationRunView:
 		writeFields(&output, object, []fieldLabel{{"name", "name"}, {"workflow", "workflowName"}, {"status", "status"}, {"conclusion", "conclusion"}, {"branch", "headBranch"}, {"event", "event"}, {"id", "id"}, {"url", "url"}})
 	case operationStatusView:

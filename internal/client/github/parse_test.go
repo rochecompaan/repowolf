@@ -95,7 +95,7 @@ func TestParseRejectsUnsupportedAndHostileInput(t *testing.T) {
 		nil, {"auth", "status"}, {"api", "/user"}, {"alias", "list"}, {"extension", "list"},
 		{"repo", "list"}, {"repo", "create"}, {"repo", "view", "other"},
 		{"issue", "view", "https://github.com/owner/repo/issues/1"}, {"issue", "view", "1", "tail"},
-		{"issue", "list", "--limit", "0"}, {"issue", "list", "--limit", "101"}, {"issue", "list", "--limit"},
+		{"issue", "list", "--limit", "0"}, {"issue", "list", "--limit", "1002"}, {"issue", "list", "--limit"},
 		{"issue", "list", "--state", "merged"}, {"issue", "list", "--state", "open", "--state", "closed"},
 		{"issue", "create"}, {"issue", "create", "--title", ""}, {"issue", "create", "--title", "x", "--body-file", "secret"},
 		{"issue", "create", "--title=x"}, {"issue", "edit", "1"}, {"issue", "edit", "1", "--state", "closed"},

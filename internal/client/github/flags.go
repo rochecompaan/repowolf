@@ -88,9 +88,10 @@ func fieldSet(names ...string) map[string]struct{} {
 
 var responseFields = map[operationKind]map[string]struct{}{
 	operationRepositoryView: fieldSet("name", "owner", "nameWithOwner", "description", "private", "url", "defaultBranch", "sshUrl"),
-	operationIssueList:      fieldSet("number", "title", "state", "author", "assignees", "labels", "url", "createdAt", "updatedAt"),
-	operationIssueView:      issueFields(), operationIssueCreate: issueFields(), operationIssueEdit: issueFields(),
-	operationIssueClose: issueFields(), operationIssueReopen: issueFields(),
+	operationIssueList:      fieldSet("number", "title", "body", "state", "author", "assignees", "labels", "url", "createdAt", "updatedAt"),
+	operationIssueView:      issueFields(true), operationIssueCreate: issueFields(false), operationIssueEdit: issueFields(false),
+	operationIssueClose: issueFields(false), operationIssueReopen: issueFields(false), operationIssueLabelChange: issueFields(false),
+	operationLabelList:    fieldSet("name"),
 	operationIssueComment: fieldSet("id", "author", "body", "url", "createdAt", "updatedAt"),
 	operationPullList:     pullFields(false), operationPullView: pullFields(true), operationPullCreate: pullFields(true),
 	operationPullEdit: pullFields(true), operationPullClose: pullFields(true), operationPullReopen: pullFields(true), operationPullReady: pullFields(true),
@@ -100,8 +101,12 @@ var responseFields = map[operationKind]map[string]struct{}{
 	operationStatusView: fieldSet("state", "objectId", "statuses"),
 }
 
-func issueFields() map[string]struct{} {
-	return fieldSet("number", "title", "body", "state", "author", "assignees", "labels", "url", "createdAt", "updatedAt")
+func issueFields(includeComments bool) map[string]struct{} {
+	fields := fieldSet("number", "title", "body", "state", "author", "assignees", "labels", "url", "createdAt", "updatedAt")
+	if includeComments {
+		fields["comments"] = struct{}{}
+	}
+	return fields
 }
 func pullFields(details bool) map[string]struct{} {
 	fields := fieldSet("number", "title", "body", "state", "draft", "author", "head", "base", "headObjectId", "url", "createdAt", "updatedAt")

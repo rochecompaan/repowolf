@@ -37,6 +37,12 @@ func normalizedResult(kind operationKind, response *repowolfv1.GitHubResponse) (
 		value = response.GetIssueClose().GetIssue()
 	case operationIssueReopen:
 		value = response.GetIssueReopen().GetIssue()
+	case operationLabelList:
+		value = response.GetLabelList().GetLabels()
+	case operationLabelCreate:
+		value = response.GetLabelCreate().GetLabel()
+	case operationIssueLabelChange:
+		value = response.GetIssueLabelChange().GetIssue()
 	case operationPullList:
 		value = response.GetPullList().GetPulls()
 	case operationPullView:
@@ -71,7 +77,7 @@ func normalizedResult(kind operationKind, response *repowolfv1.GitHubResponse) (
 	if err != nil {
 		return nil, err
 	}
-	return shapeJSON(kind, normalized), nil
+	return normalized, nil
 }
 
 func responseMatches(kind operationKind, response *repowolfv1.GitHubResponse) bool {
@@ -94,6 +100,12 @@ func responseMatches(kind operationKind, response *repowolfv1.GitHubResponse) bo
 		return response.GetIssueClose() != nil
 	case operationIssueReopen:
 		return response.GetIssueReopen() != nil
+	case operationLabelList:
+		return response.GetLabelList() != nil
+	case operationLabelCreate:
+		return response.GetLabelCreate() != nil
+	case operationIssueLabelChange:
+		return response.GetIssueLabelChange() != nil
 	case operationPullList:
 		return response.GetPullList() != nil
 	case operationPullView:

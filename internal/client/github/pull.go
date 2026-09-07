@@ -39,7 +39,7 @@ func parsePull(args []string, cwd string) (any, parsedFlags, operationKind, erro
 func parsePullList(args []string) (any, parsedFlags, operationKind, error) {
 	flags, err := parseFlags(args, operationFlags("--state", "--base", "--head", "--limit"))
 	state, stateErr := pullState(valueOr(flags, "--state", "open"))
-	limit, limitErr := listLimit(valueOr(flags, "--limit", "30"))
+	limit, limitErr := listLimit(valueOr(flags, "--limit", "30"), 100)
 	request := &repowolfv1.GitHubPullListRequest{State: state, Limit: limit}
 	for name, target := range map[string]**string{"--base": &request.Base, "--head": &request.Head} {
 		if value, ok := flags.values[name]; ok {

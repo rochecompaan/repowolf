@@ -13,7 +13,7 @@ func parseRun(args []string) (any, parsedFlags, operationKind, error) {
 	switch args[0] {
 	case "list":
 		flags, err := parseFlags(args[1:], operationFlags("--branch", "--status", "--limit"))
-		limit, limitErr := listLimit(valueOr(flags, "--limit", "30"))
+		limit, limitErr := listLimit(valueOr(flags, "--limit", "30"), 100)
 		request := &repowolfv1.GitHubRunListRequest{Limit: limit}
 		if branch, ok := flags.values["--branch"]; ok {
 			request.Branch = &branch
