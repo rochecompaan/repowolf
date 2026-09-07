@@ -83,6 +83,9 @@ func TestPatchmillSingleCallProviderResponsesRejectInvalidOrMismatchedData(t *te
 	}{
 		{"empty login", currentUser, []byte(`{"login":""}`)},
 		{"invalid UTF-8 login", currentUser, []byte{'{', '"', 'l', 'o', 'g', 'i', 'n', '"', ':', '"', 0xff, '"', '}'}},
+		{"whitespace login", currentUser, []byte(`{"login":"octo cat"}`)},
+		{"control-character login", currentUser, []byte(`{"login":"octocat\n"}`)},
+		{"40-character login", currentUser, []byte(`{"login":"` + strings.Repeat("x", 40) + `"}`)},
 		{"oversized login", currentUser, []byte(`{"login":"` + strings.Repeat("x", maximumNameBytes+1) + `"}`)},
 		{"empty created label name", labelCreate, []byte(`{"name":""}`)},
 		{"oversized created label name", labelCreate, []byte(`{"name":"` + strings.Repeat("x", 51) + `"}`)},
@@ -103,6 +106,21 @@ func TestPatchmillSingleCallProviderResponsesRejectInvalidOrMismatchedData(t *te
 				t.Fatalf("Execute() = %#v, %v; want provider response rejection", response, err)
 			}
 		})
+	}
+}
+
+func TestPatchmillSingleCallRepositoryAcceptsDistinctAPIAndGitHosts(t *testing.T) {
+	resolvedRepository := repository()
+	resolvedRepository.Provider.APIHost = "api.example.test"
+	resolvedRepository.Provider.GitHost = "ssh.example.test"
+	resolvedRepository.Provider.SSHUser = "git"
+	resolvedRepository.Provider.SSHPort = 22
+	repositoryView := &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewRequest{}}}
+	caller := &fakeCaller{results: []runner.Result{{Stdout: []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","private":false,"html_url":"https://api.example.test/owner/repo","ssh_url":"git@ssh.example.test:owner/repo.git","default_branch":"main"}`)}}}
+
+	response, err := testAdapter(t, caller).Execute(context.Background(), resolvedRepository, repositoryView)
+	if err != nil || response == nil {
+		t.Fatalf("Execute() = %#v, %v; want accepted split-host repository response", response, err)
 	}
 }
 

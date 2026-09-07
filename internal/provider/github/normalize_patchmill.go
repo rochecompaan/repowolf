@@ -3,7 +3,6 @@ package github
 import (
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/policy"
@@ -14,10 +13,23 @@ func currentUserResponse(value apiUser) (*repowolfv1.GitHubResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	if login == "" || len(login) > maximumNameBytes || !utf8.ValidString(login) {
+	if !githubLogin(login) {
 		return nil, providerResponse(nil, "login")
 	}
 	return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_CurrentUser{CurrentUser: &repowolfv1.GitHubCurrentUserResult{User: &repowolfv1.GitHubUserRecord{Login: login}}}}, nil
+}
+
+func githubLogin(value string) bool {
+	if len(value) == 0 || len(value) > 39 {
+		return false
+	}
+	for index, character := range value {
+		if character >= 'A' && character <= 'Z' || character >= 'a' && character <= 'z' || character >= '0' && character <= '9' || index > 0 && character == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func labelRecord(value apiLabel) (*repowolfv1.GitHubLabelRecord, error) {
@@ -45,7 +57,7 @@ func repositoryTarget(record *repowolfv1.GitHubRepositoryRecord, repository poli
 	}
 	expectedPath := "/" + repository.Repository.Owner + "/" + repository.Repository.Name
 	parsed, err := url.Parse(record.GetUrl())
-	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, repository.Provider.GitHost) || parsed.User != nil || parsed.EscapedPath() != expectedPath || parsed.RawQuery != "" || parsed.Fragment != "" {
+	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, repository.Provider.APIHost) || parsed.User != nil || parsed.EscapedPath() != expectedPath || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return providerResponse(nil, "html_url")
 	}
 	expectedSSHURL := repository.Provider.SSHUser + "@" + repository.Provider.GitHost + ":" + repository.Repository.Owner + "/" + repository.Repository.Name + ".git"
