@@ -15,9 +15,13 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-const bytesValueWireOverhead = 4
+const (
+	bytesValueWireOverhead = 4
+	// An 8 MiB payload needs a four-byte length varint plus the field tag.
+	responseWireOverhead = 5
+)
 
-func TestEffectiveGRPCMessageLimitIsExactInBothDirections(t *testing.T) {
+func TestEffectiveGRPCMessageLimitsAreExactPerDirection(t *testing.T) {
 	tlsConfig, roots := testTLS(t)
 	token, index := serverTestIndex(t)
 	service, err := New(Options{
@@ -59,7 +63,14 @@ func TestEffectiveGRPCMessageLimitIsExactInBothDirections(t *testing.T) {
 	if err := connection.Invoke(authCtx, echoMethod, nextByte, &response); status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("next-byte receive error = %v", err)
 	}
-	if err := connection.Invoke(authCtx, echoMethod, &wrapperspb.BytesValue{Value: []byte("next-encoded-response")}, &response); status.Code(err) != codes.ResourceExhausted {
+
+	if err := connection.Invoke(authCtx, echoMethod, &wrapperspb.BytesValue{Value: []byte("at-response-limit-response")}, &response, grpc.MaxCallRecvMsgSize(responseLimitBytes)); err != nil {
+		t.Fatalf("exact-limit response failed: %v", err)
+	}
+	if got := proto.Size(&response); got != responseLimitBytes {
+		t.Fatalf("exact-limit response encoded size = %d", got)
+	}
+	if err := connection.Invoke(authCtx, echoMethod, &wrapperspb.BytesValue{Value: []byte("next-encoded-response")}, &response, grpc.MaxCallRecvMsgSize(responseLimitBytes+16)); status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("next-byte send error = %v", err)
 	}
 

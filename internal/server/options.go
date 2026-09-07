@@ -12,7 +12,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-const messageLimitBytes = 1_048_576
+const (
+	messageLimitBytes = 1_048_576
+	// Bounded paginated reads may return up to the provider's 8 MiB read budget.
+	responseLimitBytes = 8 * 1_048_576
+)
 
 // Options are immutable service dependencies assembled before listener bind.
 type Options struct {

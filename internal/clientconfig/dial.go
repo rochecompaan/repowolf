@@ -11,7 +11,9 @@ import (
 
 const (
 	messageLimitBytes = 1 << 20
-	dialTimeout       = 10 * time.Second
+	// Bounded paginated reads may return up to the provider's 8 MiB read budget.
+	responseLimitBytes = 8 << 20
+	dialTimeout        = 10 * time.Second
 )
 
 type bearerCredentials struct{ token string }
@@ -41,7 +43,7 @@ func Dial(ctx context.Context, config Config) (*grpc.ClientConn, error) {
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsSettings)),
 		grpc.WithPerRPCCredentials(bearerCredentials{token: config.Token}),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(messageLimitBytes),
+			grpc.MaxCallRecvMsgSize(responseLimitBytes),
 			grpc.MaxCallSendMsgSize(messageLimitBytes),
 		),
 	)

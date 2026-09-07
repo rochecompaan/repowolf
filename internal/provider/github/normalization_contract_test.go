@@ -1,10 +1,12 @@
 package github
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	"github.com/rochecompaan/repowolf/internal/runner"
 )
 
 const largeProviderID uint64 = 9_007_199_254_740_993
@@ -71,6 +73,27 @@ func TestNormalizationPreservesLargeUint64AndOperationAllowlists(t *testing.T) {
 	}
 }
 
+// Regression: REST issue comments are projected only into the typed record
+// fields that Patchmill can later render as author, body, and createdAt.
+func TestIssueViewCommentsNormalizationContract(t *testing.T) {
+	comment := commentFixture(int(largeProviderID))
+	comment["extra"] = map[string]any{"untrusted": true}
+	caller := &fakeCaller{results: []runner.Result{{Stdout: issueViewFixture()}, {Stdout: commentPage(t, comment)}}}
+
+	response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	comments := response.GetIssueView().GetIssue().GetComments()
+	if len(comments) != 1 {
+		t.Fatalf("comments = %d, want 1", len(comments))
+	}
+	got := comments[0]
+	if got.GetId() != largeProviderID || got.GetAuthor() != "reviewer" || got.GetBody() != "comment 9007199254740993" || got.GetCreatedAt() != "2026-09-01T00:00:00Z" || len(got.ProtoReflect().GetUnknown()) != 0 {
+		t.Fatalf("normalized comment = %#v", got)
+	}
+}
+
 func TestNormalizationRejectsTrailingDocumentsAndWrongTypes(t *testing.T) {
 	issue := `{"number":1,"title":"title","body":null,"state":"open","user":{"login":"me"},"assignees":[],"labels":[],"html_url":"https://safe.example/1","created_at":"c","updated_at":"u"}`
 	pull := `{"number":1,"title":"title","body":null,"state":"open","draft":false,"user":{"login":"me"},"head":{"ref":"topic","sha":"0123456789012345678901234567890123456789"},"base":{"ref":"main"},"html_url":"https://safe.example/1","created_at":"c","updated_at":"u","mergeable_state":"clean"}`
@@ -82,7 +105,7 @@ func TestNormalizationRejectsTrailingDocumentsAndWrongTypes(t *testing.T) {
 		valid string
 		wrong string
 	}{
-		{"repository", request(&repowolfv1.GitHubRequest_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewRequest{}}), "repository", `{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","default_branch":"main"}`, `{"name":5}`},
+		{"repository", request(&repowolfv1.GitHubRequest_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewRequest{}}), "repository", `{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","ssh_url":"git@github.com:owner/repo.git","default_branch":"main"}`, `{"name":5}`},
 		{"issue list", request(&repowolfv1.GitHubRequest_IssueList{IssueList: &repowolfv1.GitHubIssueListRequest{}}), "issue_list", `{"items":[` + issue + `]}`, `[]`},
 		{"issue", request(&repowolfv1.GitHubRequest_IssueView{IssueView: &repowolfv1.GitHubIssueViewRequest{Number: 1}}), "issue", issue, strings.Replace(issue, `"number":1`, `"number":"1"`, 1)},
 		{"comment", request(&repowolfv1.GitHubRequest_IssueComment{IssueComment: &repowolfv1.GitHubIssueCommentRequest{Number: 1, Body: "body"}}), "comment", `{"id":1,"user":{"login":"me"},"body":"body","html_url":"https://safe.example/c","created_at":"c","updated_at":"u"}`, `{"id":"1"}`},

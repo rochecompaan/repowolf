@@ -132,5 +132,6 @@ and arm64.
 
 - [Complete Docker walkthrough](examples/docker/README.md)
 - [Configuration reference](docs/configuration.md)
+- [GitHub CLI compatibility](docs/github-cli-compatibility.md)
 - [Deployment options](docs/deployment.md)
 - [Approved MVP design](docs/specs/2026-08-01-repowolf-mvp-design.md)

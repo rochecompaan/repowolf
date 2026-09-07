@@ -27,7 +27,11 @@ func repositoryRecord(value apiRepository) (*repowolfv1.GitHubRepositoryRecord, 
 	if e != nil {
 		return nil, e
 	}
-	return &repowolfv1.GitHubRepositoryRecord{Repository: name, Owner: owner, NameWithOwner: full, Description: value.Description, Private: private, Url: link, DefaultBranch: branch}, nil
+	sshURL, e := required(value.SSHURL, "ssh_url")
+	if e != nil {
+		return nil, e
+	}
+	return &repowolfv1.GitHubRepositoryRecord{Repository: name, Owner: owner, NameWithOwner: full, Description: value.Description, Private: private, Url: link, DefaultBranch: branch, SshUrl: sshURL}, nil
 }
 func issueRecord(value apiIssue, includeBody bool) (*repowolfv1.GitHubIssueRecord, error) {
 	number, e := requiredID(value.Number, "number")
@@ -113,6 +117,18 @@ func commentRecord(value apiComment) (*repowolfv1.GitHubCommentRecord, error) {
 	}
 	return &repowolfv1.GitHubCommentRecord{Id: id, Author: author, Body: body, Url: link, CreatedAt: created, UpdatedAt: updated}, nil
 }
+func commentRecords(values []apiComment) ([]*repowolfv1.GitHubCommentRecord, error) {
+	out := make([]*repowolfv1.GitHubCommentRecord, 0, len(values))
+	for _, value := range values {
+		record, err := commentRecord(value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, record)
+	}
+	return out, nil
+}
+
 func pullRecord(value apiPull, details bool) (*repowolfv1.GitHubPullRecord, error) {
 	number, e := requiredID(value.Number, "number")
 	if e != nil {

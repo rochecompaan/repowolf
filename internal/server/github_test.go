@@ -17,11 +17,15 @@ type fakeGitHubExecutor struct {
 	repository policy.ResolvedRepository
 	response   *repowolfv1.GitHubResponse
 	err        error
+	before     func()
 }
 
 func (fake *fakeGitHubExecutor) Execute(_ context.Context, repository policy.ResolvedRepository, _ *repowolfv1.GitHubRequest) (*repowolfv1.GitHubResponse, error) {
 	fake.calls++
 	fake.repository = repository
+	if fake.before != nil {
+		fake.before()
+	}
 	return fake.response, fake.err
 }
 
@@ -116,6 +120,14 @@ func githubServerRequest(operation any) *repowolfv1.GitHubRequest {
 func requestWithOperation(operation any) *repowolfv1.GitHubRequest {
 	request := &repowolfv1.GitHubRequest{}
 	switch value := operation.(type) {
+	case *repowolfv1.GitHubRequest_CurrentUser:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_LabelList:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_LabelCreate:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_IssueLabelChange:
+		request.Operation = value
 	case *repowolfv1.GitHubRequest_IssueView:
 		request.Operation = value
 	}

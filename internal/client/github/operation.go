@@ -21,6 +21,8 @@ func normalizedResult(kind operationKind, response *repowolfv1.GitHubResponse) (
 	switch kind {
 	case operationRepositoryView:
 		value = response.GetRepositoryView().GetRepository()
+	case operationAuthStatus, operationCurrentUserLogin:
+		value = response.GetCurrentUser().GetUser()
 	case operationIssueList:
 		value = response.GetIssueList().GetIssues()
 	case operationIssueView:
@@ -35,6 +37,12 @@ func normalizedResult(kind operationKind, response *repowolfv1.GitHubResponse) (
 		value = response.GetIssueClose().GetIssue()
 	case operationIssueReopen:
 		value = response.GetIssueReopen().GetIssue()
+	case operationLabelList:
+		value = response.GetLabelList().GetLabels()
+	case operationLabelCreate:
+		value = response.GetLabelCreate().GetLabel()
+	case operationIssueLabelChange:
+		value = response.GetIssueLabelChange().GetIssue()
 	case operationPullList:
 		value = response.GetPullList().GetPulls()
 	case operationPullView:
@@ -65,13 +73,19 @@ func normalizedResult(kind operationKind, response *repowolfv1.GitHubResponse) (
 	if isNilResult(value) {
 		return nil, fmt.Errorf("GitHub response did not match request")
 	}
-	return normalizeJSON(value)
+	normalized, err := normalizeJSON(value)
+	if err != nil {
+		return nil, err
+	}
+	return normalized, nil
 }
 
 func responseMatches(kind operationKind, response *repowolfv1.GitHubResponse) bool {
 	switch kind {
 	case operationRepositoryView:
 		return response.GetRepositoryView() != nil
+	case operationAuthStatus, operationCurrentUserLogin:
+		return response.GetCurrentUser() != nil
 	case operationIssueList:
 		return response.GetIssueList() != nil
 	case operationIssueView:
@@ -86,6 +100,12 @@ func responseMatches(kind operationKind, response *repowolfv1.GitHubResponse) bo
 		return response.GetIssueClose() != nil
 	case operationIssueReopen:
 		return response.GetIssueReopen() != nil
+	case operationLabelList:
+		return response.GetLabelList() != nil
+	case operationLabelCreate:
+		return response.GetLabelCreate() != nil
+	case operationIssueLabelChange:
+		return response.GetIssueLabelChange() != nil
 	case operationPullList:
 		return response.GetPullList() != nil
 	case operationPullView:

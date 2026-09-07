@@ -10,7 +10,8 @@ import (
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 )
 
-const maxRenderedBytes = 1 << 20
+// Bounded paginated reads may return up to the provider's 8 MiB read budget.
+const maxRenderedBytes = 8 << 20
 
 func render(parsed command, response *repowolfv1.GitHubResponse) ([]byte, error) {
 	value, err := normalizedResult(parsed.kind, response)
@@ -19,7 +20,7 @@ func render(parsed command, response *repowolfv1.GitHubResponse) ([]byte, error)
 	}
 	var output []byte
 	if len(parsed.fields) != 0 {
-		output, err = renderJSON(value, parsed.fields)
+		output, err = renderJSON(githubJSONShape(parsed.kind, value), parsed.fields)
 	} else {
 		output, err = renderNative(parsed.kind, value)
 	}
@@ -33,29 +34,18 @@ func render(parsed command, response *repowolfv1.GitHubResponse) ([]byte, error)
 }
 
 func renderJSON(value any, fields []string) ([]byte, error) {
-	selectObject := func(object map[string]any) map[string]any {
-		selected := make(map[string]any, len(fields))
-		for _, field := range fields {
-			item, exists := object[field]
-			if !exists {
-				item = absentJSONValue(field)
-			}
-			selected[field] = item
-		}
-		return selected
-	}
 	var selected any
 	switch typed := value.(type) {
 	case map[string]any:
-		selected = selectObject(typed)
+		selected = selectJSONFields(typed, fields)
 	case []any:
-		items := make([]map[string]any, 0, len(typed))
+		items := make([]orderedJSONObject, 0, len(typed))
 		for _, item := range typed {
 			object, ok := item.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("invalid typed list response")
 			}
-			items = append(items, selectObject(object))
+			items = append(items, selectJSONFields(object, fields))
 		}
 		selected = items
 	default:
@@ -74,7 +64,7 @@ func absentJSONValue(field string) any {
 		return false
 	case "number", "id":
 		return 0
-	case "assignees", "labels", "statuses":
+	case "assignees", "comments", "labels", "statuses":
 		return []any{}
 	default:
 		return nil
@@ -102,9 +92,13 @@ func renderNative(kind operationKind, value any) ([]byte, error) {
 		return nil, fmt.Errorf("invalid typed object response")
 	}
 	switch kind {
+	case operationAuthStatus:
+		fmt.Fprintf(&output, "Logged in to github.com as %s\n", cell(object["login"]))
+	case operationCurrentUserLogin:
+		fmt.Fprintln(&output, cell(object["login"]))
 	case operationRepositoryView:
 		writeFields(&output, object, []fieldLabel{{"name", "nameWithOwner"}, {"description", "description"}, {"url", "url"}, {"default branch", "defaultBranch"}})
-	case operationIssueView, operationIssueCreate, operationIssueEdit, operationIssueClose, operationIssueReopen:
+	case operationIssueView, operationIssueCreate, operationIssueEdit, operationIssueLabelChange, operationIssueClose, operationIssueReopen:
 		writeFields(&output, object, []fieldLabel{{"title", "title"}, {"state", "state"}, {"author", "author"}, {"labels", "labels"}, {"assignees", "assignees"}, {"number", "number"}, {"url", "url"}})
 		writeBody(&output, object["body"])
 	case operationPullView, operationPullCreate, operationPullEdit, operationPullClose, operationPullReopen, operationPullReady:
@@ -112,6 +106,8 @@ func renderNative(kind operationKind, value any) ([]byte, error) {
 		writeBody(&output, object["body"])
 	case operationIssueComment, operationPullComment:
 		fmt.Fprintln(&output, cell(object["url"]))
+	case operationLabelCreate:
+		return nil, nil
 	case operationRunView:
 		writeFields(&output, object, []fieldLabel{{"name", "name"}, {"workflow", "workflowName"}, {"status", "status"}, {"conclusion", "conclusion"}, {"branch", "headBranch"}, {"event", "event"}, {"id", "id"}, {"url", "url"}})
 	case operationStatusView:

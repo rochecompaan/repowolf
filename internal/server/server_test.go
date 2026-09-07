@@ -129,7 +129,7 @@ func TestAuditFailureFailsCompletedRPC(t *testing.T) {
 	}
 }
 
-func TestTLSHealthIsUnauthenticatedAndMessageCapsAreOneMiB(t *testing.T) {
+func TestTLSHealthIsUnauthenticatedAndRequestCapIsOneMiB(t *testing.T) {
 	tlsConfig, roots := testTLS(t)
 	token, index := serverTestIndex(t)
 	var output bytes.Buffer
@@ -165,8 +165,12 @@ func TestTLSHealthIsUnauthenticatedAndMessageCapsAreOneMiB(t *testing.T) {
 	if err := connection.Invoke(authCtx, echoMethod, large, &wrapperspb.BytesValue{}); status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("oversized receive error = %v", err)
 	}
-	if err := connection.Invoke(authCtx, echoMethod, &wrapperspb.BytesValue{Value: []byte("large-response")}, &wrapperspb.BytesValue{}); status.Code(err) != codes.ResourceExhausted {
-		t.Fatalf("oversized send error = %v", err)
+	var largeResponse wrapperspb.BytesValue
+	if err := connection.Invoke(authCtx, echoMethod, &wrapperspb.BytesValue{Value: []byte("large-response")}, &largeResponse, grpc.MaxCallRecvMsgSize(responseLimitBytes)); err != nil {
+		t.Fatalf("above-request-cap response failed: %v", err)
+	}
+	if len(largeResponse.Value) != messageLimitBytes+1 {
+		t.Fatalf("above-request-cap response length = %d", len(largeResponse.Value))
 	}
 	cancel()
 	if err := <-serveDone; err != nil {
@@ -304,8 +308,10 @@ func (echoImplementation) Call(_ context.Context, request *wrapperspb.BytesValue
 	switch string(request.Value) {
 	case "large-response":
 		return &wrapperspb.BytesValue{Value: bytes.Repeat([]byte{'x'}, messageLimitBytes+1)}, nil
+	case "at-response-limit-response":
+		return &wrapperspb.BytesValue{Value: bytes.Repeat([]byte{'x'}, responseLimitBytes-responseWireOverhead)}, nil
 	case "next-encoded-response":
-		return &wrapperspb.BytesValue{Value: bytes.Repeat([]byte{'x'}, messageLimitBytes-bytesValueWireOverhead+1)}, nil
+		return &wrapperspb.BytesValue{Value: bytes.Repeat([]byte{'x'}, responseLimitBytes-responseWireOverhead+1)}, nil
 	default:
 		return request, nil
 	}

@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -172,6 +173,47 @@ func mustRead(path string) []byte {
 	return contents
 }
 
+const expectedIssueListProviderQuery = `query IssueList($owner: String!, $name: String!, $states: [IssueState!], $cursor: String, $first: Int!) {
+  repository(owner: $owner, name: $name) {
+    issues(first: $first, after: $cursor, states: $states, orderBy: {field: CREATED_AT, direction: ASC}) {
+      nodes {
+        number
+        title
+        body
+        state
+        labels(first: 100) { nodes { name } pageInfo { hasNextPage } }
+        author { login }
+        createdAt
+        updatedAt
+        url
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}`
+
+func expectedIssueListProviderInput() string {
+	body := struct {
+		Query     string `json:"query"`
+		Variables struct {
+			Owner  string   `json:"owner"`
+			Name   string   `json:"name"`
+			States []string `json:"states"`
+			Cursor *string  `json:"cursor"`
+			First  int      `json:"first"`
+		} `json:"variables"`
+	}{Query: expectedIssueListProviderQuery}
+	body.Variables.Owner = "alpha"
+	body.Variables.Name = "repo"
+	body.Variables.States = []string{"OPEN"}
+	body.Variables.First = 30
+	raw, err := json.Marshal(body)
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
+}
+
 func assertProviderContract(t *testing.T, argv, input string) {
 	t.Helper()
 	api := func(method, endpoint string, writes bool) []string {
@@ -184,7 +226,7 @@ func assertProviderContract(t *testing.T, argv, input string) {
 	}
 	sha := "0123456789012345678901234567890123456789"
 	want := [][]string{
-		api("GET", "/search/issues?q=repo%3Aalpha%2Frepo+is%3Aissue+state%3Aopen&per_page=30", false),
+		api("POST", "graphql", true),
 		api("GET", "/repos/alpha/repo/pulls/7", false),
 		api("GET", "/repos/alpha/repo/commits/"+sha+"/check-runs?page=1&per_page=100", false),
 		api("GET", "/repos/alpha/repo/commits/"+sha+"/status?page=1&per_page=100", false),
@@ -195,7 +237,7 @@ func assertProviderContract(t *testing.T, argv, input string) {
 	if got := recordedBlocks(argv); !reflect.DeepEqual(got, want) {
 		t.Errorf("provider argv = %#v\nwant %#v", got, want)
 	}
-	wantInput := [][]string{{`{"assignees":null,"body":"` + issueBodyMarker + `","labels":null,"title":"typed write"}`}, {`{"body":"` + commentMarker + `"}`}}
+	wantInput := [][]string{{expectedIssueListProviderInput()}, {`{"assignees":null,"body":"` + issueBodyMarker + `","labels":null,"title":"typed write"}`}, {`{"body":"` + commentMarker + `"}`}}
 	if got := recordedBlocks(input); !reflect.DeepEqual(got, wantInput) {
 		t.Errorf("provider input = %#v, want %#v", got, wantInput)
 	}

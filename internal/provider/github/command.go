@@ -26,16 +26,17 @@ func (adapter *Adapter) plan(repository policy.ResolvedRepository, request *repo
 	var method, endpoint, normalizer string
 	var input any
 	switch operation := request.Operation.(type) {
+	case *repowolfv1.GitHubRequest_CurrentUser:
+		method, endpoint, normalizer = "GET", "/user", "current_user"
 	case *repowolfv1.GitHubRequest_RepositoryView:
 		method, endpoint, normalizer = "GET", base, "repository"
-	case *repowolfv1.GitHubRequest_IssueList:
-		query := "repo:" + repository.Repository.Owner + "/" + repository.Repository.Name + " is:issue"
-		if operation.IssueList.State != repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_ALL {
-			query += " state:" + issueState(operation.IssueList.State)
+	case *repowolfv1.GitHubRequest_LabelCreate:
+		method, endpoint, normalizer = "POST", base+"/labels", "label_create"
+		input = map[string]any{
+			"name":        operation.LabelCreate.Name,
+			"color":       operation.LabelCreate.Color,
+			"description": operation.LabelCreate.Description,
 		}
-		method, endpoint, normalizer = "GET", "/search/issues?q="+url.QueryEscape(query)+"&per_page="+decimal(operation.IssueList.Limit), "issue_list"
-	case *repowolfv1.GitHubRequest_IssueView:
-		method, endpoint, normalizer = "GET", base+"/issues/"+decimal(operation.IssueView.Number), "issue"
 	case *repowolfv1.GitHubRequest_IssueCreate:
 		method, endpoint, normalizer = "POST", base+"/issues", "issue"
 		input = createIssueBody(operation.IssueCreate)
@@ -90,6 +91,17 @@ func (adapter *Adapter) plan(repository policy.ResolvedRepository, request *repo
 		return commandPlan{}, ErrInvalidRequest
 	}
 	return commandPlan{command: adapter.apiCommand(repository.Provider.APIHost, method, endpoint, input, outputLimit(normalizer)), normalize: normalizer}, nil
+}
+
+func (adapter *Adapter) issueViewCommand(repository policy.ResolvedRepository, number uint64, stdoutLimit int) runner.Command {
+	endpoint := "/repos/" + repository.Repository.Owner + "/" + repository.Repository.Name + "/issues/" + decimal(number)
+	return adapter.apiCommand(repository.Provider.APIHost, "GET", endpoint, nil, stdoutLimit)
+}
+
+func (adapter *Adapter) issueCommentsCommand(repository policy.ResolvedRepository, number uint64, page, perPage, stdoutLimit int) runner.Command {
+	query := url.Values{"page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(perPage)}}
+	endpoint := "/repos/" + repository.Repository.Owner + "/" + repository.Repository.Name + "/issues/" + decimal(number) + "/comments?" + query.Encode()
+	return adapter.apiCommand(repository.Provider.APIHost, "GET", endpoint, nil, stdoutLimit)
 }
 
 func (adapter *Adapter) apiCommand(host, method, endpoint string, value any, stdoutLimit int) runner.Command {
@@ -152,9 +164,6 @@ func editPullBody(value *repowolfv1.GitHubPullEditRequest) map[string]any {
 	return body
 }
 func decimal(value uint64) string { return strconv.FormatUint(value, 10) }
-func issueState(value repowolfv1.GitHubIssueState) string {
-	return map[repowolfv1.GitHubIssueState]string{repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_OPEN: "open", repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_CLOSED: "closed", repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_ALL: "all"}[value]
-}
 func pullState(value repowolfv1.GitHubPullState) string {
 	return map[repowolfv1.GitHubPullState]string{repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_OPEN: "open", repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_CLOSED: "closed", repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_ALL: "all"}[value]
 }
@@ -162,8 +171,11 @@ func runStatus(value repowolfv1.GitHubRunStatus) string {
 	return map[repowolfv1.GitHubRunStatus]string{1: "queued", 2: "in_progress", 3: "completed", 4: "success", 5: "failure", 6: "cancelled", 7: "skipped", 8: "timed_out", 9: "action_required", 10: "neutral", 11: "stale", 12: "startup_failure", 13: "requested", 14: "waiting", 15: "pending"}[value]
 }
 func outputLimit(normalizer string) int {
-	if normalizer == "repository" {
+	if normalizer == "repository" || normalizer == "current_user" {
 		return miB
+	}
+	if normalizer == "label_create" {
+		return maximumMutationBytes
 	}
 	if normalizer == "issue" || normalizer == "pull" || normalizer == "comment" || normalizer == "run" {
 		return 2 * miB

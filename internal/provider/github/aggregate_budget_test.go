@@ -13,6 +13,37 @@ import (
 
 const mutationAggregateLimit = 4 * miB
 
+// Regression: issue-label preflight and replacement output share one exact 4 MiB budget.
+func TestIssueLabelChangeAggregateBudget(t *testing.T) {
+	updated := issueLabelChangeFixture(`[{"name":"bug"},{"name":"ready"}]`)
+	preflight := paddedJSON(`{"labels":[{"name":"bug"}]}`, mutationAggregateLimit-len(updated))
+	for _, test := range []struct {
+		name     string
+		mutation []byte
+		wantErr  error
+	}{
+		{"exact limit", []byte(updated), nil},
+		{"one byte over", []byte(updated + " "), runner.ErrOutputLimit},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &fakeCaller{results: []runner.Result{{Stdout: preflight}, {Stdout: test.mutation}}}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueLabelChangeRequest(&repowolfv1.GitHubIssueLabelChangeRequest{Number: 18, AddLabels: []string{"ready"}}))
+			if test.wantErr == nil {
+				if err != nil || response.GetIssueLabelChange().GetIssue() == nil {
+					t.Fatalf("Execute() = %#v, %v", response, err)
+				}
+				if len(caller.commands) != 2 || caller.commands[1].StdoutLimit != len(updated) {
+					t.Fatalf("commands = %#v", caller.commands)
+				}
+				return
+			}
+			if response != nil || !errors.Is(err, test.wantErr) {
+				t.Fatalf("Execute() = %#v, %v, want %v", response, err, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestPreflightedMutationsShareExactAggregateStdoutBudget(t *testing.T) {
 	issue := `{"number":1,"title":"title","body":"body","state":"open","user":{"login":"me"},"assignees":[],"labels":[],"html_url":"https://safe.example/1","created_at":"c","updated_at":"u"}`
 	comment := `{"id":1,"user":{"login":"me"},"body":"body","html_url":"https://safe.example/c","created_at":"c","updated_at":"u"}`
@@ -77,6 +108,74 @@ func TestPreflightedMutationsShareExactAggregateStdoutBudget(t *testing.T) {
 	}
 }
 
+// Regression: an issue and all requested comment pages share one exact 8 MiB
+// raw-output budget rather than receiving independent per-call allowances.
+func TestIssueViewCommentBudget(t *testing.T) {
+	issue := issueViewFixture()
+	comments := commentPage(t, commentFixture(1))
+	issueSize := 2 * miB
+	issue = append(issue, []byte(strings.Repeat(" ", issueSize-len(issue)))...)
+
+	for _, test := range []struct {
+		name string
+		size int
+		want error
+	}{
+		{"exact limit", maximumPaginatedReadBytes, nil},
+		{"one byte over", maximumPaginatedReadBytes + 1, runner.ErrOutputLimit},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			last := append(append([]byte{}, comments...), []byte(strings.Repeat(" ", test.size-issueSize-len(comments)))...)
+			caller := &fakeCaller{results: []runner.Result{{Stdout: issue}, {Stdout: last}}}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
+			if test.want == nil {
+				if err != nil || len(response.GetIssueView().GetIssue().GetComments()) != 1 {
+					t.Fatalf("Execute() = %#v, %v", response, err)
+				}
+				if caller.commands[0].StdoutLimit != 2*miB || caller.commands[1].StdoutLimit != test.size-issueSize {
+					t.Fatalf("stdout limits = %d, %d", caller.commands[0].StdoutLimit, caller.commands[1].StdoutLimit)
+				}
+				return
+			}
+			if response != nil || !errors.Is(err, test.want) {
+				t.Fatalf("Execute() = %#v, %v, want %v", response, err, test.want)
+			}
+		})
+	}
+}
+
+// Regression: all included headers and label JSON share one exact 8 MiB raw
+// output budget rather than receiving an independent allowance per page.
+func TestLabelListAggregateBudget(t *testing.T) {
+	base := labelPage(t, 1, 1, false)
+	for _, test := range []struct {
+		name string
+		size int
+		want error
+	}{
+		{"exact limit", maximumPaginatedReadBytes, nil},
+		{"one byte over", maximumPaginatedReadBytes + 1, runner.ErrOutputLimit},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			raw := append(append([]byte{}, base...), []byte(strings.Repeat(" ", test.size-len(base)))...)
+			caller := &fakeCaller{results: []runner.Result{{Stdout: raw}}}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), labelListRequest(1))
+			if test.want == nil {
+				if err != nil || len(response.GetLabelList().GetLabels()) != 1 {
+					t.Fatalf("Execute() = %#v, %v", response, err)
+				}
+				if caller.commands[0].StdoutLimit != maximumPaginatedReadBytes {
+					t.Fatalf("stdout limit = %d", caller.commands[0].StdoutLimit)
+				}
+				return
+			}
+			if response != nil || !errors.Is(err, test.want) {
+				t.Fatalf("Execute() = %#v, %v, want %v", response, err, test.want)
+			}
+		})
+	}
+}
+
 func testAdapter(t *testing.T, caller Caller) *Adapter {
 	t.Helper()
 	adapter, err := New(AdapterOptions{Path: "/pinned/gh", Environment: []string{"GH_TOKEN=secret"}, Timeout: time.Minute, Caller: caller})
@@ -91,4 +190,19 @@ func paddedJSON(value string, size int) []byte {
 		panic("fixture exceeds requested size")
 	}
 	return []byte(value + strings.Repeat(" ", size-len(value)))
+}
+
+// Regression: the shared read budget must not loosen the 2 MiB per-call cap
+// on the comments-path issue view.
+func TestIssueViewCommentPathKeepsPerCallCap(t *testing.T) {
+	issue := issueViewFixture()
+	issue = append(issue, []byte(strings.Repeat(" ", 2*miB-len(issue)+1))...)
+	caller := &fakeCaller{results: []runner.Result{{Stdout: issue}}}
+	response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
+	if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
+		t.Fatalf("Execute() = %#v, %v, want output limit", response, err)
+	}
+	if len(caller.commands) != 1 || caller.commands[0].StdoutLimit != 2*miB {
+		t.Fatalf("commands = %d, first stdout limit = %d, want 1 command capped at 2 MiB", len(caller.commands), caller.commands[0].StdoutLimit)
+	}
 }

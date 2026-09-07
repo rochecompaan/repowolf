@@ -37,7 +37,7 @@ func repository() policy.ResolvedRepository {
 	return policy.ResolvedRepository{
 		ID:         "project",
 		Repository: config.Repository{Owner: "owner", Name: "repo"},
-		Provider:   config.Provider{Kind: config.ProviderGitHub, APIHost: "github.example"},
+		Provider:   config.Provider{Kind: config.ProviderGitHub, APIHost: "github.example", GitHost: "github.example", SSHUser: "git", SSHPort: 22},
 	}
 }
 
@@ -45,6 +45,8 @@ func request(operation any) *repowolfv1.GitHubRequest {
 	req := &repowolfv1.GitHubRequest{}
 	switch value := operation.(type) {
 	case *repowolfv1.GitHubRequest_RepositoryView:
+		req.Operation = value
+	case *repowolfv1.GitHubRequest_LabelList:
 		req.Operation = value
 	case *repowolfv1.GitHubRequest_IssueList:
 		req.Operation = value
@@ -260,8 +262,9 @@ func TestAllTypedOperationsExecuteWithoutClientCommandSurface(t *testing.T) {
 	comment := `{"id":1,"user":{"login":"me"},"body":"body","html_url":"https://safe.example/c","created_at":"c","updated_at":"u"}`
 	run := `{"id":1,"name":"CI","display_title":"run","status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"0123456789012345678901234567890123456789","html_url":"https://safe.example/r","created_at":"c","updated_at":"u","run_attempt":1,"jobs_url":"https://safe.example/jobs"}`
 	responses := map[string][]string{
-		"repository_view": {`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","default_branch":"main"}`},
-		"issue_list":      {`{"items":[]}`}, "issue_view": {issue}, "issue_create": {issue},
+		"repository_view": {`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://github.example/owner/repo","ssh_url":"git@github.example:owner/repo.git","default_branch":"main"}`},
+		"label_list":      {includedResponse(nil, `[]`)},
+		"issue_list":      {`{"data":{"repository":{"issues":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}`}, "issue_view": {issue}, "issue_create": {issue},
 		"issue_edit": {`{"number":1}`, issue}, "issue_comment": {`{"number":1}`, comment}, "issue_close": {`{"number":1}`, issue}, "issue_reopen": {`{"number":1}`, issue},
 		"pull_list": {`[]`}, "pull_view": {pull}, "pull_create": {pull}, "pull_edit": {pull}, "pull_comment": {pull, comment}, "pull_close": {pull}, "pull_reopen": {pull},
 		"run_list": {`{"workflow_runs":[]}`}, "run_view": {run}, "status_view": {`{"state":"success","sha":"0123456789012345678901234567890123456789","statuses":[]}`},
@@ -298,7 +301,7 @@ func TestAllTypedOperationsExecuteWithoutClientCommandSurface(t *testing.T) {
 }
 
 func TestAdapterRejectsRawOutputAboveCommandBudget(t *testing.T) {
-	raw := []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","default_branch":"main"}`)
+	raw := []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://github.example/owner/repo","ssh_url":"git@github.example:owner/repo.git","default_branch":"main"}`)
 	padding := miB - len(raw) + 1
 	raw = append(raw, make([]byte, padding)...)
 	for i := len(raw) - padding; i < len(raw); i++ {
@@ -316,7 +319,7 @@ func TestAdapterRejectsRawOutputAboveCommandBudget(t *testing.T) {
 }
 
 func TestAdapterBuildsPinnedRepositoryCommandAndNormalizes(t *testing.T) {
-	caller := &fakeCaller{results: []runner.Result{{Stdout: []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","default_branch":"main"}`)}}}
+	caller := &fakeCaller{results: []runner.Result{{Stdout: []byte(`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://github.example/owner/repo","ssh_url":"git@github.example:owner/repo.git","default_branch":"main"}`)}}}
 	adapter, err := New(AdapterOptions{Path: "/pinned/gh", Environment: []string{"GH_TOKEN=secret"}, Timeout: time.Minute, Caller: caller})
 	if err != nil {
 		t.Fatal(err)
@@ -350,6 +353,7 @@ func validOperations() []operationCase {
 	body, title, base := "body", "title", "main"
 	return []operationCase{
 		{"repository_view", request(&repowolfv1.GitHubRequest_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewRequest{}}), config.RepositoryRead},
+		{"label_list", request(&repowolfv1.GitHubRequest_LabelList{LabelList: &repowolfv1.GitHubLabelListRequest{Limit: 1}}), config.IssuesRead},
 		{"issue_list", request(&repowolfv1.GitHubRequest_IssueList{IssueList: &repowolfv1.GitHubIssueListRequest{State: issueOpen, Limit: 1}}), config.IssuesRead},
 		{"issue_view", request(&repowolfv1.GitHubRequest_IssueView{IssueView: &repowolfv1.GitHubIssueViewRequest{Number: 1}}), config.IssuesRead},
 		{"issue_create", request(&repowolfv1.GitHubRequest_IssueCreate{IssueCreate: &repowolfv1.GitHubIssueCreateRequest{Title: "title", Body: &body}}), config.IssuesWrite},

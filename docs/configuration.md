@@ -82,6 +82,25 @@ principals:
           - git:write
 ```
 
+### GitHub capability command families
+
+For the exact supported command forms and resource bounds, read the
+[GitHub CLI compatibility reference](github-cli-compatibility.md).
+
+| Capability | Command families it permits |
+| --- | --- |
+| `repository:read` | `gh auth status`, `gh api user --jq .login`, and `gh repo view` |
+| `issues:read` | `gh issue list`, `gh issue view`, and `gh label list` |
+| `issues:write` | `gh issue create`, `gh issue edit`, `gh issue comment`, `gh issue close`, `gh issue reopen`, and `gh label create` |
+| `pull_requests:read` | `gh pr list` and `gh pr view` |
+| `pull_requests:write` | `gh pr create`, `gh pr edit`, `gh pr comment`, `gh pr close`, `gh pr reopen`, and `gh pr ready` |
+| `actions:read` | `gh run list` and `gh run view` |
+| `statuses:read` | `gh status get` and `gh pr checks` |
+| `git:read` | Git fetch and clone operations through `repowolf-git-ssh` |
+| `git:write` | Git push operations through `repowolf-git-ssh` |
+
+`gh --version` is a local command. It does not require a capability.
+
 Validate policy without loading token values, TLS files, or provider executables:
 
 ```sh

@@ -2,10 +2,13 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
 
+	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/runner"
 )
 
@@ -16,9 +19,13 @@ type typedCommandContract struct {
 
 func TestAllTypedOperationsProduceExactPinnedCommandContracts(t *testing.T) {
 	contracts := allTypedCommandContracts()
-	operations := validOperations()
-	if len(operations) != 20 || len(contracts) != 20 {
-		t.Fatalf("operations/contracts = %d/%d, want 20/20", len(operations), len(contracts))
+	operations := append(validOperations(), operationCase{
+		name:       "issue_label_change",
+		request:    issueLabelChangeRequest(&repowolfv1.GitHubIssueLabelChangeRequest{Number: 1, AddLabels: []string{"ready"}}),
+		capability: config.IssuesWrite,
+	})
+	if len(operations) != 22 || len(contracts) != 22 {
+		t.Fatalf("operations/contracts = %d/%d, want 22/22", len(operations), len(contracts))
 	}
 	for _, operation := range operations {
 		t.Run(operation.name, func(t *testing.T) {
@@ -48,8 +55,9 @@ func allTypedCommandContracts() map[string]typedCommandContract {
 	pull := `{"number":1,"title":"title","body":"body","state":"open","draft":false,"user":{"login":"me"},"head":{"ref":"topic","sha":"0123456789012345678901234567890123456789"},"base":{"ref":"main"},"html_url":"https://safe.example/1","created_at":"c","updated_at":"u","mergeable_state":"clean"}`
 	comment := `{"id":1,"user":{"login":"me"},"body":"body","html_url":"https://safe.example/c","created_at":"c","updated_at":"u"}`
 	run := `{"id":1,"name":"CI","display_title":"run","status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"0123456789012345678901234567890123456789","html_url":"https://safe.example/r","created_at":"c","updated_at":"u","run_attempt":1,"jobs_url":"https://safe.example/jobs"}`
-	repositoryJSON := `{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://safe.example/repo","default_branch":"main"}`
+	repositoryJSON := `{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://github.example/owner/repo","ssh_url":"git@github.example:owner/repo.git","default_branch":"main"}`
 	preflight := `{"number":1}`
+	labelPreflight := `{"labels":[]}`
 	head := `{"head":{"sha":"0123456789012345678901234567890123456789"}}`
 	checks := `{"total_count":0,"check_runs":[]}`
 	statuses := `{"total_count":0,"statuses":[]}`
@@ -63,26 +71,53 @@ func allTypedCommandContracts() map[string]typedCommandContract {
 	}
 	return map[string]typedCommandContract{
 		"repository_view": {result(repositoryJSON), []runner.Command{expectedAPI("GET", base, nil, miB)}},
-		"issue_list":      {result(`{"items":[]}`), []runner.Command{expectedAPI("GET", "/search/issues?q=repo%3Aowner%2Frepo+is%3Aissue+state%3Aopen&per_page=1", nil, 8*miB)}},
+		"label_list":      {result(includedResponse(nil, `[]`)), []runner.Command{expectedLabelPage(base+"/labels?page=1&per_page=100", maximumPaginatedReadBytes)}},
+		"issue_list":      {result(`{"data":{"repository":{"issues":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}`), []runner.Command{expectedIssueListGraphQL("OPEN", 1)}},
 		"issue_view":      {result(issue), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 2*miB)}},
 		"issue_create":    {result(issue), []runner.Command{expectedAPI("POST", base+"/issues", []byte(`{"assignees":null,"body":"body","labels":null,"title":"title"}`), 2*miB)}},
 		"issue_edit":      {result(preflight, issue), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 4*miB), expectedAPI("PATCH", base+"/issues/1", []byte(`{"title":"title"}`), 4*miB-len(preflight))}},
 		"issue_comment":   {result(preflight, comment), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 4*miB), expectedAPI("POST", base+"/issues/1/comments", []byte(`{"body":"body"}`), 4*miB-len(preflight))}},
 		"issue_close":     {result(preflight, issue), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 4*miB), expectedAPI("PATCH", base+"/issues/1", []byte(`{"state":"closed"}`), 4*miB-len(preflight))}},
 		"issue_reopen":    {result(preflight, issue), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 4*miB), expectedAPI("PATCH", base+"/issues/1", []byte(`{"state":"open"}`), 4*miB-len(preflight))}},
-		"pull_list":       {result(`[]`), []runner.Command{expectedAPI("GET", base+"/pulls?per_page=1&state=open", nil, 8*miB)}},
-		"pull_view":       {result(pull), []runner.Command{expectedAPI("GET", base+"/pulls/1", nil, 2*miB)}},
-		"pull_create":     {result(pull), []runner.Command{expectedAPI("POST", base+"/pulls", []byte(`{"base":"main","head":"topic","title":"title"}`), 2*miB)}},
-		"pull_edit":       {result(pull), []runner.Command{expectedAPI("PATCH", base+"/pulls/1", []byte(`{"base":"main"}`), 2*miB)}},
-		"pull_comment":    {result(pull, comment), []runner.Command{expectedAPI("GET", base+"/pulls/1", nil, 4*miB), expectedAPI("POST", base+"/issues/1/comments", []byte(`{"body":"body"}`), 4*miB-len(pull))}},
-		"pull_close":      {result(pull), []runner.Command{expectedAPI("PATCH", base+"/pulls/1", []byte(`{"state":"closed"}`), 2*miB)}},
-		"pull_reopen":     {result(pull), []runner.Command{expectedAPI("PATCH", base+"/pulls/1", []byte(`{"state":"open"}`), 2*miB)}},
-		"pull_ready":      {result("ready\n", pull), []runner.Command{expectedNative([]string{"pr", "ready", "1", "--repo", "github.example/owner/repo"}, miB), expectedAPI("GET", base+"/pulls/1", nil, 2*miB)}},
-		"pull_checks":     {result(head, checks, statuses), []runner.Command{expectedAPI("GET", base+"/pulls/1", nil, 8*miB), expectedAPI("GET", base+"/commits/0123456789012345678901234567890123456789/check-runs?page=1&per_page=100", nil, 8*miB-len(head)), expectedAPI("GET", base+"/commits/0123456789012345678901234567890123456789/status?page=1&per_page=100", nil, 8*miB-len(head)-len(checks))}},
-		"run_list":        {result(`{"workflow_runs":[]}`), []runner.Command{expectedAPI("GET", base+"/actions/runs?per_page=1", nil, 8*miB)}},
-		"run_view":        {result(run), []runner.Command{expectedAPI("GET", base+"/actions/runs/1", nil, 2*miB)}},
-		"status_view":     {result(`{"state":"success","sha":"0123456789012345678901234567890123456789","statuses":[]}`), []runner.Command{expectedAPI("GET", base+"/commits/0123456789012345678901234567890123456789/status", nil, 8*miB)}},
+		"issue_label_change": {result(labelPreflight, issue), []runner.Command{
+			expectedAPI("GET", base+"/issues/1", nil, 4*miB),
+			expectedAPI("PATCH", base+"/issues/1", []byte(`{"labels":["ready"]}`), 4*miB-len(labelPreflight)),
+		}},
+		"pull_list":    {result(`[]`), []runner.Command{expectedAPI("GET", base+"/pulls?per_page=1&state=open", nil, 8*miB)}},
+		"pull_view":    {result(pull), []runner.Command{expectedAPI("GET", base+"/pulls/1", nil, 2*miB)}},
+		"pull_create":  {result(pull), []runner.Command{expectedAPI("POST", base+"/pulls", []byte(`{"base":"main","head":"topic","title":"title"}`), 2*miB)}},
+		"pull_edit":    {result(pull), []runner.Command{expectedAPI("PATCH", base+"/pulls/1", []byte(`{"base":"main"}`), 2*miB)}},
+		"pull_comment": {result(pull, comment), []runner.Command{expectedAPI("GET", base+"/pulls/1", nil, 4*miB), expectedAPI("POST", base+"/issues/1/comments", []byte(`{"body":"body"}`), 4*miB-len(pull))}},
+		"pull_close":   {result(pull), []runner.Command{expectedAPI("PATCH", base+"/pulls/1", []byte(`{"state":"closed"}`), 2*miB)}},
+		"pull_reopen":  {result(pull), []runner.Command{expectedAPI("PATCH", base+"/pulls/1", []byte(`{"state":"open"}`), 2*miB)}},
+		"pull_ready":   {result("ready\n", pull), []runner.Command{expectedNative([]string{"pr", "ready", "1", "--repo", "github.example/owner/repo"}, miB), expectedAPI("GET", base+"/pulls/1", nil, 2*miB)}},
+		"pull_checks":  {result(head, checks, statuses), []runner.Command{expectedAPI("GET", base+"/pulls/1", nil, 8*miB), expectedAPI("GET", base+"/commits/0123456789012345678901234567890123456789/check-runs?page=1&per_page=100", nil, 8*miB-len(head)), expectedAPI("GET", base+"/commits/0123456789012345678901234567890123456789/status?page=1&per_page=100", nil, 8*miB-len(head)-len(checks))}},
+		"run_list":     {result(`{"workflow_runs":[]}`), []runner.Command{expectedAPI("GET", base+"/actions/runs?per_page=1", nil, 8*miB)}},
+		"run_view":     {result(run), []runner.Command{expectedAPI("GET", base+"/actions/runs/1", nil, 2*miB)}},
+		"status_view":  {result(`{"state":"success","sha":"0123456789012345678901234567890123456789","statuses":[]}`), []runner.Command{expectedAPI("GET", base+"/commits/0123456789012345678901234567890123456789/status", nil, 8*miB)}},
 	}
+}
+
+func expectedIssueListGraphQL(state string, first int) runner.Command {
+	body := struct {
+		Query     string `json:"query"`
+		Variables struct {
+			Owner  string   `json:"owner"`
+			Name   string   `json:"name"`
+			States []string `json:"states"`
+			Cursor *string  `json:"cursor"`
+			First  int      `json:"first"`
+		} `json:"variables"`
+	}{Query: expectedIssueListQuery}
+	body.Variables.Owner = "owner"
+	body.Variables.Name = "repo"
+	body.Variables.States = []string{state}
+	body.Variables.First = first
+	stdin, err := json.Marshal(body)
+	if err != nil {
+		panic(err)
+	}
+	return expectedAPI("POST", "graphql", stdin, maximumPaginatedReadBytes)
 }
 
 func expectedAPI(method, endpoint string, stdin []byte, stdoutLimit int) runner.Command {

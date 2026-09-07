@@ -10,6 +10,11 @@ import (
 func FuzzParseArgs(f *testing.F) {
 	for _, seed := range [][]string{
 		{"issue", "list", "--repo", "owner/repo"},
+		{"issue", "list", "--state", "open", "--limit", "1001", "--json", "number,title,body,state,labels,author,createdAt,updatedAt,url"},
+		{"issue", "view", "18", "--json", "number,title,body,state,labels,author,createdAt,updatedAt,url,comments"},
+		{"label", "list", "--limit", "1000", "--json", "name"},
+		{"label", "create", "patchmill:ready", "--repo", "owner/name", "--color", "1a2B3c", "--description", "Ready for work"},
+		{"issue", "edit", "18", "--add-label", "patchmill:ready,help wanted", "--remove-label", "patchmill:queued"},
 		{"pr", "checks", "7", "--json", "name,state", "--repo", "owner/repo"},
 		{"api", "/user"},
 		{"workflow", "run"},
@@ -57,6 +62,9 @@ func typedOperation(request *repowolfv1.GitHubRequest) bool {
 		*repowolfv1.GitHubRequest_IssueComment,
 		*repowolfv1.GitHubRequest_IssueClose,
 		*repowolfv1.GitHubRequest_IssueReopen,
+		*repowolfv1.GitHubRequest_LabelList,
+		*repowolfv1.GitHubRequest_LabelCreate,
+		*repowolfv1.GitHubRequest_IssueLabelChange,
 		*repowolfv1.GitHubRequest_PullList,
 		*repowolfv1.GitHubRequest_PullView,
 		*repowolfv1.GitHubRequest_PullCreate,

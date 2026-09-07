@@ -53,6 +53,18 @@ func (adapter *Adapter) Execute(ctx context.Context, repository policy.ResolvedR
 	if repository.Provider.Kind != config.ProviderGitHub {
 		return nil, policy.ErrDenied
 	}
+	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_LabelList); ok {
+		return adapter.executeLabelList(ctx, repository, request)
+	}
+	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueList); ok {
+		return adapter.executeIssueList(ctx, repository, request)
+	}
+	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueView); ok {
+		return adapter.executeIssueView(ctx, repository, request)
+	}
+	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueLabelChange); ok {
+		return adapter.executeIssueLabelChange(ctx, repository, request)
+	}
 	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_PullChecks); ok {
 		return adapter.executeChecks(ctx, repository, request)
 	}
@@ -78,12 +90,7 @@ func (adapter *Adapter) Execute(ctx context.Context, repository policy.ResolvedR
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueView); ok {
-		if err := rejectPullIssue(result.Stdout); err != nil {
-			return nil, err
-		}
-	}
-	response, err := normalize(request, plan.normalize, result.Stdout)
+	response, err := normalizeResolved(repository, request, plan.normalize, result.Stdout)
 	if err != nil {
 		return nil, err
 	}

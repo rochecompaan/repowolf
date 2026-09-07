@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestDialEnforcesExactOneMiBMessageLimits(t *testing.T) {
+func TestDialEnforcesExactPerDirectionMessageLimits(t *testing.T) {
 	service := &limitGitHubService{response: sizedResponse(t, 64)}
 	endpoint, caFile := startLimitTLSServer(t, service)
 	connection, err := Dial(context.Background(), Config{Endpoint: endpoint, Token: testToken, CAFile: caFile, ServerName: "repowolf.test"})
@@ -46,13 +46,13 @@ func TestDialEnforcesExactOneMiBMessageLimits(t *testing.T) {
 		}
 	})
 	t.Run("receive exact limit succeeds", func(t *testing.T) {
-		service.setResponse(sizedResponse(t, messageLimitBytes))
+		service.setResponse(sizedResponse(t, responseLimitBytes))
 		if _, err := client.Execute(context.Background(), sizedRequest(t, 64)); err != nil {
 			t.Fatalf("exact-limit receive failed: %v", err)
 		}
 	})
 	t.Run("receive over limit is rejected", func(t *testing.T) {
-		service.setResponse(sizedResponse(t, messageLimitBytes+1))
+		service.setResponse(sizedResponse(t, responseLimitBytes+1))
 		if _, err := client.Execute(context.Background(), sizedRequest(t, 64)); status.Code(err) != codes.ResourceExhausted {
 			t.Fatalf("over-limit receive error = %v", err)
 		}

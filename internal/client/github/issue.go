@@ -15,13 +15,13 @@ func parseIssue(args []string) (any, parsedFlags, operationKind, error) {
 	case "list":
 		flags, err := parseFlags(args[1:], operationFlags("--state", "--limit"))
 		state, stateErr := issueState(valueOr(flags, "--state", "open"))
-		limit, limitErr := listLimit(valueOr(flags, "--limit", "30"))
+		limit, limitErr := listLimit(valueOr(flags, "--limit", "30"), 1001)
 		err = firstError(err, stateErr, limitErr)
 		return &repowolfv1.GitHubRequest_IssueList{IssueList: &repowolfv1.GitHubIssueListRequest{State: state, Limit: limit}}, flags, operationIssueList, err
 	case "view":
 		return parseIssueNumber(args[1:], operationIssueView)
 	case "create":
-		flags, err := parseFlags(args[1:], operationFlags("--title", "--body"))
+		flags, err := parseFlags(args[1:], operationFlags("--title", "--body", "--label"))
 		title, present := flags.values["--title"]
 		if err == nil && (!present || !validTitle(title)) {
 			err = fmt.Errorf("--title is required")
@@ -32,6 +32,11 @@ func parseIssue(args []string) (any, parsedFlags, operationKind, error) {
 			if !validBody(body, false) && err == nil {
 				err = fmt.Errorf("invalid --body")
 			}
+		}
+		if labels, ok := flags.values["--label"]; ok {
+			var labelErr error
+			request.Labels, labelErr = labelCSV(labels)
+			err = firstError(err, labelErr)
 		}
 		return &repowolfv1.GitHubRequest_IssueCreate{IssueCreate: request}, flags, operationIssueCreate, err
 	case "edit":
@@ -52,7 +57,13 @@ func parseIssueEdit(args []string) (any, parsedFlags, operationKind, error) {
 	if err != nil {
 		return nil, parsedFlags{}, operationUnknown, err
 	}
-	flags, flagErr := parseFlags(rest, operationFlags("--title", "--body"))
+	flags, flagErr := parseFlags(rest, operationFlags("--title", "--body", "--add-label", "--remove-label"))
+	if _, labelsChanged := flags.values["--add-label"]; labelsChanged {
+		return parseIssueLabelChange(number, flags, flagErr)
+	}
+	if _, labelsChanged := flags.values["--remove-label"]; labelsChanged {
+		return parseIssueLabelChange(number, flags, flagErr)
+	}
 	request := &repowolfv1.GitHubIssueEditRequest{Number: number}
 	if value, ok := flags.values["--title"]; ok {
 		request.Title = &value
@@ -120,10 +131,40 @@ func issueState(value string) (repowolfv1.GitHubIssueState, error) {
 	return state, nil
 }
 
-func listLimit(value string) (uint64, error) {
+func parseIssueLabelChange(number uint64, flags parsedFlags, flagErr error) (any, parsedFlags, operationKind, error) {
+	if _, titleSet := flags.values["--title"]; titleSet {
+		flagErr = firstError(flagErr, fmt.Errorf("label changes cannot be combined with --title or --body"))
+	}
+	if _, bodySet := flags.values["--body"]; bodySet {
+		flagErr = firstError(flagErr, fmt.Errorf("label changes cannot be combined with --title or --body"))
+	}
+	request := &repowolfv1.GitHubIssueLabelChangeRequest{Number: number}
+	if value, ok := flags.values["--add-label"]; ok {
+		var labelErr error
+		request.AddLabels, labelErr = labelCSV(value)
+		flagErr = firstError(flagErr, labelErr)
+	}
+	if value, ok := flags.values["--remove-label"]; ok {
+		var labels []string
+		var labelErr error
+		labels, labelErr = labelCSV(value)
+		flagErr = firstError(flagErr, labelErr)
+		request.RemoveLabels = labels
+	}
+	for _, add := range request.AddLabels {
+		for _, remove := range request.RemoveLabels {
+			if add == remove {
+				flagErr = firstError(flagErr, fmt.Errorf("label cannot be both added and removed"))
+			}
+		}
+	}
+	return &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: request}, flags, operationIssueLabelChange, flagErr
+}
+
+func listLimit(value string, maximum uint64) (uint64, error) {
 	limit, err := positiveDecimal(value)
-	if err != nil || limit > 100 {
-		return 0, fmt.Errorf("limit must be between 1 and 100")
+	if err != nil || limit > maximum {
+		return 0, fmt.Errorf("limit must be between 1 and %d", maximum)
 	}
 	return limit, nil
 }

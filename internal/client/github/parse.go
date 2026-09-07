@@ -3,6 +3,7 @@ package github
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -20,6 +21,8 @@ type operationKind byte
 const (
 	operationUnknown operationKind = iota
 	operationRepositoryView
+	operationAuthStatus
+	operationCurrentUserLogin
 	operationIssueList
 	operationIssueView
 	operationIssueCreate
@@ -27,6 +30,9 @@ const (
 	operationIssueComment
 	operationIssueClose
 	operationIssueReopen
+	operationLabelList
+	operationLabelCreate
+	operationIssueLabelChange
 	operationPullList
 	operationPullView
 	operationPullCreate
@@ -65,12 +71,18 @@ func parseArgs(args []string, cwd string) (command, error) {
 	var kind operationKind
 	var err error
 	switch args[0] {
+	case "auth":
+		operation, flags, kind, err = parseAuth(args[1:])
+	case "api":
+		operation, flags, kind, err = parseAPI(args[1:])
 	case "repo":
 		operation, flags, kind, err = parseRepository(args[1:])
 	case "issue":
 		operation, flags, kind, err = parseIssue(args[1:])
+	case "label":
+		operation, flags, kind, err = parseLabel(args[1:])
 	case "pr":
-		operation, flags, kind, err = parsePull(args[1:])
+		operation, flags, kind, err = parsePull(args[1:], cwd)
 	case "run":
 		operation, flags, kind, err = parseRun(args[1:])
 	case "status":
@@ -93,6 +105,9 @@ func parseArgs(args []string, cwd string) (command, error) {
 	if err := assignOperation(request, operation); err != nil {
 		return command{}, err
 	}
+	if view := request.GetIssueView(); view != nil {
+		view.IncludeComments = slices.Contains(fields, "comments")
+	}
 	return command{request: request, kind: kind, fields: fields}, nil
 }
 
@@ -108,15 +123,6 @@ func validateArgv(args []string) error {
 		}
 	}
 	return nil
-}
-
-func parseRepository(args []string) (any, parsedFlags, operationKind, error) {
-	if len(args) == 0 || args[0] != "view" {
-		return nil, parsedFlags{}, operationUnknown, fmt.Errorf("unsupported repository operation")
-	}
-	flags, err := parseFlags(args[1:], operationFlags())
-	operation := &repowolfv1.GitHubRequest_RepositoryView{RepositoryView: &repowolfv1.GitHubRepositoryViewRequest{}}
-	return operation, flags, operationRepositoryView, err
 }
 
 func selectedFields(kind operationKind, value string) ([]string, error) {
@@ -143,6 +149,8 @@ func selectedFields(kind operationKind, value string) ([]string, error) {
 
 func assignOperation(request *repowolfv1.GitHubRequest, operation any) error {
 	switch value := operation.(type) {
+	case *repowolfv1.GitHubRequest_CurrentUser:
+		request.Operation = value
 	case *repowolfv1.GitHubRequest_RepositoryView:
 		request.Operation = value
 	case *repowolfv1.GitHubRequest_IssueList:
@@ -158,6 +166,12 @@ func assignOperation(request *repowolfv1.GitHubRequest, operation any) error {
 	case *repowolfv1.GitHubRequest_IssueClose:
 		request.Operation = value
 	case *repowolfv1.GitHubRequest_IssueReopen:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_LabelList:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_LabelCreate:
+		request.Operation = value
+	case *repowolfv1.GitHubRequest_IssueLabelChange:
 		request.Operation = value
 	case *repowolfv1.GitHubRequest_PullList:
 		request.Operation = value
