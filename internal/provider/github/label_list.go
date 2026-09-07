@@ -66,14 +66,15 @@ func (adapter *Adapter) callLabelPage(
 	budget *aggregateBudget,
 ) (includedPage, error) {
 	query := url.Values{"page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(perPage)}}
-	endpoint := "/repos/" + repository.Repository.Owner + "/" + repository.Repository.Name + "/labels?" + query.Encode()
+	path := "/repos/" + repository.Repository.Owner + "/" + repository.Repository.Name + "/labels"
+	endpoint := path + "?" + query.Encode()
 	command := adapter.apiCommand(repository.Provider.APIHost, "GET", endpoint, nil, maximumPaginatedReadBytes)
 	command.Args = append([]string{command.Args[0], "--include"}, command.Args[1:]...)
 	result, err := adapter.callBudgeted(ctx, command, budget)
 	if err != nil {
 		return includedPage{}, err
 	}
-	return decodeIncludedPage(result.Stdout, page)
+	return decodeIncludedRepositoryPage(result.Stdout, page, perPage, repository.Provider.APIHost, path)
 }
 
 func normalizeLabelPage(raw []byte, maximum int) ([]*repowolfv1.GitHubLabelRecord, error) {
@@ -89,14 +90,11 @@ func normalizeLabelPage(raw []byte, maximum int) ([]*repowolfv1.GitHubLabelRecor
 	}
 	records := make([]*repowolfv1.GitHubLabelRecord, 0, len(*values))
 	for _, value := range *values {
-		name, err := required(value.Name, "label.name")
+		record, err := labelRecord(value)
 		if err != nil {
 			return nil, err
 		}
-		if name == "" {
-			return nil, providerResponse(nil, "label.name")
-		}
-		records = append(records, &repowolfv1.GitHubLabelRecord{Name: name})
+		records = append(records, record)
 	}
 	return records, nil
 }
@@ -109,8 +107,23 @@ func boundedLabelListResponse(labels []*repowolfv1.GitHubLabelRecord) (*repowolf
 	return response, nil
 }
 
+type expectedLinkTarget struct {
+	host    string
+	path    string
+	perPage int
+}
+
 func decodeIncludedPage(raw []byte, expectedPage int) (includedPage, error) {
-	response, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(raw)), nil)
+	return decodeIncludedPageForTarget(raw, expectedPage, nil)
+}
+
+func decodeIncludedRepositoryPage(raw []byte, expectedPage, perPage int, host, path string) (includedPage, error) {
+	return decodeIncludedPageForTarget(raw, expectedPage, &expectedLinkTarget{host: host, path: path, perPage: perPage})
+}
+
+func decodeIncludedPageForTarget(raw []byte, expectedPage int, target *expectedLinkTarget) (includedPage, error) {
+	reader := bufio.NewReader(bytes.NewReader(raw))
+	response, err := http.ReadResponse(reader, nil)
 	if err != nil {
 		return includedPage{}, providerResponse(err, "HTTP response")
 	}
@@ -124,7 +137,7 @@ func decodeIncludedPage(raw []byte, expectedPage int) (includedPage, error) {
 	}
 	hasNext := false
 	if len(links) == 1 {
-		hasNext, err = decodeLinkHeader(links[0], expectedPage)
+		hasNext, err = decodeLinkHeader(links[0], expectedPage, target)
 		if err != nil {
 			return includedPage{}, err
 		}
@@ -133,23 +146,26 @@ func decodeIncludedPage(raw []byte, expectedPage int) (includedPage, error) {
 	if err != nil {
 		return includedPage{}, providerResponse(err, "HTTP body")
 	}
+	if _, err := reader.ReadByte(); err != io.EOF {
+		return includedPage{}, providerResponse(err, "trailing HTTP data")
+	}
 	return includedPage{body: body, hasNext: hasNext}, nil
 }
 
-func decodeLinkHeader(raw string, expectedPage int) (bool, error) {
+func decodeLinkHeader(raw string, expectedPage int, target *expectedLinkTarget) (bool, error) {
 	if strings.TrimSpace(raw) == "" {
 		return false, providerResponse(nil, "Link header")
 	}
 	relations := make(map[string]int)
 	for _, rawLink := range strings.Split(raw, ",") {
-		target, relation, err := decodePageLink(strings.TrimSpace(rawLink))
+		page, relation, err := decodePageLink(strings.TrimSpace(rawLink), target)
 		if err != nil {
 			return false, err
 		}
 		if _, duplicate := relations[relation]; duplicate {
 			return false, providerResponse(nil, "Link relation")
 		}
-		relations[relation] = target
+		relations[relation] = page
 	}
 	if err := validatePageRelations(relations, expectedPage); err != nil {
 		return false, err
@@ -158,7 +174,7 @@ func decodeLinkHeader(raw string, expectedPage int) (bool, error) {
 	return hasNext, nil
 }
 
-func decodePageLink(raw string) (int, string, error) {
+func decodePageLink(raw string, expected *expectedLinkTarget) (int, string, error) {
 	closeBracket := strings.IndexByte(raw, '>')
 	if !strings.HasPrefix(raw, "<") || closeBracket < 2 {
 		return 0, "", providerResponse(nil, "Link target")
@@ -176,7 +192,11 @@ func decodePageLink(raw string) (int, string, error) {
 	if relation != "next" && relation != "prev" && relation != "first" && relation != "last" {
 		return 0, "", providerResponse(nil, "Link relation")
 	}
-	pages := parsed.Query()["page"]
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return 0, "", providerResponse(err, "Link query")
+	}
+	pages := query["page"]
 	if len(pages) != 1 {
 		return 0, "", providerResponse(nil, "Link page")
 	}
@@ -184,7 +204,22 @@ func decodePageLink(raw string) (int, string, error) {
 	if err != nil || page < 1 {
 		return 0, "", providerResponse(err, "Link page")
 	}
+	if expected != nil && !validExpectedLinkTarget(parsed, query, expected) {
+		return 0, "", providerResponse(nil, "Link target")
+	}
 	return page, relation, nil
+}
+
+func validExpectedLinkTarget(parsed *url.URL, query url.Values, expected *expectedLinkTarget) bool {
+	if !strings.EqualFold(parsed.Host, expected.host) || parsed.EscapedPath() != expected.path || len(query) != 2 {
+		return false
+	}
+	perPage := query["per_page"]
+	if len(perPage) != 1 {
+		return false
+	}
+	value, err := strconv.Atoi(perPage[0])
+	return err == nil && value == expected.perPage
 }
 
 func validatePageRelations(relations map[string]int, expectedPage int) error {
