@@ -37,8 +37,6 @@ func (adapter *Adapter) plan(repository policy.ResolvedRepository, request *repo
 			"color":       operation.LabelCreate.Color,
 			"description": operation.LabelCreate.Description,
 		}
-	case *repowolfv1.GitHubRequest_IssueView:
-		method, endpoint, normalizer = "GET", base+"/issues/"+decimal(operation.IssueView.Number), "issue"
 	case *repowolfv1.GitHubRequest_IssueCreate:
 		method, endpoint, normalizer = "POST", base+"/issues", "issue"
 		input = createIssueBody(operation.IssueCreate)
@@ -93,6 +91,17 @@ func (adapter *Adapter) plan(repository policy.ResolvedRepository, request *repo
 		return commandPlan{}, ErrInvalidRequest
 	}
 	return commandPlan{command: adapter.apiCommand(repository.Provider.APIHost, method, endpoint, input, outputLimit(normalizer)), normalize: normalizer}, nil
+}
+
+func (adapter *Adapter) issueViewCommand(repository policy.ResolvedRepository, number uint64, stdoutLimit int) runner.Command {
+	endpoint := "/repos/" + repository.Repository.Owner + "/" + repository.Repository.Name + "/issues/" + decimal(number)
+	return adapter.apiCommand(repository.Provider.APIHost, "GET", endpoint, nil, stdoutLimit)
+}
+
+func (adapter *Adapter) issueCommentsCommand(repository policy.ResolvedRepository, number uint64, page, perPage, stdoutLimit int) runner.Command {
+	query := url.Values{"page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(perPage)}}
+	endpoint := "/repos/" + repository.Repository.Owner + "/" + repository.Repository.Name + "/issues/" + decimal(number) + "/comments?" + query.Encode()
+	return adapter.apiCommand(repository.Provider.APIHost, "GET", endpoint, nil, stdoutLimit)
 }
 
 func (adapter *Adapter) apiCommand(host, method, endpoint string, value any, stdoutLimit int) runner.Command {

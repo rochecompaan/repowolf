@@ -5,10 +5,13 @@ import repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 func issueListResponse(records []*repowolfv1.GitHubIssueRecord) *repowolfv1.GitHubResponse {
 	return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueList{IssueList: &repowolfv1.GitHubIssueListResult{Issues: records}}}
 }
+func issueViewResponse(record *repowolfv1.GitHubIssueRecord) *repowolfv1.GitHubResponse {
+	return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueView{IssueView: &repowolfv1.GitHubIssueViewResult{Issue: record}}}
+}
 func issueResponse(request *repowolfv1.GitHubRequest, record *repowolfv1.GitHubIssueRecord) (*repowolfv1.GitHubResponse, error) {
 	switch request.Operation.(type) {
 	case *repowolfv1.GitHubRequest_IssueView:
-		return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueView{IssueView: &repowolfv1.GitHubIssueViewResult{Issue: record}}}, nil
+		return issueViewResponse(record), nil
 	case *repowolfv1.GitHubRequest_IssueCreate:
 		return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueCreate{IssueCreate: &repowolfv1.GitHubIssueCreateResult{Issue: record}}}, nil
 	case *repowolfv1.GitHubRequest_IssueEdit:

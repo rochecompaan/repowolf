@@ -77,6 +77,42 @@ func TestPreflightedMutationsShareExactAggregateStdoutBudget(t *testing.T) {
 	}
 }
 
+// Regression: an issue and all requested comment pages share one exact 8 MiB
+// raw-output budget rather than receiving independent per-call allowances.
+func TestIssueViewCommentBudget(t *testing.T) {
+	issue := issueViewFixture()
+	comments := commentPage(t, commentFixture(1))
+	issueSize := 4 * miB
+	issue = append(issue, []byte(strings.Repeat(" ", issueSize-len(issue)))...)
+
+	for _, test := range []struct {
+		name string
+		size int
+		want error
+	}{
+		{"exact limit", maximumPaginatedReadBytes, nil},
+		{"one byte over", maximumPaginatedReadBytes + 1, runner.ErrOutputLimit},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			last := append(append([]byte{}, comments...), []byte(strings.Repeat(" ", test.size-issueSize-len(comments)))...)
+			caller := &fakeCaller{results: []runner.Result{{Stdout: issue}, {Stdout: last}}}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
+			if test.want == nil {
+				if err != nil || len(response.GetIssueView().GetIssue().GetComments()) != 1 {
+					t.Fatalf("Execute() = %#v, %v", response, err)
+				}
+				if caller.commands[0].StdoutLimit != maximumPaginatedReadBytes || caller.commands[1].StdoutLimit != test.size-issueSize {
+					t.Fatalf("stdout limits = %d, %d", caller.commands[0].StdoutLimit, caller.commands[1].StdoutLimit)
+				}
+				return
+			}
+			if response != nil || !errors.Is(err, test.want) {
+				t.Fatalf("Execute() = %#v, %v, want %v", response, err, test.want)
+			}
+		})
+	}
+}
+
 func testAdapter(t *testing.T, caller Caller) *Adapter {
 	t.Helper()
 	adapter, err := New(AdapterOptions{Path: "/pinned/gh", Environment: []string{"GH_TOKEN=secret"}, Timeout: time.Minute, Caller: caller})

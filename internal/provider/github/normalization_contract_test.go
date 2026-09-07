@@ -1,10 +1,12 @@
 package github
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	"github.com/rochecompaan/repowolf/internal/runner"
 )
 
 const largeProviderID uint64 = 9_007_199_254_740_993
@@ -68,6 +70,27 @@ func TestNormalizationPreservesLargeUint64AndOperationAllowlists(t *testing.T) {
 	}
 	if got := runView.GetRunView().Run; got.Id != largeProviderID || got.GetAttempt() != 2 || got.GetJobsUrl() != "https://safe.example/jobs" || len(got.ProtoReflect().GetUnknown()) != 0 {
 		t.Fatalf("view run = %#v", got)
+	}
+}
+
+// Regression: REST issue comments are projected only into the typed record
+// fields that Patchmill can later render as author, body, and createdAt.
+func TestIssueViewCommentsNormalizationContract(t *testing.T) {
+	comment := commentFixture(int(largeProviderID))
+	comment["extra"] = map[string]any{"untrusted": true}
+	caller := &fakeCaller{results: []runner.Result{{Stdout: issueViewFixture()}, {Stdout: commentPage(t, comment)}}}
+
+	response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	comments := response.GetIssueView().GetIssue().GetComments()
+	if len(comments) != 1 {
+		t.Fatalf("comments = %d, want 1", len(comments))
+	}
+	got := comments[0]
+	if got.GetId() != largeProviderID || got.GetAuthor() != "reviewer" || got.GetBody() != "comment 9007199254740993" || got.GetCreatedAt() != "2026-09-01T00:00:00Z" || len(got.ProtoReflect().GetUnknown()) != 0 {
+		t.Fatalf("normalized comment = %#v", got)
 	}
 }
 

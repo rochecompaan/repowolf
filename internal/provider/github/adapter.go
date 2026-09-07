@@ -56,6 +56,9 @@ func (adapter *Adapter) Execute(ctx context.Context, repository policy.ResolvedR
 	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueList); ok {
 		return adapter.executeIssueList(ctx, repository, request)
 	}
+	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueView); ok {
+		return adapter.executeIssueView(ctx, repository, request)
+	}
 	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_PullChecks); ok {
 		return adapter.executeChecks(ctx, repository, request)
 	}
@@ -80,11 +83,6 @@ func (adapter *Adapter) Execute(ctx context.Context, repository policy.ResolvedR
 	result, err := adapter.call(ctx, plan.command)
 	if err != nil {
 		return nil, err
-	}
-	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueView); ok {
-		if err := rejectPullIssue(result.Stdout); err != nil {
-			return nil, err
-		}
 	}
 	response, err := normalizeResolved(repository, request, plan.normalize, result.Stdout)
 	if err != nil {
