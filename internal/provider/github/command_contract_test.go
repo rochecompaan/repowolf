@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -63,7 +64,7 @@ func allTypedCommandContracts() map[string]typedCommandContract {
 	}
 	return map[string]typedCommandContract{
 		"repository_view": {result(repositoryJSON), []runner.Command{expectedAPI("GET", base, nil, miB)}},
-		"issue_list":      {result(`{"items":[]}`), []runner.Command{expectedAPI("GET", "/search/issues?q=repo%3Aowner%2Frepo+is%3Aissue+state%3Aopen&per_page=1", nil, 8*miB)}},
+		"issue_list":      {result(`{"data":{"repository":{"issues":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}`), []runner.Command{expectedIssueListGraphQL("OPEN", 1)}},
 		"issue_view":      {result(issue), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 2*miB)}},
 		"issue_create":    {result(issue), []runner.Command{expectedAPI("POST", base+"/issues", []byte(`{"assignees":null,"body":"body","labels":null,"title":"title"}`), 2*miB)}},
 		"issue_edit":      {result(preflight, issue), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 4*miB), expectedAPI("PATCH", base+"/issues/1", []byte(`{"title":"title"}`), 4*miB-len(preflight))}},
@@ -83,6 +84,28 @@ func allTypedCommandContracts() map[string]typedCommandContract {
 		"run_view":        {result(run), []runner.Command{expectedAPI("GET", base+"/actions/runs/1", nil, 2*miB)}},
 		"status_view":     {result(`{"state":"success","sha":"0123456789012345678901234567890123456789","statuses":[]}`), []runner.Command{expectedAPI("GET", base+"/commits/0123456789012345678901234567890123456789/status", nil, 8*miB)}},
 	}
+}
+
+func expectedIssueListGraphQL(state string, first int) runner.Command {
+	body := struct {
+		Query     string `json:"query"`
+		Variables struct {
+			Owner  string   `json:"owner"`
+			Name   string   `json:"name"`
+			States []string `json:"states"`
+			Cursor *string  `json:"cursor"`
+			First  int      `json:"first"`
+		} `json:"variables"`
+	}{Query: expectedIssueListQuery}
+	body.Variables.Owner = "owner"
+	body.Variables.Name = "repo"
+	body.Variables.States = []string{state}
+	body.Variables.First = first
+	stdin, err := json.Marshal(body)
+	if err != nil {
+		panic(err)
+	}
+	return expectedAPI("POST", "graphql", stdin, maximumPaginatedReadBytes)
 }
 
 func expectedAPI(method, endpoint string, stdin []byte, stdoutLimit int) runner.Command {

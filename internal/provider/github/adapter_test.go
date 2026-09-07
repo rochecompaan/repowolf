@@ -261,7 +261,7 @@ func TestAllTypedOperationsExecuteWithoutClientCommandSurface(t *testing.T) {
 	run := `{"id":1,"name":"CI","display_title":"run","status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"0123456789012345678901234567890123456789","html_url":"https://safe.example/r","created_at":"c","updated_at":"u","run_attempt":1,"jobs_url":"https://safe.example/jobs"}`
 	responses := map[string][]string{
 		"repository_view": {`{"name":"repo","owner":{"login":"owner"},"full_name":"owner/repo","description":null,"private":false,"html_url":"https://github.example/owner/repo","ssh_url":"git@github.example:owner/repo.git","default_branch":"main"}`},
-		"issue_list":      {`{"items":[]}`}, "issue_view": {issue}, "issue_create": {issue},
+		"issue_list":      {`{"data":{"repository":{"issues":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}`}, "issue_view": {issue}, "issue_create": {issue},
 		"issue_edit": {`{"number":1}`, issue}, "issue_comment": {`{"number":1}`, comment}, "issue_close": {`{"number":1}`, issue}, "issue_reopen": {`{"number":1}`, issue},
 		"pull_list": {`[]`}, "pull_view": {pull}, "pull_create": {pull}, "pull_edit": {pull}, "pull_comment": {pull, comment}, "pull_close": {pull}, "pull_reopen": {pull},
 		"run_list": {`{"workflow_runs":[]}`}, "run_view": {run}, "status_view": {`{"state":"success","sha":"0123456789012345678901234567890123456789","statuses":[]}`},

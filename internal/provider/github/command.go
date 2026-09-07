@@ -37,12 +37,6 @@ func (adapter *Adapter) plan(repository policy.ResolvedRepository, request *repo
 			"color":       operation.LabelCreate.Color,
 			"description": operation.LabelCreate.Description,
 		}
-	case *repowolfv1.GitHubRequest_IssueList:
-		query := "repo:" + repository.Repository.Owner + "/" + repository.Repository.Name + " is:issue"
-		if operation.IssueList.State != repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_ALL {
-			query += " state:" + issueState(operation.IssueList.State)
-		}
-		method, endpoint, normalizer = "GET", "/search/issues?q="+url.QueryEscape(query)+"&per_page="+decimal(operation.IssueList.Limit), "issue_list"
 	case *repowolfv1.GitHubRequest_IssueView:
 		method, endpoint, normalizer = "GET", base+"/issues/"+decimal(operation.IssueView.Number), "issue"
 	case *repowolfv1.GitHubRequest_IssueCreate:
@@ -161,9 +155,6 @@ func editPullBody(value *repowolfv1.GitHubPullEditRequest) map[string]any {
 	return body
 }
 func decimal(value uint64) string { return strconv.FormatUint(value, 10) }
-func issueState(value repowolfv1.GitHubIssueState) string {
-	return map[repowolfv1.GitHubIssueState]string{repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_OPEN: "open", repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_CLOSED: "closed", repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_ALL: "all"}[value]
-}
 func pullState(value repowolfv1.GitHubPullState) string {
 	return map[repowolfv1.GitHubPullState]string{repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_OPEN: "open", repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_CLOSED: "closed", repowolfv1.GitHubPullState_GIT_HUB_PULL_STATE_ALL: "all"}[value]
 }
