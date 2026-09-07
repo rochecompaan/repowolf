@@ -76,7 +76,7 @@ func parseArgs(args []string, cwd string) (command, error) {
 	case "issue":
 		operation, flags, kind, err = parseIssue(args[1:])
 	case "pr":
-		operation, flags, kind, err = parsePull(args[1:])
+		operation, flags, kind, err = parsePull(args[1:], cwd)
 	case "run":
 		operation, flags, kind, err = parseRun(args[1:])
 	case "status":

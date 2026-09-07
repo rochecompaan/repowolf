@@ -8,7 +8,7 @@ import (
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 )
 
-func parsePull(args []string) (any, parsedFlags, operationKind, error) {
+func parsePull(args []string, cwd string) (any, parsedFlags, operationKind, error) {
 	if len(args) == 0 {
 		return nil, parsedFlags{}, operationUnknown, fmt.Errorf("pull-request subcommand is required")
 	}
@@ -20,7 +20,7 @@ func parsePull(args []string) (any, parsedFlags, operationKind, error) {
 	case "create":
 		return parsePullCreate(args[1:])
 	case "edit":
-		return parsePullEdit(args[1:])
+		return parsePullEdit(args[1:], cwd)
 	case "comment":
 		return parsePullComment(args[1:])
 	case "close":
@@ -80,12 +80,12 @@ func parsePullCreate(args []string) (any, parsedFlags, operationKind, error) {
 	return &repowolfv1.GitHubRequest_PullCreate{PullCreate: request}, flags, operationPullCreate, err
 }
 
-func parsePullEdit(args []string) (any, parsedFlags, operationKind, error) {
+func parsePullEdit(args []string, cwd string) (any, parsedFlags, operationKind, error) {
 	number, rest, err := requiredNumber(args)
 	if err != nil {
 		return nil, parsedFlags{}, operationUnknown, err
 	}
-	flags, flagErr := parseFlags(rest, operationFlags("--title", "--body", "--base"))
+	flags, flagErr := parseFlags(rest, operationFlags("--title", "--body", "--body-file", "--base"))
 	request := &repowolfv1.GitHubPullEditRequest{Number: number}
 	for name, target := range map[string]**string{"--title": &request.Title, "--body": &request.Body, "--base": &request.Base} {
 		if value, ok := flags.values[name]; ok {
@@ -99,6 +99,19 @@ func parsePullEdit(args []string) (any, parsedFlags, operationKind, error) {
 			if !valid {
 				flagErr = firstError(flagErr, fmt.Errorf("invalid %s", name))
 			}
+		}
+	}
+	if _, hasBody := flags.values["--body"]; hasBody {
+		if _, hasBodyFile := flags.values["--body-file"]; hasBodyFile {
+			flagErr = firstError(flagErr, fmt.Errorf("--body and --body-file cannot be combined"))
+		}
+	}
+	if bodyFile, ok := flags.values["--body-file"]; ok && flagErr == nil {
+		body, err := readBodyFile(cwd, bodyFile)
+		if err != nil {
+			flagErr = err
+		} else {
+			request.Body = &body
 		}
 	}
 	if request.Title == nil && request.Body == nil && request.Base == nil {
