@@ -176,7 +176,7 @@ func TestPatchmillJSONRendering(t *testing.T) {
 		response *repowolfv1.GitHubResponse
 		want     string
 	}{
-		{"issue list objects", command{kind: operationIssueList, fields: []string{"author", "labels"}}, &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueList{IssueList: &repowolfv1.GitHubIssueListResult{Issues: []*repowolfv1.GitHubIssueRecord{issue}}}}, "[{\"author\":{\"login\":\"octocat\"},\"labels\":[{\"name\":\"bug\"}]}]\n"},
+		{"issue list objects preserve selected order", command{kind: operationIssueList, fields: []string{"labels", "author"}}, &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueList{IssueList: &repowolfv1.GitHubIssueListResult{Issues: []*repowolfv1.GitHubIssueRecord{issue}}}}, "[{\"labels\":[{\"name\":\"bug\"}],\"author\":{\"login\":\"octocat\"}}]\n"},
 		{"issue view comments", command{kind: operationIssueView, fields: []string{"comments"}}, &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueView{IssueView: &repowolfv1.GitHubIssueViewResult{Issue: issue}}}, "{\"comments\":[{\"author\":{\"login\":\"reviewer\"},\"body\":\"done\",\"createdAt\":\"2026-09-07T00:00:00Z\"}]}\n"},
 		{"label list", command{kind: operationLabelList, fields: []string{"name"}}, &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_LabelList{LabelList: &repowolfv1.GitHubLabelListResult{Labels: []*repowolfv1.GitHubLabelRecord{{Name: "bug"}, {Name: "patchmill:ready"}}}}}, "[{\"name\":\"bug\"},{\"name\":\"patchmill:ready\"}]\n"},
 		{"label create native output", command{kind: operationLabelCreate}, &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_LabelCreate{LabelCreate: &repowolfv1.GitHubLabelCreateResult{Label: &repowolfv1.GitHubLabelRecord{Name: "bug"}}}}, ""},

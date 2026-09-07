@@ -33,29 +33,18 @@ func render(parsed command, response *repowolfv1.GitHubResponse) ([]byte, error)
 }
 
 func renderJSON(value any, fields []string) ([]byte, error) {
-	selectObject := func(object map[string]any) map[string]any {
-		selected := make(map[string]any, len(fields))
-		for _, field := range fields {
-			item, exists := object[field]
-			if !exists {
-				item = absentJSONValue(field)
-			}
-			selected[field] = item
-		}
-		return selected
-	}
 	var selected any
 	switch typed := value.(type) {
 	case map[string]any:
-		selected = selectObject(typed)
+		selected = selectJSONFields(typed, fields)
 	case []any:
-		items := make([]map[string]any, 0, len(typed))
+		items := make([]orderedJSONObject, 0, len(typed))
 		for _, item := range typed {
 			object, ok := item.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("invalid typed list response")
 			}
-			items = append(items, selectObject(object))
+			items = append(items, selectJSONFields(object, fields))
 		}
 		selected = items
 	default:
