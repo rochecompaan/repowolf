@@ -49,10 +49,10 @@ if $needs_input; then
   printf 'BEGIN\n%s\nEND\n' "$input" >> "$FAKE_PROVIDER_STDIN_LOG"
 fi
 
-issue='{"number":31,"title":"typed issue","body":"task13-issue-body-marker","state":"open","user":{"login":"agent"},"assignees":[],"labels":[{"name":"security"}],"html_url":"https://safe.invalid/issue/31","created_at":"2026-08-01T00:00:00Z","updated_at":"2026-08-01T00:00:00Z"}'
+graphql_issue='{"number":31,"title":"typed issue","body":"task13-issue-body-marker","state":"OPEN","labels":{"nodes":[{"name":"security"}],"pageInfo":{"hasNextPage":false}},"author":{"login":"agent"},"createdAt":"2026-08-01T00:00:00Z","updatedAt":"2026-08-01T00:00:00Z","url":"https://safe.invalid/issue/31"}'
 case "$method $endpoint" in
-  'GET /search/issues?'*)
-    emit "{\"items\":[$issue]}"
+  'POST graphql')
+    emit "{\"data\":{\"repository\":{\"issues\":{\"nodes\":[$graphql_issue],\"pageInfo\":{\"hasNextPage\":false,\"endCursor\":\"cursor-31\"}}}}}"
     ;;
   'GET /repos/alpha/repo/pulls/7')
     emit '{"head":{"sha":"0123456789012345678901234567890123456789"}}'
