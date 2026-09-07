@@ -26,8 +26,9 @@ func TestGitHubServiceEnforcesFinalProtobufLimitIncludingMetadata(t *testing.T) 
 		size    int
 		wantErr bool
 	}{
-		{"exact limit", messageLimitBytes, false},
-		{"one byte over", messageLimitBytes + 1, true},
+		{"above request limit", messageLimitBytes + 1, false},
+		{"exact limit", responseLimitBytes, false},
+		{"one byte over", responseLimitBytes + 1, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			providerResponse := githubResponseWithFinalSize(t, test.size, requestID)
@@ -48,8 +49,8 @@ func TestGitHubServiceEnforcesFinalProtobufLimitIncludingMetadata(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := proto.Size(response); got != messageLimitBytes {
-				t.Fatalf("final protobuf size = %d, want %d", got, messageLimitBytes)
+			if got := proto.Size(response); got != test.size {
+				t.Fatalf("final protobuf size = %d, want %d", got, test.size)
 			}
 		})
 	}

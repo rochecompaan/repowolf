@@ -1,6 +1,7 @@
 package github
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/url"
 	"strings"
@@ -40,7 +41,7 @@ type graphQLIssue struct {
 	Body      *string                 `json:"body"`
 	State     *string                 `json:"state"`
 	Labels    *graphQLLabelConnection `json:"labels"`
-	Author    *apiUser                `json:"author"`
+	Author    json.RawMessage         `json:"author"`
 	CreatedAt *string                 `json:"createdAt"`
 	UpdatedAt *string                 `json:"updatedAt"`
 	URL       *string                 `json:"url"`
@@ -103,13 +104,9 @@ func graphQLIssueRecord(value graphQLIssue) (*repowolfv1.GitHubIssueRecord, erro
 	if err != nil || state != "OPEN" && state != "CLOSED" {
 		return nil, providerResponse(err, "issue.state")
 	}
-	// GraphQL nulls the author for deleted users; REST substitutes "ghost".
-	author := "ghost"
-	if value.Author != nil {
-		author, err = userLogin(value.Author, "issue.author")
-		if err != nil || !graphQLActorLogin(author) {
-			return nil, providerResponse(err, "issue.author")
-		}
+	author, err := graphQLIssueAuthor(value.Author)
+	if err != nil {
+		return nil, err
 	}
 	labels, err := graphQLIssueLabels(value.Labels)
 	if err != nil {
@@ -131,6 +128,25 @@ func graphQLIssueRecord(value graphQLIssue) (*repowolfv1.GitHubIssueRecord, erro
 		Number: issueNumber, Title: issueTitle, Body: &issueBody, State: strings.ToLower(state), Author: author,
 		Assignees: []string{}, Labels: labels, Url: link, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}, nil
+}
+
+func graphQLIssueAuthor(raw json.RawMessage) (string, error) {
+	if raw == nil {
+		return "", providerResponse(nil, "issue.author")
+	}
+	// GraphQL nulls the author for deleted users; REST substitutes "ghost".
+	if bytes.Equal(raw, []byte("null")) {
+		return "ghost", nil
+	}
+	var value apiUser
+	if err := decode(raw, &value); err != nil {
+		return "", providerResponse(err, "issue.author")
+	}
+	author, err := userLogin(&value, "issue.author")
+	if err != nil || !graphQLActorLogin(author) {
+		return "", providerResponse(err, "issue.author")
+	}
+	return author, nil
 }
 
 func graphQLIssueLabels(connection *graphQLLabelConnection) ([]string, error) {

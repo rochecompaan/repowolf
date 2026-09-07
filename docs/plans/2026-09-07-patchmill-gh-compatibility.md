@@ -27,7 +27,7 @@
 - Return at most 1,000 labels through at most ten fixed REST pages.
 - Apply an 8 MiB aggregate provider-output limit to paginated reads.
 - Apply a 4 MiB aggregate provider-output limit to mutations, including preflight output.
-- Keep the normalized protobuf response and client-rendered response limit at 1 MiB.
+- Keep requests at 1 MiB and allow normalized protobuf responses and client-rendered output up to 8 MiB.
 - Keep all calls under the request context and configured provider timeout.
 - Read pull-request body files through a no-follow regular-file descriptor.
 - Read at most 65,537 body-file bytes and reject bodies larger than 65,536 bytes.
@@ -857,7 +857,7 @@ For each new operation, use the server fixture to assert:
 - A missing capability returns the existing denied error.
 - An accepted request writes the canonical audit name before provider execution.
 - Provider errors remain generic to the client.
-- A response above 1 MiB returns `runner.ErrOutputLimit`.
+- A response above 8 MiB returns `runner.ErrOutputLimit`.
 
 - [ ] **Step 7: Run server tests after wiring the mappings**
 
@@ -1028,7 +1028,7 @@ Cover missing `data`, repository, issues, nodes, page info, author, label names,
 
 Cover `hasNextPage: true` with an empty cursor, repeated cursors, empty nodes with another page, and more nodes than requested.
 
-Return raw page bytes totaling exactly 8 MiB and assert success when the final protobuf stays below 1 MiB. Add one byte and assert `runner.ErrOutputLimit`.
+Return raw page bytes totaling exactly 8 MiB and assert success when the final protobuf stays within the 8 MiB response limit. Add one provider-output byte and assert `runner.ErrOutputLimit`.
 
 Cancel the context after page one and assert no page-two call.
 
@@ -1259,16 +1259,16 @@ Provider commands for label pages must include response headers in stdout throug
 
 Cover malformed HTTP status lines, malformed headers, conflicting `Link` headers, and invalid link relations.
 
-Cover a short body with `rel="next"`. Also cover page ten with `rel="next"`.
+Cover a short body with `rel="next"`. Also cover truncation when page ten has `rel="next"` and when one page returns more records than requested.
 
-Page ten with a next relation must return `runner.ErrOutputLimit` without an eleventh provider call.
+Reaching the requested limit returns the truncated result without an eleventh provider call.
 
 - [ ] **Step 3: Run the label-list tests and observe unsupported execution**
 
 Run:
 
 ```bash
-go test ./internal/provider/github -run 'TestLabelListPagination|TestLabelListRejectsPaginationMetadata|TestLabelListOverflow|TestLabelListAggregateBudget' -count=1
+go test ./internal/provider/github -run 'TestLabelListPagination|TestLabelListRejectsPaginationMetadata|TestLabelListTruncation|TestLabelListAggregateBudget' -count=1
 ```
 
 Expected: FAIL because `LabelList` is not dispatched.
@@ -1294,7 +1294,7 @@ Do not follow the URL from the header. Validate its page relation, then build th
 
 Fetch labels with a stable `per_page=100` on every page so REST offsets never shift. Normalize only nonempty label names.
 
-Reject pages above 100 records and enforce the requested total record limit independently before appending. Reject `hasNext` after the requested limit or page ten.
+Reject pages above 100 records and enforce the requested total record limit independently. Validate each complete page before truncating it to that limit, then return without another call.
 
 Dispatch `LabelList` to `executeLabelList` from `Adapter.Execute`.
 
@@ -1304,7 +1304,7 @@ Run:
 
 ```bash
 gofmt -w internal/provider/github/label_list.go internal/provider/github/label_list_test.go internal/provider/github/adapter.go
-go test ./internal/provider/github -run 'TestLabelListPagination|TestLabelListRejectsPaginationMetadata|TestLabelListOverflow|TestLabelListAggregateBudget' -count=1
+go test ./internal/provider/github -run 'TestLabelListPagination|TestLabelListRejectsPaginationMetadata|TestLabelListTruncation|TestLabelListAggregateBudget' -count=1
 go test ./internal/provider/github -count=1
 ```
 
@@ -1445,7 +1445,8 @@ issue list: 1,001 records, 11 pages, 8 MiB aggregate provider output
 issue comments: 1,000 records plus overflow detection, 8 MiB aggregate provider output
 label list: 1,000 records, 10 pages, 8 MiB aggregate provider output
 mutations: 4 MiB aggregate provider output
-normalized and rendered response: 1 MiB
+request: 1 MiB
+normalized and rendered response: 8 MiB
 ```
 
 State that RepoWolf rejects generic `gh api`, GraphQL, JQ, templates, aliases, extensions, and shell passthrough.

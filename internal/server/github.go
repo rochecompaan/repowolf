@@ -72,7 +72,7 @@ func (service *githubService) Execute(ctx context.Context, request *repowolfv1.G
 		return nil, rpcstatus.ErrRepositoryUnavailable
 	}
 	response.Meta = &repowolfv1.ResponseMeta{RequestId: requestID}
-	if proto.Size(response) > messageLimitBytes {
+	if proto.Size(response) > responseLimitBytes {
 		return nil, runner.ErrOutputLimit
 	}
 	return response, nil

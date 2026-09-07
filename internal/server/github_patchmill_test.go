@@ -77,7 +77,7 @@ func TestGitHubPatchmillResponseLimit(t *testing.T) {
 	for _, test := range patchmillServerOperations {
 		t.Run(test.name, func(t *testing.T) {
 			request := githubServerRequest(test.request)
-			executor := &fakeGitHubExecutor{response: githubResponseWithFinalSize(t, messageLimitBytes+1, requestID)}
+			executor := &fakeGitHubExecutor{response: githubResponseWithFinalSize(t, responseLimitBytes+1, requestID)}
 			service := newGitHubService(githubPolicy(t, test.capability, config.ProviderGitHub), executor, &eventSink{})
 			response, err := service.Execute(auth.WithRequestID(auth.WithPrincipal(context.Background(), "agent"), requestID), request)
 			if response != nil || !errors.Is(err, runner.ErrOutputLimit) {

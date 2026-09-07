@@ -127,6 +127,7 @@ func TestIssueListRejectsPaginationMetadata(t *testing.T) {
 		{"missing page info", []string{`{"data":{"repository":{"issues":{"nodes":[]}}}}`}, 1},
 		{"missing has next page", []string{page(`[]`, `{"endCursor":"cursor-1"}`)}, 1},
 		{"missing author login", []string{page(`[{`+strings.Replace(validScalars, `"author":{"login":"octocat"}`, `"author":{}`, 1)+`}]`, validPageInfo)}, 1},
+		{"absent author", []string{page(`[{`+strings.Replace(validScalars, `"author":{"login":"octocat"},`, ``, 1)+`}]`, validPageInfo)}, 1},
 		{"missing labels", []string{page(`[{`+strings.Replace(validScalars, `,`+validLabels, ``, 1)+`}]`, validPageInfo)}, 1},
 		{"missing label nodes", []string{page(`[{`+strings.Replace(validScalars, validLabels, `"labels":{"pageInfo":{"hasNextPage":false}}`, 1)+`}]`, validPageInfo)}, 1},
 		{"missing label page info", []string{page(`[{`+strings.Replace(validScalars, validLabels, `"labels":{"nodes":[{"name":"bug"}]}`, 1)+`}]`, validPageInfo)}, 1},

@@ -52,7 +52,8 @@ issue list: 1,001 records, 11 pages, 8 MiB aggregate provider output
 issue comments: 1,000 records plus overflow detection, 8 MiB aggregate provider output
 label list: 1,000 records, 10 pages, 8 MiB aggregate provider output
 mutations: 4 MiB aggregate provider output
-normalized and rendered response: 1 MiB
+request: 1 MiB
+normalized and rendered response: 8 MiB
 ```
 
 RepoWolf fails closed when an input, limit, response, or pagination record is

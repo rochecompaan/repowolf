@@ -231,7 +231,7 @@ The provider requests repository labels in pages of 100. It stops after a short 
 
 The provider reads fixed REST pagination metadata for each page. Missing, malformed, repeated, or contradictory pagination data fails closed.
 
-The result contains at most 1,000 label names. If page ten reports another page, the operation fails on overflow.
+The result contains at most the requested limit, capped at 1,000 label names. The provider validates a complete returned page before truncating it to the requested limit, and it never makes an eleventh call.
 
 ### Label creation
 
@@ -257,7 +257,7 @@ A mutation has a 4 MiB aggregate provider-output budget. This budget includes pr
 
 Each child call receives only the remaining aggregate budget. Exhaustion returns the existing output-limit error.
 
-The normalized protobuf response retains the existing 1 MiB limit. Client-rendered output therefore remains bounded by typed response data.
+Requests retain the existing 1 MiB protobuf limit. Normalized protobuf responses and client-rendered output each have an 8 MiB limit, so bounded paginated reads can use their full read budget.
 
 The complete operation remains under the RPC context and configured provider timeout. Pagination does not create a new independent timeout for each page.
 
