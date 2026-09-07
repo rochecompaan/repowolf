@@ -13,6 +13,37 @@ import (
 
 const mutationAggregateLimit = 4 * miB
 
+// Regression: issue-label preflight and replacement output share one exact 4 MiB budget.
+func TestIssueLabelChangeAggregateBudget(t *testing.T) {
+	updated := issueLabelChangeFixture(`[{"name":"bug"},{"name":"ready"}]`)
+	preflight := paddedJSON(`{"labels":[{"name":"bug"}]}`, mutationAggregateLimit-len(updated))
+	for _, test := range []struct {
+		name     string
+		mutation []byte
+		wantErr  error
+	}{
+		{"exact limit", []byte(updated), nil},
+		{"one byte over", []byte(updated + " "), runner.ErrOutputLimit},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &fakeCaller{results: []runner.Result{{Stdout: preflight}, {Stdout: test.mutation}}}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueLabelChangeRequest(&repowolfv1.GitHubIssueLabelChangeRequest{Number: 18, AddLabels: []string{"ready"}}))
+			if test.wantErr == nil {
+				if err != nil || response.GetIssueLabelChange().GetIssue() == nil {
+					t.Fatalf("Execute() = %#v, %v", response, err)
+				}
+				if len(caller.commands) != 2 || caller.commands[1].StdoutLimit != len(updated) {
+					t.Fatalf("commands = %#v", caller.commands)
+				}
+				return
+			}
+			if response != nil || !errors.Is(err, test.wantErr) {
+				t.Fatalf("Execute() = %#v, %v, want %v", response, err, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestPreflightedMutationsShareExactAggregateStdoutBudget(t *testing.T) {
 	issue := `{"number":1,"title":"title","body":"body","state":"open","user":{"login":"me"},"assignees":[],"labels":[],"html_url":"https://safe.example/1","created_at":"c","updated_at":"u"}`
 	comment := `{"id":1,"user":{"login":"me"},"body":"body","html_url":"https://safe.example/c","created_at":"c","updated_at":"u"}`

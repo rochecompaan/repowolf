@@ -62,6 +62,9 @@ func (adapter *Adapter) Execute(ctx context.Context, repository policy.ResolvedR
 	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueView); ok {
 		return adapter.executeIssueView(ctx, repository, request)
 	}
+	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_IssueLabelChange); ok {
+		return adapter.executeIssueLabelChange(ctx, repository, request)
+	}
 	if _, ok := request.Operation.(*repowolfv1.GitHubRequest_PullChecks); ok {
 		return adapter.executeChecks(ctx, repository, request)
 	}

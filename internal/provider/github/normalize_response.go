@@ -20,6 +20,8 @@ func issueResponse(request *repowolfv1.GitHubRequest, record *repowolfv1.GitHubI
 		return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueClose{IssueClose: &repowolfv1.GitHubIssueCloseResult{Issue: record}}}, nil
 	case *repowolfv1.GitHubRequest_IssueReopen:
 		return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueReopen{IssueReopen: &repowolfv1.GitHubIssueReopenResult{Issue: record}}}, nil
+	case *repowolfv1.GitHubRequest_IssueLabelChange:
+		return &repowolfv1.GitHubResponse{Result: &repowolfv1.GitHubResponse_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeResult{Issue: record}}}, nil
 	default:
 		return nil, ErrInvalidRequest
 	}
