@@ -71,7 +71,7 @@ func allTypedCommandContracts() map[string]typedCommandContract {
 	}
 	return map[string]typedCommandContract{
 		"repository_view": {result(repositoryJSON), []runner.Command{expectedAPI("GET", base, nil, miB)}},
-		"label_list":      {result(includedResponse(nil, `[]`)), []runner.Command{expectedLabelPage(base+"/labels?page=1&per_page=1", maximumPaginatedReadBytes)}},
+		"label_list":      {result(includedResponse(nil, `[]`)), []runner.Command{expectedLabelPage(base+"/labels?page=1&per_page=100", maximumPaginatedReadBytes)}},
 		"issue_list":      {result(`{"data":{"repository":{"issues":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}`), []runner.Command{expectedIssueListGraphQL("OPEN", 1)}},
 		"issue_view":      {result(issue), []runner.Command{expectedAPI("GET", base+"/issues/1", nil, 2*miB)}},
 		"issue_create":    {result(issue), []runner.Command{expectedAPI("POST", base+"/issues", []byte(`{"assignees":null,"body":"body","labels":null,"title":"title"}`), 2*miB)}},
