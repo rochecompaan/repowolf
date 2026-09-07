@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
@@ -103,7 +104,7 @@ func graphQLIssueRecord(value graphQLIssue) (*repowolfv1.GitHubIssueRecord, erro
 		return nil, providerResponse(err, "issue.state")
 	}
 	author, err := userLogin(value.Author, "issue.author")
-	if err != nil || !githubLogin(author) {
+	if err != nil || !graphQLActorLogin(author) {
 		return nil, providerResponse(err, "issue.author")
 	}
 	labels, err := graphQLIssueLabels(value.Labels)
@@ -157,6 +158,19 @@ func graphQLIssueText(value *string, field string, validate func(string) error) 
 		return "", providerResponse(err, field)
 	}
 	return text, nil
+}
+
+// GraphQL issue authors are Actors, which include bot identities.
+func graphQLActorLogin(value string) bool {
+	if value == "" || len(value) > maximumNameBytes || !utf8.ValidString(value) {
+		return false
+	}
+	for _, character := range value {
+		if unicode.IsControl(character) || unicode.IsSpace(character) {
+			return false
+		}
+	}
+	return true
 }
 
 func currentUserResponse(value apiUser) (*repowolfv1.GitHubResponse, error) {

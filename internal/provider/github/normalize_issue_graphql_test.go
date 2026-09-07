@@ -21,7 +21,7 @@ func TestIssueListRejectsMalformedGraphQLRecords(t *testing.T) {
 		{"title too long", func(v map[string]any) { v["title"] = strings.Repeat("x", maximumTitleBytes+1) }},
 		{"body too long", func(v map[string]any) { v["body"] = strings.Repeat("x", maximumBodyBytes+1) }},
 		{"invalid login", func(v map[string]any) { v["author"] = map[string]any{"login": "bad login"} }},
-		{"login too long", func(v map[string]any) { v["author"] = map[string]any{"login": strings.Repeat("x", 40)} }},
+		{"login too long", func(v map[string]any) { v["author"] = map[string]any{"login": strings.Repeat("x", maximumNameBytes+1)} }},
 		{"too many labels", func(v map[string]any) { v["labels"].(map[string]any)["nodes"] = graphQLLabelFixtures(101) }},
 	}
 	for _, field := range []string{"title", "state", "createdAt", "updatedAt", "url", "author", "label"} {
@@ -101,4 +101,31 @@ func graphQLLabelFixtures(count int) []map[string]any {
 		values[index] = map[string]any{"name": fmt.Sprintf("label-%d", index)}
 	}
 	return values
+}
+
+// Issue authors are GraphQL Actors, including bots, not only human accounts.
+func TestIssueListGraphQLActorLogins(t *testing.T) {
+	for _, test := range []struct {
+		login string
+		valid bool
+	}{
+		{"octocat", true}, {"dependabot[bot]", true}, {strings.Repeat("x", maximumNameBytes), true},
+		{"bad\u2003actor", false}, {"bad\u0085actor", false}, {"bad\x1bactor", false},
+	} {
+		t.Run(test.login, func(t *testing.T) {
+			value := graphQLIssueFixture(1)
+			setGraphQLString(value, "author", test.login)
+			page, err := normalizeIssueGraphQLPage(graphQLIssuePage([]map[string]any{value}, false, "last"), 1)
+			if test.valid {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if page.records[0].GetAuthor() != test.login {
+					t.Fatal("actor login changed")
+				}
+			} else if err == nil {
+				t.Fatal("accepted invalid actor")
+			}
+		})
+	}
 }
