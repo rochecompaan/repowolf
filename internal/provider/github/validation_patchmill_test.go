@@ -2,6 +2,7 @@ package github
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -10,17 +11,14 @@ import (
 
 func TestPatchmillRequestValidation(t *testing.T) {
 	issueState := repowolfv1.GitHubIssueState_GIT_HUB_ISSUE_STATE_OPEN
-	tooManyLabels := make([]string, 101)
-	for index := range tooManyLabels {
-		tooManyLabels[index] = "label"
-	}
+	tooManyLabels := numberedLabels(101)
 
 	validRequests := []*repowolfv1.GitHubRequest{
 		{Operation: &repowolfv1.GitHubRequest_CurrentUser{CurrentUser: &repowolfv1.GitHubCurrentUserRequest{}}},
 		{Operation: &repowolfv1.GitHubRequest_IssueList{IssueList: &repowolfv1.GitHubIssueListRequest{State: issueState, Limit: 1001}}},
 		{Operation: &repowolfv1.GitHubRequest_LabelList{LabelList: &repowolfv1.GitHubLabelListRequest{Limit: 1000}}},
 		{Operation: &repowolfv1.GitHubRequest_LabelCreate{LabelCreate: &repowolfv1.GitHubLabelCreateRequest{Name: strings.Repeat("é", 50), Color: "1A2b3C", Description: strings.Repeat("é", 100)}}},
-		{Operation: &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeRequest{Number: 1, AddLabels: []string{"add"}, RemoveLabels: []string{"remove"}}}},
+		{Operation: &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeRequest{Number: 1, AddLabels: numberedLabels(100)}}},
 	}
 	for _, request := range validRequests {
 		if err := ValidateGitHubRequest(request); err != nil {
@@ -62,4 +60,32 @@ func TestPatchmillRequestValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPatchmillOversizedLabelChangesRejectBeforeSeenAllocation(t *testing.T) {
+	labels := numberedLabels(101)
+	request := func(number uint64) *repowolfv1.GitHubRequest {
+		return &repowolfv1.GitHubRequest{Operation: &repowolfv1.GitHubRequest_IssueLabelChange{IssueLabelChange: &repowolfv1.GitHubIssueLabelChangeRequest{Number: number, AddLabels: labels}}}
+	}
+	allocations := testing.AllocsPerRun(100, func() {
+		if err := ValidateGitHubRequest(request(1)); !errors.Is(err, ErrInvalidRequest) {
+			t.Fatalf("ValidateGitHubRequest() = %v, want ErrInvalidRequest", err)
+		}
+	})
+	baseline := testing.AllocsPerRun(100, func() {
+		if err := ValidateGitHubRequest(request(0)); !errors.Is(err, ErrInvalidRequest) {
+			t.Fatalf("ValidateGitHubRequest() = %v, want ErrInvalidRequest", err)
+		}
+	})
+	if allocations > baseline {
+		t.Fatalf("oversized label validation allocations = %v, baseline = %v", allocations, baseline)
+	}
+}
+
+func numberedLabels(count int) []string {
+	labels := make([]string, count)
+	for index := range labels {
+		labels[index] = "label-" + strconv.Itoa(index)
+	}
+	return labels
 }

@@ -50,6 +50,12 @@ func validateIssueLabelChange(value *repowolfv1.GitHubIssueLabelChangeRequest) e
 	if len(value.AddLabels) == 0 && len(value.RemoveLabels) == 0 {
 		return invalid("empty label change")
 	}
+	if err := labels(value.AddLabels); err != nil {
+		return err
+	}
+	if err := labels(value.RemoveLabels); err != nil {
+		return err
+	}
 	seen := make(map[string]struct{}, len(value.AddLabels)+len(value.RemoveLabels))
 	if err := distinctLabels(value.AddLabels, seen); err != nil {
 		return err
@@ -89,9 +95,6 @@ func labelColor(value string) error {
 }
 
 func distinctLabels(values []string, seen map[string]struct{}) error {
-	if err := labels(values); err != nil {
-		return err
-	}
 	for _, value := range values {
 		if _, exists := seen[value]; exists {
 			return invalid("duplicate label")
