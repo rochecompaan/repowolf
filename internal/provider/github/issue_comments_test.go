@@ -76,39 +76,52 @@ func TestIssueViewCommentsStopOnShortPage(t *testing.T) {
 // Regression: exactly 1,000 comments are allowed only after an empty bounded
 // probe, while a nonempty probe proves truncation and fails closed.
 func TestIssueViewCommentOverflow(t *testing.T) {
-	results := []runner.Result{{Stdout: issueViewFixture()}}
-	for page := 0; page < 10; page++ {
-		results = append(results, runner.Result{Stdout: commentFixtures(t, page*100+1, 100)})
+	for _, total := range []int{1000, 1001} {
+		t.Run(fmt.Sprint(total), func(t *testing.T) {
+			used := 0
+			caller := &scriptedIssueViewCaller{call: func(_ context.Context, command runner.Command, index int) (runner.Result, error) {
+				if command.StdoutLimit != maximumPaginatedReadBytes-used {
+					t.Fatalf("remaining budget = %d", command.StdoutLimit)
+				}
+				var raw []byte
+				if index == 0 {
+					raw = issueViewFixture()
+				} else {
+					if index > 11 {
+						t.Fatal("more than eleven comment calls")
+					}
+					_, _, start, count := restPageWindow(t, command, total)
+					raw = commentFixtures(t, start+1, count)
+				}
+				used += len(raw)
+				return runner.Result{Stdout: raw}, nil
+			}}
+			response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
+			if total == 1000 {
+				if err != nil {
+					t.Fatal(err)
+				}
+				comments := response.GetIssueView().GetIssue().GetComments()
+				if len(comments) != total {
+					t.Fatalf("comments = %d", len(comments))
+				}
+				for index, comment := range comments {
+					if comment.GetId() != uint64(index+1) {
+						t.Fatalf("comment %d ID = %d", index, comment.GetId())
+					}
+				}
+			} else if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
+				t.Fatalf("Execute() = %v, %v", response, err)
+			}
+			if len(caller.commands) != 12 {
+				t.Fatalf("calls = %d, want preflight plus eleven comment calls", len(caller.commands))
+			}
+			for page := 1; page <= 10; page++ {
+				assertCommentEndpoint(t, caller.commands, page, page, 100)
+			}
+			assertCommentEndpoint(t, caller.commands, 11, 1001, 1)
+		})
 	}
-
-	t.Run("empty probe permits exactly one thousand", func(t *testing.T) {
-		caller := &fakeCaller{results: append(append([]runner.Result{}, results...), runner.Result{Stdout: []byte(`[]`)})}
-		response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := len(response.GetIssueView().GetIssue().GetComments()); got != 1_000 {
-			t.Fatalf("comments = %d, want 1000", got)
-		}
-		if len(caller.commands) != 12 {
-			t.Fatalf("commands = %d, want issue, ten pages, and probe", len(caller.commands))
-		}
-		for page := 1; page <= 10; page++ {
-			assertCommentEndpoint(t, caller.commands, page, page, 100)
-		}
-		assertCommentEndpoint(t, caller.commands, 11, 11, 1)
-	})
-
-	t.Run("nonempty probe rejects truncation", func(t *testing.T) {
-		caller := &fakeCaller{results: append(append([]runner.Result{}, results...), runner.Result{Stdout: commentPage(t, commentFixture(1_001))})}
-		response, err := testAdapter(t, caller).Execute(context.Background(), repository(), issueViewRequest(true))
-		if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
-			t.Fatalf("Execute() = %#v, %v, want output limit", response, err)
-		}
-		if len(caller.commands) != 12 {
-			t.Fatalf("commands = %d, want bounded probe", len(caller.commands))
-		}
-	})
 }
 
 // Regression: issue/comment JSON and every required typed comment field must

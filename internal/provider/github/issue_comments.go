@@ -83,7 +83,7 @@ func (adapter *Adapter) fetchIssueComments(
 		}
 	}
 
-	probe, err := adapter.callIssueCommentPage(ctx, repository, number, maximumIssueCommentPages+1, 1, budget)
+	probe, err := adapter.callIssueCommentPage(ctx, repository, number, maximumIssueCommentPages*issueCommentPageSize+1, 1, budget)
 	if err != nil {
 		return nil, err
 	}

@@ -1209,7 +1209,7 @@ Use an 8 MiB budget when comments are requested. Fetch the issue, reject pull re
 
 Request pages 1 through 10 with `per_page=100`. Stop after a page with fewer than 100 comments.
 
-After ten full pages, request page 11 with `per_page=1`. Return `runner.ErrOutputLimit` when that probe contains a comment.
+After ten full pages, request page 1001 with `per_page=1` (REST offset `(page-1)*per_page = 1000`). This is the eleventh comment call, in addition to the issue preflight. Return `runner.ErrOutputLimit` when that probe contains a comment.
 
 Attach at most 1,000 `GitHubCommentRecord` values to `GitHubIssueRecord.Comments`. Keep the operation under the original context.
 
