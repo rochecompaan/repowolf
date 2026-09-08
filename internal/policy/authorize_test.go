@@ -86,6 +86,25 @@ func TestResolveGitDeniesAmbiguousCoordinates(t *testing.T) {
 	}
 }
 
+func TestResolveGitRejectsUnicodeCaseFoldConfusables(t *testing.T) {
+	cfg := testConfig()
+	cfg.Repositories["kelvin"] = config.Repository{Provider: "gitea", Owner: "Kelvin", Name: "Repo"}
+	principal := cfg.Principals["infra-agent"]
+	principal.Grants = append(principal.Grants, config.Grant{Repository: "kelvin", Capabilities: []config.Capability{config.GitRead}})
+	cfg.Principals["infra-agent"] = principal
+	snapshot, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = snapshot.ResolveGit("infra-agent", GitSelector{
+		SSHUser: "forge_user", Host: "gitea.example", Owner: "Kelvin", Name: "Repo",
+	}, config.GitRead)
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("Unicode-confusable ResolveGit = %v, want denied", err)
+	}
+}
+
 func TestResolveMultiRepositoryPrincipal(t *testing.T) {
 	snapshot := testSnapshot(t)
 

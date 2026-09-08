@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,6 +44,7 @@ func StartGitea(t testing.TB) *Gitea {
 	t.Helper()
 	requireCommands(t, "docker", "git", "ssh", "ssh-agent", "ssh-add", "ssh-keygen", "ssh-keyscan")
 	command := exec.Command("docker", "run", "-d",
+		"--tmpfs", "/data",
 		"-p", "127.0.0.1::3000", "-p", "127.0.0.1::22",
 		"-e", "GITEA__database__DB_TYPE=sqlite3",
 		"-e", "GITEA__security__INSTALL_LOCK=true",
@@ -55,7 +57,7 @@ func StartGitea(t testing.TB) *Gitea {
 		t.Fatalf("start pinned Gitea container: %v", err)
 	}
 	fixture := &Gitea{containerID: strings.TrimSpace(string(output)), SSHHost: "localhost", SSHUser: "git", Owner: "Team_Name", Repository: "Repo.One"}
-	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", fixture.containerID).Run() })
+	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", "-v", fixture.containerID).Run() })
 
 	httpPort := dockerPort(t, fixture.containerID, "3000/tcp")
 	fixture.SSHPort = dockerPort(t, fixture.containerID, "22/tcp")
@@ -238,16 +240,25 @@ func dockerPort(t testing.TB, container, port string) int {
 }
 func waitHTTP(t testing.TB, url string, timeout time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		response, err := http.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	client := &http.Client{Timeout: time.Second}
+	for ctx.Err() == nil {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatalf("create Gitea readiness request: %v", err)
+		}
+		response, err := client.Do(request)
 		if err == nil {
 			_ = response.Body.Close()
 			if response.StatusCode >= 200 && response.StatusCode < 500 {
 				return
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 	t.Fatalf("Gitea HTTP readiness timeout")
 }

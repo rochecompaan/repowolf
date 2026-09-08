@@ -1,10 +1,6 @@
 package policy
 
-import (
-	"strings"
-
-	"github.com/rochecompaan/repowolf/internal/config"
-)
+import "github.com/rochecompaan/repowolf/internal/config"
 
 // Selector describes optional exact repository identity fields supplied by a client.
 type Selector struct {
@@ -94,10 +90,32 @@ func matchesGit(selector GitSelector, repository config.Repository, provider con
 	}
 	slugMatches := selector.Owner == repository.Owner && selector.Name == repository.Name
 	if provider.Kind == config.ProviderGitea {
-		slugMatches = strings.EqualFold(selector.Owner, repository.Owner) && strings.EqualFold(selector.Name, repository.Name)
+		slugMatches = asciiEqualFold(selector.Owner, repository.Owner) && asciiEqualFold(selector.Name, repository.Name)
 	}
-	return userMatches && strings.EqualFold(selector.Host, provider.GitHost) &&
+	return userMatches && asciiEqualFold(selector.Host, provider.GitHost) &&
 		(selector.SSHPort == 0 || selector.SSHPort == provider.SSHPort) && slugMatches
+}
+
+func asciiEqualFold(left, right string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range len(left) {
+		leftByte, rightByte := left[index], right[index]
+		if leftByte >= 0x80 || rightByte >= 0x80 {
+			return false
+		}
+		if leftByte >= 'A' && leftByte <= 'Z' {
+			leftByte += 'a' - 'A'
+		}
+		if rightByte >= 'A' && rightByte <= 'Z' {
+			rightByte += 'a' - 'A'
+		}
+		if leftByte != rightByte {
+			return false
+		}
+	}
+	return true
 }
 
 func matches(selector Selector, repository config.Repository, provider config.Provider) bool {
