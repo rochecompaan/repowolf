@@ -65,6 +65,21 @@ func TestMarkersRemainInTheirIntendedChannels(t *testing.T) {
 	if deniedRemote.err == nil || deniedRemote.stdout != "" {
 		t.Fatalf("denied remote content exists: %v; stdout=%q stderr=%q", deniedRemote.err, deniedRemote.stdout, deniedRemote.stderr)
 	}
+	giteaCheckout := filepath.Join(git.root, "gitea-leak-checkout")
+	giteaClone := git.git(t, git.root, "clone", "ssh://forge_user@gitea.example.invalid:2222/team_name/repo.one.git", giteaCheckout)
+	if giteaClone.err != nil {
+		t.Fatalf("Gitea clone: %v; stdout=%q stderr=%q", giteaClone.err, giteaClone.stdout, giteaClone.stderr)
+	}
+	if err := os.WriteFile(filepath.Join(git.giteaSeed, "fetched.txt"), []byte("Gitea fetched content\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git.gitOK(t, git.giteaSeed, "add", "fetched.txt")
+	git.gitOK(t, git.giteaSeed, "commit", "-m", "Gitea leak fetch update")
+	git.gitOK(t, git.giteaSeed, "push", git.giteaRemote, "main")
+	giteaFetch := git.git(t, giteaCheckout, "fetch", "origin")
+	if giteaFetch.err != nil {
+		t.Fatalf("Gitea fetch: %v; stdout=%q stderr=%q", giteaFetch.err, giteaFetch.stdout, giteaFetch.stderr)
+	}
 	git.server.Stop(t)
 
 	channels := map[string]string{
@@ -91,15 +106,20 @@ func TestMarkersRemainInTheirIntendedChannels(t *testing.T) {
 		"ssh.upload.input":      string(mustRead(git.uploadInput)),
 		"ssh.receive.allowed":   allowedReceiveInput,
 		"ssh.receive.denied":    deniedReceiveInput,
-		"git.checkout.contents": string(mustRead(filepath.Join(checkout, "pack.txt"))) + string(mustRead(filepath.Join(checkout, "allowed.txt"))) + string(mustRead(filepath.Join(checkout, "denied.txt"))),
+		"git.checkout.contents": string(mustRead(filepath.Join(checkout, "pack.txt"))) + string(mustRead(filepath.Join(checkout, "allowed.txt"))) + string(mustRead(filepath.Join(checkout, "denied.txt"))) + string(mustRead(filepath.Join(giteaCheckout, "gitea.txt"))),
+		"gitea.clone.stdout":    giteaClone.stdout,
+		"gitea.clone.stderr":    giteaClone.stderr,
+		"gitea.fetch.stdout":    giteaFetch.stdout,
+		"gitea.fetch.stderr":    giteaFetch.stderr,
+		"gitea.upload.input":    string(mustRead(git.giteaUploadInput)),
 	}
 	assertAuditInvocations(t, channels["forge.audit"], forgeAuditExpectations(
 		"github.issue_list", "github.issue_create", "github.issue_comment",
 	), auditLeakMarkers())
 	gitForbidden := append(auditLeakMarkers(), allowedContentMarker, deniedContentMarker)
-	assertAuditInvocations(t, channels["git.audit"], gitAuditExpectations(
-		"refs/heads/"+allowedUpdateMarker, "refs/heads/"+deniedUpdateMarker,
-	), gitForbidden)
+	gitExpectations := gitAuditExpectations("refs/heads/"+allowedUpdateMarker, "refs/heads/"+deniedUpdateMarker)
+	gitExpectations = append(gitExpectations, giteaUploadAuditExpectations()...)
+	assertAuditInvocations(t, channels["git.audit"], gitExpectations, gitForbidden)
 	allowed := map[string]map[string]bool{
 		agentToken:              {},
 		providerCredential:      {"provider.environment": true},
