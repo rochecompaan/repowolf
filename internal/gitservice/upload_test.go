@@ -31,7 +31,7 @@ func TestUploadCommandUsesOnlyPinnedRepositoryConfiguration(t *testing.T) {
 		Host: "git.example", Owner: "trusted-owner", Name: "trusted-repo", SshPort: 2222,
 	}}
 
-	command, repository, err := service.command(ctx, open, config.GitRead, "git-upload-pack")
+	command, repository, err := service.command(ctx, open, config.GitRead, "git-upload-pack", config.ProviderGitHub)
 	if err != nil {
 		t.Fatalf("command: %v", err)
 	}
@@ -47,6 +47,26 @@ func TestUploadCommandUsesOnlyPinnedRepositoryConfiguration(t *testing.T) {
 	}
 	if command.StdinLimit != 8<<30 || command.StdoutLimit != 8<<30 {
 		t.Fatalf("stream limits = %d/%d", command.StdinLimit, command.StdoutLimit)
+	}
+}
+
+func TestUploadCommandUsesTrustedGiteaConfiguration(t *testing.T) {
+	service := newGiteaTestService(t, config.GitRead)
+	ctx := auth.WithPrincipal(context.Background(), "agent")
+	open := &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{
+		SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222,
+	}}
+
+	command, repository, err := service.command(ctx, open, config.GitRead, "git-upload-pack", config.ProviderGitHub, config.ProviderGitea)
+	if err != nil {
+		t.Fatalf("command: %v", err)
+	}
+	want := []string{"-T", "-p", "2222", "--", "forge_user@Gitea.Example", "git-upload-pack 'Team_Name/Repo.One.git'"}
+	if !reflect.DeepEqual(command.Args, want) {
+		t.Fatalf("argv = %#v, want %#v", command.Args, want)
+	}
+	if repository.ID != "gitea-read" || repository.Provider.Kind != config.ProviderGitea {
+		t.Fatalf("repository = %#v", repository)
 	}
 }
 
@@ -67,7 +87,7 @@ func TestUploadCommandRejectsInexactOrUnauthorizedRepository(t *testing.T) {
 		"no grant":     {unauthorized, &repowolfv1.RepositorySelector{Host: "git.example", Owner: "trusted-owner", Name: "trusted-repo", SshPort: 2222}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, _, err := service.command(test.ctx, &repowolfv1.GitOpen{Repository: test.selector}, config.GitRead, "git-upload-pack")
+			_, _, err := service.command(test.ctx, &repowolfv1.GitOpen{Repository: test.selector}, config.GitRead, "git-upload-pack", config.ProviderGitHub)
 			if err == nil {
 				t.Fatal("expected rejection")
 			}
@@ -165,6 +185,57 @@ func TestUploadPackDenialStartsNoProviderAndSendsPermissionTerminal(t *testing.T
 	}
 }
 
+func TestUploadPackGiteaAuditAndReceivePackDenialBeforeInput(t *testing.T) {
+	service := newGiteaTestService(t, config.GitRead)
+	directory := t.TempDir()
+	path := filepath.Join(directory, "ssh")
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := "#!" + shell + "\n" +
+		"[ \"$5\" = forge_user@Gitea.Example ] && [ \"$6\" = \"git-upload-pack 'Team_Name/Repo.One.git'\" ] || exit 92\n" +
+		"printf server-response\nwhile IFS= read -r line; do :; done\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	auditOutput := &bytes.Buffer{}
+	service.options.SSHPath = path
+	service.options.Runner = &runner.Runner{}
+	service.options.Audit = audit.NewWriter(auditOutput)
+	stream := &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: []*repowolfv1.GitFrame{
+		{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222}}}},
+	}}
+	if err := service.uploadPack(stream); err != nil {
+		t.Fatal(err)
+	}
+	events := decodeAuditEvents(t, auditOutput)
+	if len(events) != 2 || events[0].Provider != "gitea" || events[0].Repository != "gitea-read" || events[0].Outcome != audit.OutcomeAccepted || events[1].Outcome != audit.OutcomeCompleted {
+		t.Fatalf("events = %#v", events)
+	}
+
+	counter := &countingProcessRunner{}
+	service.options.Runner = counter
+	service.options.Audit = audit.NewWriter(io.Discard)
+	receive := &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: []*repowolfv1.GitFrame{
+		{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222}}}},
+		dataFrame([]byte("must remain unread")),
+	}}
+	if err := service.receivePack(receive); err != nil {
+		t.Fatal(err)
+	}
+	if counter.starts != 0 || receive.recvAt != 1 || receive.sent[0].GetTerminal().GetCategory() != repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PERMISSION_DENIED {
+		t.Fatalf("starts=%d recvAt=%d sent=%#v", counter.starts, receive.recvAt, receive.sent)
+	}
+}
+
+type countingProcessRunner struct{ starts int }
+
+func (counter *countingProcessRunner) Start(context.Context, runner.Command) (*runner.Process, error) {
+	counter.starts++
+	return nil, errors.New("unexpected process start")
+}
+
 func executableTestService(t *testing.T, capabilities ...config.Capability) (*Service, *bytes.Buffer) {
 	t.Helper()
 	service := newTestService(t, capabilities...)
@@ -232,6 +303,30 @@ func (stream *memoryStream) Send(frame *repowolfv1.GitFrame) error {
 	}
 	stream.sent = append(stream.sent, frame)
 	return nil
+}
+
+func newGiteaTestService(t *testing.T, capabilities ...config.Capability) *Service {
+	t.Helper()
+	cfg := config.Config{
+		Providers: map[string]config.Provider{"gitea": {
+			Kind: config.ProviderGitea, GitHost: "Gitea.Example", SSHUser: "forge_user", SSHPort: 2222,
+		}},
+		Repositories: map[string]config.Repository{"gitea-read": {
+			Provider: "gitea", Owner: "Team_Name", Name: "Repo.One", Git: config.PushPolicy{MaxRefUpdates: 4},
+		}},
+		Principals: map[string]config.Principal{"agent": {
+			Grants: []config.Grant{{Repository: "gitea-read", Capabilities: capabilities}},
+		}},
+	}
+	snapshot, err := policy.New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Service{options: Options{Policy: snapshot, SSHPath: "/pinned/ssh", Limits: config.Limits{
+		MaxStreamChunkBytes: 64 << 10, MaxPushPrefixBytes: 1 << 20,
+		MaxGitBytesPerDirection: 8 << 30, InitialStreamTimeout: time.Second,
+		OperationTimeout: time.Minute, IdleStreamTimeout: time.Second,
+	}}}
 }
 
 func newTestService(t *testing.T, capabilities ...config.Capability) *Service {
