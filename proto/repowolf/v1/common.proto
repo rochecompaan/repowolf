@@ -9,6 +9,7 @@ message RepositorySelector {
   string owner = 2;
   string name = 3;
   uint32 ssh_port = 4;
+  string ssh_user = 5;
 }
 
 message RequestContext {

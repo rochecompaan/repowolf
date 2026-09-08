@@ -54,7 +54,7 @@ func Parse(args []string) (Request, error) {
 	if len(args)-position != 2 {
 		return Request{}, fmt.Errorf("unsupported SSH argument shape")
 	}
-	host, err := parseAuthority(args[position])
+	user, host, err := parseAuthority(args[position])
 	if err != nil {
 		return Request{}, err
 	}
@@ -63,7 +63,7 @@ func Parse(args []string) (Request, error) {
 		return Request{}, err
 	}
 	return Request{
-		Repository: &repowolfv1.RepositorySelector{Host: host, SshPort: uint32(port), Owner: owner, Name: name},
+		Repository: &repowolfv1.RepositorySelector{Host: host, SshPort: uint32(port), SshUser: user, Owner: owner, Name: name},
 		Operation:  operation,
 	}, nil
 }
@@ -98,16 +98,31 @@ func parsePort(value string) (uint64, error) {
 	return port, nil
 }
 
-func parseAuthority(authority string) (string, error) {
-	const prefix = "git@"
-	if !strings.HasPrefix(authority, prefix) {
-		return "", fmt.Errorf("unsupported SSH user")
+func parseAuthority(authority string) (string, string, error) {
+	if strings.Count(authority, "@") != 1 {
+		return "", "", fmt.Errorf("invalid SSH authority")
 	}
-	host := authority[len(prefix):]
+	user, host, _ := strings.Cut(authority, "@")
+	if !validSSHUser(user) {
+		return "", "", fmt.Errorf("unsupported SSH user")
+	}
 	if !validHost(host) {
-		return "", fmt.Errorf("invalid SSH host")
+		return "", "", fmt.Errorf("invalid SSH host")
 	}
-	return strings.ToLower(host), nil
+	return user, strings.ToLower(host), nil
+}
+
+func validSSHUser(value string) bool {
+	if value == "" || !(value[0] >= 'a' && value[0] <= 'z' || value[0] == '_') {
+		return false
+	}
+	for index, character := range value[1:] {
+		if character >= 'a' && character <= 'z' || character >= '0' && character <= '9' || character == '_' || character == '-' {
+			continue
+		}
+		return character == '$' && index == len(value)-2
+	}
+	return true
 }
 
 func parseCommand(command string) (Operation, string, string, error) {
@@ -149,6 +164,10 @@ func validHost(value string) bool {
 }
 
 func validSlug(owner, name string) bool {
+	return validGitHubSlug(owner, name) || validGiteaComponent(owner) && validGiteaComponent(name)
+}
+
+func validGitHubSlug(owner, name string) bool {
 	if owner == "" || len(owner) > 39 || name == "" || len(name) > 100 || name == "." || name == ".." {
 		return false
 	}
@@ -160,7 +179,14 @@ func validSlug(owner, name string) bool {
 			return false
 		}
 	}
-	for _, character := range name {
+	return validGiteaComponent(name)
+}
+
+func validGiteaComponent(value string) bool {
+	if value == "" || len(value) > 100 || value == "." || value == ".." || !asciiAlphaNumeric(rune(value[0])) {
+		return false
+	}
+	for _, character := range value {
 		if !asciiAlphaNumeric(character) && character != '.' && character != '_' && character != '-' {
 			return false
 		}
