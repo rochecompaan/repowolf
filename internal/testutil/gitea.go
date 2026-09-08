@@ -149,17 +149,20 @@ func (fixture *Gitea) StartSSHAccess(t testing.TB) SSHAccess {
 	if err != nil {
 		t.Fatalf("start ssh-agent: %v", err)
 	}
-	pid := parseAgentPID(string(output))
+	pid, err := parseAgentPID(string(output))
+	if err != nil {
+		t.Fatalf("parse ssh-agent PID: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := exec.Command("kill", strconv.Itoa(pid)).Run(); err != nil {
+			t.Errorf("stop ssh-agent PID %d: %v", pid, err)
+		}
+	})
 	add := exec.Command("ssh-add", fixture.privateKey)
 	add.Env = append(os.Environ(), "SSH_AUTH_SOCK="+socket)
 	if output, err := add.CombinedOutput(); err != nil {
 		t.Fatalf("add Gitea SSH key: %v: %s", err, output)
 	}
-	t.Cleanup(func() {
-		if pid > 0 {
-			_ = exec.Command("kill", strconv.Itoa(pid)).Run()
-		}
-	})
 	return SSHAccess{Home: home, AgentSocket: socket}
 }
 
@@ -276,13 +279,16 @@ func waitSSH(t testing.TB, host string, port int, timeout time.Duration) {
 	}
 	t.Fatalf("Gitea SSH readiness timeout")
 }
-func parseAgentPID(output string) int {
+func parseAgentPID(output string) (int, error) {
 	for _, field := range strings.Fields(output) {
 		if strings.HasPrefix(field, "SSH_AGENT_PID=") {
 			value := strings.TrimSuffix(strings.TrimPrefix(field, "SSH_AGENT_PID="), ";")
-			pid, _ := strconv.Atoi(value)
-			return pid
+			pid, err := strconv.Atoi(value)
+			if err != nil || pid <= 0 {
+				return 0, fmt.Errorf("invalid SSH_AGENT_PID")
+			}
+			return pid, nil
 		}
 	}
-	return 0
+	return 0, fmt.Errorf("missing SSH_AGENT_PID")
 }

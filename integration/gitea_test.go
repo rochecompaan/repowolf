@@ -125,10 +125,7 @@ limits:
 	remote := "ssh://" + gitea.SSHUser + "@" + gitea.SSHHost + ":" + strconv.Itoa(gitea.SSHPort) + "/team_name/repo.one.git"
 	clone := runPinnedGit(gitPath, root, gitEnv, "clone", remote, checkout)
 	if clone.err != nil {
-		captureContents, _ := os.ReadFile(capture)
-		auditContents, _ := os.ReadFile(server.AuditPath)
-		serverContents, _ := os.ReadFile(server.StderrPath)
-		t.Fatalf("pinned Gitea clone: %v; stdout=%q stderr=%q capture=%q audit=%q broker=%q", clone.err, clone.stdout, clone.stderr, captureContents, auditContents, serverContents)
+		t.Fatalf("pinned Gitea clone: %v; stdoutBytes=%d stderrBytes=%d captureBytes=%d auditBytes=%d brokerStderrBytes=%d", clone.err, len(clone.stdout), len(clone.stderr), fileSize(capture), fileSize(server.AuditPath), fileSize(server.StderrPath))
 	}
 	if got := strings.TrimSpace(runPinnedGitOK(t, gitPath, checkout, gitEnv, "rev-parse", "HEAD").stdout); got != seedCommit {
 		t.Fatalf("cloned HEAD = %q, want %q", got, seedCommit)
@@ -154,15 +151,21 @@ limits:
 			}
 		}
 	}
-	if strings.Count(auditLog, `"provider":"gitea"`) != 4 || strings.Count(auditLog, `"repository":"pinned-gitea"`) != 4 {
-		t.Fatalf("missing Gitea upload-pack audit pairs: %s", auditLog)
+	providerEvents := strings.Count(auditLog, `"provider":"gitea"`)
+	repositoryEvents := strings.Count(auditLog, `"repository":"pinned-gitea"`)
+	if providerEvents != 4 || repositoryEvents != 4 {
+		t.Fatalf("missing Gitea upload-pack audit pairs: providerEvents=%d repositoryEvents=%d auditBytes=%d", providerEvents, repositoryEvents, len(auditLog))
 	}
-	if strings.Count(captureLog, "BEGIN\n") != 2 || !strings.Contains(captureLog, "REPOWOLF_TOKEN_GITEA=unset") || !strings.Contains(captureLog, "REPOWOLF_TOKEN_AGENT=unset") {
-		t.Fatalf("unexpected SSH environment capture: %s", captureLog)
+	invocations := strings.Count(captureLog, "BEGIN\n")
+	giteaTokenUnset := strings.Contains(captureLog, "REPOWOLF_TOKEN_GITEA=unset")
+	principalTokenUnset := strings.Contains(captureLog, "REPOWOLF_TOKEN_AGENT=unset")
+	if invocations != 2 || !giteaTokenUnset || !principalTokenUnset {
+		t.Fatalf("unexpected SSH environment capture: invocations=%d giteaTokenUnset=%t principalTokenUnset=%t captureBytes=%d", invocations, giteaTokenUnset, principalTokenUnset, len(captureLog))
 	}
 	trustedArgs := "-T\n-p\n" + strconv.Itoa(gitea.SSHPort) + "\n--\n" + gitea.SSHUser + "@" + gitea.SSHHost + "\ngit-upload-pack '" + gitea.Owner + "/" + gitea.Repository + ".git'"
-	if strings.Count(captureLog, trustedArgs) != 2 {
-		t.Fatalf("SSH wrapper did not preserve trusted argv: %s", captureLog)
+	trustedInvocations := strings.Count(captureLog, trustedArgs)
+	if trustedInvocations != 2 {
+		t.Fatalf("SSH wrapper did not preserve trusted argv: trustedInvocations=%d captureBytes=%d", trustedInvocations, len(captureLog))
 	}
 }
 
@@ -184,7 +187,15 @@ func runPinnedGitOK(t *testing.T, gitPath, directory string, environment []strin
 	t.Helper()
 	result := runPinnedGit(gitPath, directory, environment, args...)
 	if result.err != nil {
-		t.Fatalf("git %v: %v; stdout=%q stderr=%q", args, result.err, result.stdout, result.stderr)
+		t.Fatalf("git %v: %v; stdoutBytes=%d stderrBytes=%d", args, result.err, len(result.stdout), len(result.stderr))
 	}
 	return result
+}
+
+func fileSize(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return -1
+	}
+	return info.Size()
 }

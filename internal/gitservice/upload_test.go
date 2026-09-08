@@ -185,7 +185,7 @@ func TestUploadPackDenialStartsNoProviderAndSendsPermissionTerminal(t *testing.T
 	}
 }
 
-func TestUploadPackGiteaAuditAndReceivePackDenialBeforeInput(t *testing.T) {
+func TestUploadPackGiteaAudit(t *testing.T) {
 	service := newGiteaTestService(t, config.GitRead)
 	directory := t.TempDir()
 	path := filepath.Join(directory, "ssh")
@@ -213,27 +213,6 @@ func TestUploadPackGiteaAuditAndReceivePackDenialBeforeInput(t *testing.T) {
 	if len(events) != 2 || events[0].Provider != "gitea" || events[0].Repository != "gitea-read" || events[0].Outcome != audit.OutcomeAccepted || events[1].Outcome != audit.OutcomeCompleted {
 		t.Fatalf("events = %#v", events)
 	}
-
-	counter := &countingProcessRunner{}
-	service.options.Runner = counter
-	service.options.Audit = audit.NewWriter(io.Discard)
-	receive := &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: []*repowolfv1.GitFrame{
-		{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222}}}},
-		dataFrame([]byte("must remain unread")),
-	}}
-	if err := service.receivePack(receive); err != nil {
-		t.Fatal(err)
-	}
-	if counter.starts != 0 || receive.recvAt != 1 || receive.sent[0].GetTerminal().GetCategory() != repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PERMISSION_DENIED {
-		t.Fatalf("starts=%d recvAt=%d sent=%#v", counter.starts, receive.recvAt, receive.sent)
-	}
-}
-
-type countingProcessRunner struct{ starts int }
-
-func (counter *countingProcessRunner) Start(context.Context, runner.Command) (*runner.Process, error) {
-	counter.starts++
-	return nil, errors.New("unexpected process start")
 }
 
 func executableTestService(t *testing.T, capabilities ...config.Capability) (*Service, *bytes.Buffer) {

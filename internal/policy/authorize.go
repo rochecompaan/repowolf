@@ -23,37 +23,19 @@ type GitSelector struct {
 
 // Resolve returns the one granted repository matching selector and capability.
 func (snapshot *Snapshot) Resolve(principal string, selector Selector, capability config.Capability) (ResolvedRepository, error) {
-	grants, ok := snapshot.grants[principal]
-	if !ok {
-		return ResolvedRepository{}, ErrDenied
-	}
-
-	var match ResolvedRepository
-	matched := false
-	for repositoryID := range grants {
-		repository := snapshot.repositories[repositoryID]
-		provider := snapshot.providers[repository.Provider]
-		if !matches(selector, repository, provider) {
-			continue
-		}
-		if matched {
-			return ResolvedRepository{}, ErrDenied
-		}
-		match = ResolvedRepository{ID: repositoryID, Repository: repository, Provider: provider}
-		matched = true
-	}
-	if !matched {
-		return ResolvedRepository{}, ErrDenied
-	}
-	if _, ok := grants[match.ID][capability]; !ok {
-		return ResolvedRepository{}, ErrDenied
-	}
-	match.Repository = copyRepository(match.Repository)
-	return match, nil
+	return snapshot.resolve(principal, capability, func(repository config.Repository, provider config.Provider) bool {
+		return matches(selector, repository, provider)
+	})
 }
 
 // ResolveGit returns the one granted Git repository matching selector and capability.
 func (snapshot *Snapshot) ResolveGit(principal string, selector GitSelector, capability config.Capability) (ResolvedRepository, error) {
+	return snapshot.resolve(principal, capability, func(repository config.Repository, provider config.Provider) bool {
+		return matchesGit(selector, repository, provider)
+	})
+}
+
+func (snapshot *Snapshot) resolve(principal string, capability config.Capability, matchesRepository func(config.Repository, config.Provider) bool) (ResolvedRepository, error) {
 	grants, ok := snapshot.grants[principal]
 	if !ok {
 		return ResolvedRepository{}, ErrDenied
@@ -64,7 +46,7 @@ func (snapshot *Snapshot) ResolveGit(principal string, selector GitSelector, cap
 	for repositoryID := range grants {
 		repository := snapshot.repositories[repositoryID]
 		provider := snapshot.providers[repository.Provider]
-		if !matchesGit(selector, repository, provider) {
+		if !matchesRepository(repository, provider) {
 			continue
 		}
 		if matched {
