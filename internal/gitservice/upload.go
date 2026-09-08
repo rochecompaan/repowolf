@@ -194,8 +194,12 @@ func (service *Service) uploadPack(stream gitStream) error {
 			operationDone = nil
 		}
 	}
-	if inputPending && operationDone != nil {
-		cancel(runner.ErrCommandFailed)
+	if inputPending && !outputPending && operationDone != nil {
+		// A real upload-pack may finish after answering the client's final
+		// request while the bidirectional RPC is still waiting for its terminal.
+		// Closing provider input lets the process exit without misclassifying
+		// that normal ordering as a provider failure.
+		_ = process.Stdin.Close()
 	}
 	if outputPending {
 		output = <-outputDone
