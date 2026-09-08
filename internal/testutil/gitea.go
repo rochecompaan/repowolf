@@ -178,7 +178,9 @@ func (fixture *Gitea) api(t testing.TB, method, path string, body any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := http.NewRequest(method, fixture.httpURL+path, bytes.NewReader(encoded))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, method, fixture.httpURL+path, bytes.NewReader(encoded))
 	if err != nil {
 		t.Fatal(err)
 	}
