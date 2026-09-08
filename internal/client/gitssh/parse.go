@@ -168,7 +168,7 @@ func validSlug(owner, name string) bool {
 }
 
 func validGitHubSlug(owner, name string) bool {
-	if owner == "" || len(owner) > 39 || name == "" || len(name) > 100 || name == "." || name == ".." {
+	if owner == "" || len(owner) > 39 || !validGitHubName(name) {
 		return false
 	}
 	if owner[0] == '-' || owner[len(owner)-1] == '-' || strings.Contains(owner, "--") {
@@ -179,7 +179,19 @@ func validGitHubSlug(owner, name string) bool {
 			return false
 		}
 	}
-	return validGiteaComponent(name)
+	return true
+}
+
+func validGitHubName(name string) bool {
+	if name == "" || len(name) > 100 || name == "." || name == ".." {
+		return false
+	}
+	for _, character := range name {
+		if !asciiAlphaNumeric(character) && character != '.' && character != '_' && character != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func validGiteaComponent(value string) bool {

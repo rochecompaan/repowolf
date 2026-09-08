@@ -51,6 +51,24 @@ func TestParseAcceptsExactGitGeneratedForms(t *testing.T) {
 			operation: UploadPack,
 			selector:  &repowolfv1.RepositorySelector{SshUser: "forge_user$", Host: "gitea.example", SshPort: 2222, Owner: "Team_Name", Name: "repo.with_dot"},
 		},
+		{
+			name:      "GitHub repository starting with dot",
+			args:      []string{"git@github.example", "git-upload-pack 'owner/.repo.git'"},
+			operation: UploadPack,
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", Owner: "owner", Name: ".repo"},
+		},
+		{
+			name:      "GitHub repository starting with underscore",
+			args:      []string{"git@github.example", "git-upload-pack 'owner/_repo.git'"},
+			operation: UploadPack,
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", Owner: "owner", Name: "_repo"},
+		},
+		{
+			name:      "GitHub repository starting with hyphen",
+			args:      []string{"git@github.example", "git-upload-pack 'owner/-repo.git'"},
+			operation: UploadPack,
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", Owner: "owner", Name: "-repo"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

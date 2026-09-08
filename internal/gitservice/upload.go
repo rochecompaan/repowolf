@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -21,11 +20,8 @@ import (
 const stderrLimitBytes = 1 << 20
 
 var (
-	trustedOwner          = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})?$`)
-	trustedName           = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
-	trustedGiteaComponent = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
-	errTerminalDelivery   = errors.New("git terminal delivery failed")
-	errTerminalAudit      = errors.New("git terminal audit failed")
+	errTerminalDelivery = errors.New("git terminal delivery failed")
+	errTerminalAudit    = errors.New("git terminal audit failed")
 )
 
 // ProcessRunner starts a pinned provider process.
@@ -90,7 +86,7 @@ func (service *Service) command(ctx context.Context, open *repowolfv1.GitOpen, c
 	if !kindAllowed {
 		return runner.Command{}, policy.ResolvedRepository{}, policy.ErrDenied
 	}
-	if !validTrustedRepository(repository.Provider.Kind, repository.Repository.Owner, repository.Repository.Name) {
+	if !config.ValidRepositoryIdentity(repository.Provider.Kind, repository.Repository.Owner, repository.Repository.Name) {
 		return runner.Command{}, policy.ResolvedRepository{}, rpcstatus.ErrInvalidArgument
 	}
 	if remoteService != "git-upload-pack" && remoteService != "git-receive-pack" {
@@ -105,17 +101,6 @@ func (service *Service) command(ctx context.Context, open *repowolfv1.GitOpen, c
 		StdinLimit: limit, StdoutLimit: limit, StderrLimit: stderrLimitBytes,
 	}
 	return command, repository, nil
-}
-
-func validTrustedRepository(kind config.ProviderKind, owner, name string) bool {
-	switch kind {
-	case config.ProviderGitHub:
-		return trustedOwner.MatchString(owner) && trustedName.MatchString(name)
-	case config.ProviderGitea:
-		return trustedGiteaComponent.MatchString(owner) && trustedGiteaComponent.MatchString(name)
-	default:
-		return false
-	}
 }
 
 // UploadPack relays a bounded, authorized upload-pack session.
