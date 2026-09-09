@@ -107,11 +107,12 @@ func (service *Service) receivePack(stream gitStream) error {
 }
 
 func (service *Service) receiveCommand(ctx context.Context, open *repowolfv1.GitOpen) (policy.ResolvedRepository, runner.Command, error) {
-	_, readRepository, err := service.command(ctx, open, config.GitRead, "git-receive-pack", config.ProviderGitHub)
+	allowedKinds := []config.ProviderKind{config.ProviderGitHub, config.ProviderGitea}
+	_, readRepository, err := service.command(ctx, open, config.GitRead, "git-receive-pack", allowedKinds...)
 	if err != nil {
 		return readRepository, runner.Command{}, err
 	}
-	command, writeRepository, err := service.command(ctx, open, config.GitWrite, "git-receive-pack", config.ProviderGitHub)
+	command, writeRepository, err := service.command(ctx, open, config.GitWrite, "git-receive-pack", allowedKinds...)
 	if err != nil || readRepository.ID != writeRepository.ID {
 		if err == nil {
 			err = policy.ErrDenied

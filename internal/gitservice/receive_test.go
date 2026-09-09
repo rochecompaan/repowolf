@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/audit"
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/config"
+	"github.com/rochecompaan/repowolf/internal/policy"
 	"github.com/rochecompaan/repowolf/internal/runner"
 )
 
@@ -90,22 +92,134 @@ func TestReceivePackMalformedPrefixForwardsZeroClientBytes(t *testing.T) {
 	assertTerminalCategory(t, stream, repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST)
 }
 
-func TestReceivePackGiteaDenialBeforeInput(t *testing.T) {
-	service := newGiteaTestService(t, config.GitRead)
-	counter := &countingProcessRunner{}
-	service.options.Runner = counter
-	service.options.Audit = audit.NewWriter(io.Discard)
-	stream := &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: []*repowolfv1.GitFrame{
-		{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222}}}},
-		dataFrame([]byte("must remain unread")),
+func TestReceiveCommandUsesTrustedGiteaConfiguration(t *testing.T) {
+	service := newGiteaTestService(t, config.GitRead, config.GitWrite)
+	ctx := auth.WithPrincipal(context.Background(), "agent")
+	open := &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{
+		SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222,
 	}}
 
-	if err := service.receivePack(stream); err != nil {
+	repository, command, err := service.receiveCommand(ctx, open)
+	if err != nil {
+		t.Fatalf("receiveCommand: %v", err)
+	}
+	want := []string{"-T", "-p", "2222", "--", "forge_user@Gitea.Example", "git-receive-pack 'Team_Name/Repo.One.git'"}
+	if !reflect.DeepEqual(command.Args, want) || repository.ID != "gitea-read" {
+		t.Fatalf("repository=%#v argv=%#v, want repository gitea-read argv %#v", repository, command.Args, want)
+	}
+}
+
+func TestReceivePackGiteaAppliesSharedPushPolicy(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		push      config.PushPolicy
+		ref       string
+		want      repowolfv1.GitTerminalCategory
+		wantInput bool
+	}{
+		{name: "allowed", push: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 4}, ref: "refs/heads/feature", want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED, wantInput: true},
+		{name: "denied ref", push: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 4}, ref: "refs/heads/main", want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service, capture, auditOutput := receiveExecutableGiteaService(t, test.push)
+			client := receivePrefix(test.ref)
+			stream := giteaReceiveStream(client)
+			if err := service.receivePack(stream); err != nil {
+				t.Fatal(err)
+			}
+			input, err := os.ReadFile(capture)
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			if (len(input) > 0) != test.wantInput {
+				t.Fatalf("provider input bytes = %d, wantInput=%t", len(input), test.wantInput)
+			}
+			assertTerminalCategory(t, stream, test.want)
+			events := decodeAuditEvents(t, auditOutput)
+			if len(events) != 2 || events[0].Provider != "gitea" || events[1].Repository != "gitea-read" {
+				t.Fatalf("audit events = %#v", events)
+			}
+		})
+	}
+}
+
+func TestReceivePackGiteaMissingCapabilityDenialBeforeInput(t *testing.T) {
+	for _, capabilities := range [][]config.Capability{{config.GitRead}, {config.GitWrite}} {
+		service := newGiteaTestService(t, capabilities...)
+		counter := &countingProcessRunner{}
+		service.options.Runner = counter
+		service.options.Audit = audit.NewWriter(io.Discard)
+		stream := &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: []*repowolfv1.GitFrame{
+			{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222}}}},
+			dataFrame([]byte("must remain unread")),
+		}}
+
+		if err := service.receivePack(stream); err != nil {
+			t.Fatal(err)
+		}
+		if counter.starts != 0 || stream.recvAt != 1 || stream.sent[0].GetTerminal().GetCategory() != repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PERMISSION_DENIED {
+			t.Fatalf("capabilities=%v starts=%d recvAt=%d sent=%#v", capabilities, counter.starts, stream.recvAt, stream.sent)
+		}
+	}
+}
+
+func receiveExecutableGiteaService(t *testing.T, push config.PushPolicy) (*Service, string, *bytes.Buffer) {
+	t.Helper()
+	service := newGiteaTestService(t, config.GitRead, config.GitWrite)
+	snapshot, err := policy.New(config.Config{
+		Providers: map[string]config.Provider{"gitea": {
+			Kind: config.ProviderGitea, GitHost: "Gitea.Example", SSHUser: "forge_user", SSHPort: 2222,
+		}},
+		Repositories: map[string]config.Repository{"gitea-read": {
+			Provider: "gitea", Owner: "Team_Name", Name: "Repo.One", Git: push,
+		}},
+		Principals: map[string]config.Principal{"agent": {
+			Grants: []config.Grant{{Repository: "gitea-read", Capabilities: []config.Capability{config.GitRead, config.GitWrite}}},
+		}},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if counter.starts != 0 || stream.recvAt != 1 || stream.sent[0].GetTerminal().GetCategory() != repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PERMISSION_DENIED {
-		t.Fatalf("starts=%d recvAt=%d sent=%#v", counter.starts, stream.recvAt, stream.sent)
+	service.options.Policy = snapshot
+	directory := t.TempDir()
+	path := filepath.Join(directory, "ssh")
+	capture := filepath.Join(directory, "provider-input")
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
 	}
+	cat, err := exec.LookPath("cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := "#!" + shell + "\n" +
+		"[ \"$5\" = forge_user@Gitea.Example ] && [ \"$6\" = \"git-receive-pack 'Team_Name/Repo.One.git'\" ] || exit 92\n" +
+		"printf '" + shellOctal(advertisement()) + "'\n" +
+		"exec \"$CAT\" >\"$CAPTURE\"\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	service.options.SSHPath = path
+	service.options.Environment = []string{"CAT=" + cat, "CAPTURE=" + capture}
+	service.options.Runner = &runner.Runner{}
+	auditOutput := &bytes.Buffer{}
+	service.options.Audit = audit.NewWriter(auditOutput)
+	return service, capture, auditOutput
+}
+
+func giteaReceiveStream(data []byte) *memoryStream {
+	frames := []*repowolfv1.GitFrame{{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{
+		SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222,
+	}}}}}
+	for len(data) > 0 {
+		size := len(data)
+		if size > 17 {
+			size = 17
+		}
+		frames = append(frames, dataFrame(append([]byte(nil), data[:size]...)))
+		data = data[size:]
+	}
+	return &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: frames}
 }
 
 type countingProcessRunner struct{ starts int }
