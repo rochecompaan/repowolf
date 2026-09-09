@@ -143,23 +143,63 @@ func TestReceivePackGiteaAppliesSharedPushPolicy(t *testing.T) {
 	}
 }
 
-func TestReceivePackGiteaMissingCapabilityDenialBeforeInput(t *testing.T) {
-	for _, capabilities := range [][]config.Capability{{config.GitRead}, {config.GitWrite}} {
-		service := newGiteaTestService(t, capabilities...)
-		counter := &countingProcessRunner{}
-		service.options.Runner = counter
-		service.options.Audit = audit.NewWriter(io.Discard)
-		stream := &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: []*repowolfv1.GitFrame{
-			{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222}}}},
-			dataFrame([]byte("must remain unread")),
-		}}
+func TestReceivePackGiteaAuthorizationDenialsBeforeInput(t *testing.T) {
+	valid := &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222}
+	mismatch := config.Config{
+		Providers: map[string]config.Provider{"gitea": {Kind: config.ProviderGitea, GitHost: "Gitea.Example", SSHUser: "forge_user", SSHPort: 2222}},
+		Repositories: map[string]config.Repository{
+			"gitea-read":  {Provider: "gitea", Owner: "Team_Name", Name: "Repo.One", Git: config.PushPolicy{MaxRefUpdates: 4}},
+			"gitea-write": {Provider: "gitea", Owner: "Team_Name", Name: "Repo.One", Git: config.PushPolicy{MaxRefUpdates: 4}},
+		},
+		Principals: map[string]config.Principal{"agent": {Grants: []config.Grant{
+			{Repository: "gitea-read", Capabilities: []config.Capability{config.GitRead}},
+			{Repository: "gitea-write", Capabilities: []config.Capability{config.GitWrite}},
+		}}},
+	}
+	unsupported := config.Config{
+		Providers:    map[string]config.Provider{"other": {Kind: config.ProviderKind("gitlab"), GitHost: "gitea.example", SSHUser: "forge_user", SSHPort: 2222}},
+		Repositories: map[string]config.Repository{"other": {Provider: "other", Owner: "team_name", Name: "repo.one", Git: config.PushPolicy{MaxRefUpdates: 4}}},
+		Principals:   map[string]config.Principal{"agent": {Grants: []config.Grant{{Repository: "other", Capabilities: []config.Capability{config.GitRead, config.GitWrite}}}}},
+	}
+	for _, test := range []struct {
+		name         string
+		capabilities []config.Capability
+		selector     *repowolfv1.RepositorySelector
+		policy       *config.Config
+	}{
+		{name: "missing read", capabilities: []config.Capability{config.GitWrite}, selector: valid},
+		{name: "missing write", capabilities: []config.Capability{config.GitRead}, selector: valid},
+		{name: "wrong SSH user", capabilities: []config.Capability{config.GitRead, config.GitWrite}, selector: &repowolfv1.RepositorySelector{SshUser: "git", Host: valid.Host, Owner: valid.Owner, Name: valid.Name, SshPort: valid.SshPort}},
+		{name: "wrong host", capabilities: []config.Capability{config.GitRead, config.GitWrite}, selector: &repowolfv1.RepositorySelector{SshUser: valid.SshUser, Host: "evil.example", Owner: valid.Owner, Name: valid.Name, SshPort: valid.SshPort}},
+		{name: "wrong port", capabilities: []config.Capability{config.GitRead, config.GitWrite}, selector: &repowolfv1.RepositorySelector{SshUser: valid.SshUser, Host: valid.Host, Owner: valid.Owner, Name: valid.Name, SshPort: 22}},
+		{name: "ungranted repository", capabilities: []config.Capability{config.GitRead, config.GitWrite}, selector: &repowolfv1.RepositorySelector{SshUser: valid.SshUser, Host: valid.Host, Owner: valid.Owner, Name: "missing", SshPort: valid.SshPort}},
+		{name: "read write repository mismatch", selector: valid, policy: &mismatch},
+		{name: "unsupported provider kind", selector: valid, policy: &unsupported},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := newGiteaTestService(t, test.capabilities...)
+			if test.policy != nil {
+				snapshot, err := policy.New(*test.policy)
+				if err != nil {
+					t.Fatal(err)
+				}
+				service.options.Policy = snapshot
+			}
+			counter := &countingProcessRunner{}
+			service.options.Runner = counter
+			service.options.Audit = audit.NewWriter(io.Discard)
+			stream := &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: []*repowolfv1.GitFrame{
+				{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: test.selector}}},
+				dataFrame([]byte("must remain unread")),
+			}}
 
-		if err := service.receivePack(stream); err != nil {
-			t.Fatal(err)
-		}
-		if counter.starts != 0 || stream.recvAt != 1 || stream.sent[0].GetTerminal().GetCategory() != repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PERMISSION_DENIED {
-			t.Fatalf("capabilities=%v starts=%d recvAt=%d sent=%#v", capabilities, counter.starts, stream.recvAt, stream.sent)
-		}
+			if err := service.receivePack(stream); err != nil {
+				t.Fatal(err)
+			}
+			if counter.starts != 0 || stream.recvAt != 1 || stream.sent[0].GetTerminal().GetCategory() != repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PERMISSION_DENIED {
+				t.Fatalf("starts=%d recvAt=%d sent=%#v", counter.starts, stream.recvAt, stream.sent)
+			}
+		})
 	}
 }
 

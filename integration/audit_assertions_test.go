@@ -186,6 +186,11 @@ func giteaUploadAuditExpectations() [][]auditExpectation {
 	return giteaGitAuditExpectations("refs/heads/unused", "refs/heads/unused")[:2]
 }
 
+func giteaControlledPushAuditExpectations(allowedRef, deniedRef string) [][]auditExpectation {
+	all := giteaGitAuditExpectations(allowedRef, deniedRef)
+	return append(all[:2:2], all[3:]...)
+}
+
 func giteaGitAuditExpectations(allowedRef, deniedRef string) [][]auditExpectation {
 	acceptedFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}
 	providerFields := append(append([]string(nil), acceptedFields...), "reason")

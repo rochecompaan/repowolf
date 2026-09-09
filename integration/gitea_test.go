@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
@@ -288,6 +289,30 @@ limits:
 	}
 	if strings.Join(lifecycle, "\n") != strings.Join(wantLifecycle, "\n") {
 		t.Fatalf("Gitea audit lifecycle = %v, want %v", lifecycle, wantLifecycle)
+	}
+	var receiveTerminals []auditRecord
+	for _, record := range records {
+		if record.event.Provider == "gitea" && record.event.Operation == "git.receive-pack" && string(record.event.Outcome) != "accepted" {
+			receiveTerminals = append(receiveTerminals, record)
+		}
+	}
+	if len(receiveTerminals) != 3 {
+		t.Fatalf("receive-pack terminal audit count = %d, want 3", len(receiveTerminals))
+	}
+	allowedTerminal, deniedTerminal, cancelledTerminal := receiveTerminals[0], receiveTerminals[1], receiveTerminals[2]
+	if string(allowedTerminal.event.Outcome) != "completed" || allowedTerminal.event.Reason != "GIT_TERMINAL_CATEGORY_COMPLETED" ||
+		!reflect.DeepEqual(allowedTerminal.event.Refs, []string{"refs/heads/feature/allowed"}) || allowedTerminal.event.UpdateCount != 1 ||
+		allowedTerminal.event.InputBytes <= 0 || allowedTerminal.event.OutputBytes <= 0 || !allowedTerminal.fields["input_bytes"] || !allowedTerminal.fields["output_bytes"] {
+		t.Fatalf("unsafe or incomplete allowed receive-pack terminal audit: %#v fields=%v", allowedTerminal.event, allowedTerminal.fields)
+	}
+	if string(deniedTerminal.event.Outcome) != "denied" || deniedTerminal.event.Reason != "GIT_TERMINAL_CATEGORY_INVALID_REQUEST" ||
+		!reflect.DeepEqual(deniedTerminal.event.Refs, []string{"refs/heads/denied"}) || deniedTerminal.event.UpdateCount != 1 ||
+		deniedTerminal.event.InputBytes != 0 || deniedTerminal.fields["input_bytes"] || deniedTerminal.event.OutputBytes <= 0 || !deniedTerminal.fields["output_bytes"] {
+		t.Fatalf("unsafe or incomplete denied receive-pack terminal audit: %#v fields=%v", deniedTerminal.event, deniedTerminal.fields)
+	}
+	if string(cancelledTerminal.event.Outcome) != "cancelled" || cancelledTerminal.event.Reason != "GIT_TERMINAL_CATEGORY_UNAVAILABLE" ||
+		len(cancelledTerminal.event.Refs) != 0 || cancelledTerminal.event.UpdateCount != 0 || cancelledTerminal.event.InputBytes != 0 || cancelledTerminal.fields["input_bytes"] {
+		t.Fatalf("unsafe or incomplete cancelled receive-pack terminal audit: %#v fields=%v", cancelledTerminal.event, cancelledTerminal.fields)
 	}
 	invocations := strings.Count(captureLog, "BEGIN\n")
 	giteaTokenUnset := strings.Contains(captureLog, "REPOWOLF_TOKEN_GITEA=unset")
