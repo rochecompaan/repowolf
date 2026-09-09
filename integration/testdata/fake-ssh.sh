@@ -51,6 +51,12 @@ case "$remote" in
     : > "$FAKE_SSH_GITEA_UPLOAD_INPUT"
     "$FAKE_TEE" "$FAKE_SSH_GITEA_UPLOAD_INPUT" | "$FAKE_GIT_UPLOAD_PACK" "$FAKE_SSH_GITEA_REPOSITORY"
     ;;
+  "git-receive-pack 'Team_Name/Repo.One.git'")
+    : "${FAKE_GIT_RECEIVE_PACK:?}"
+    : "${FAKE_SSH_GITEA_RECEIVE_INPUT:?}"
+    : > "$FAKE_SSH_GITEA_RECEIVE_INPUT"
+    "$FAKE_TEE" "$FAKE_SSH_GITEA_RECEIVE_INPUT" | "$FAKE_GIT_RECEIVE_PACK" "$FAKE_SSH_GITEA_REPOSITORY"
+    ;;
   *)
     printf 'unexpected fake ssh command\n' >&2
     exit 98

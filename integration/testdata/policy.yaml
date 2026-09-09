@@ -44,6 +44,8 @@ repositories:
     owner: Team_Name
     name: Repo.One
     git:
+      denyRefs:
+        - refs/heads/denied
       denyDeletes: true
       maxRefUpdates: 16
 principals:
@@ -65,6 +67,7 @@ principals:
       - repository: gitea-read
         capabilities:
           - git:read
+          - git:write
 limits:
   maxConcurrentRequests: 16
   maxConcurrentRequestsPerPrincipal: 8
