@@ -122,7 +122,7 @@ func TestReceivePackGiteaAppliesSharedPushPolicy(t *testing.T) {
 		{name: "allowed", push: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, DenyDeletes: true, MaxRefUpdates: 4}, prefix: receivePrefix("refs/heads/feature"), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED, wantOutcome: audit.OutcomeCompleted, wantRefs: []string{"refs/heads/feature"}},
 		{name: "denied ref", push: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 4}, prefix: receivePrefix("refs/heads/main"), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST, wantOutcome: audit.OutcomeDenied, wantRefs: []string{"refs/heads/main"}},
 		{name: "denied delete", push: config.PushPolicy{DenyDeletes: true, MaxRefUpdates: 4}, prefix: receiveDeletePrefix("refs/heads/feature"), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST, wantOutcome: audit.OutcomeDenied, wantRefs: []string{"refs/heads/feature"}},
-		{name: "too many updates", push: config.PushPolicy{MaxRefUpdates: 1}, prefix: receiveTwoUpdatePrefix(), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST, wantOutcome: audit.OutcomeFailed},
+		{name: "too many updates", push: config.PushPolicy{MaxRefUpdates: 1}, prefix: receiveTwoUpdatePrefix(), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST, wantOutcome: audit.OutcomeDenied, wantRefs: []string{"refs/heads/feature", "refs/heads/other"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			service, capture, auditOutput := receiveExecutableGiteaService(t, test.push)

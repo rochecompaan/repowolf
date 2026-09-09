@@ -64,8 +64,12 @@ func (service *Service) receivePack(stream gitStream) error {
 		maxBytes: service.options.Limits.MaxGitBytesPerDirection, activity: activity,
 	}
 	parsed, err := gitproto.ParseReceivePack(client, gitproto.ReceiveOptions{
-		MaxBytes: service.options.Limits.MaxPushPrefixBytes, MaxCommands: repository.Repository.Git.MaxRefUpdates,
-		Policy: repository.Repository.Git, AdvertisedCaps: advertisement.Capabilities,
+		MaxBytes: service.options.Limits.MaxPushPrefixBytes,
+		// The byte bound makes this command bound unreachable while keeping the parser independently bounded.
+		// MaxRefUpdates remains a push-policy decision owned by policy.ValidatePush.
+		MaxCommands:    service.options.Limits.MaxPushPrefixBytes,
+		Policy:         repository.Repository.Git,
+		AdvertisedCaps: advertisement.Capabilities,
 	})
 	if err != nil {
 		updates := gitproto.RejectedUpdates(err)
