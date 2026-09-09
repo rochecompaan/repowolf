@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/audit"
@@ -111,19 +112,21 @@ func TestReceiveCommandUsesTrustedGiteaConfiguration(t *testing.T) {
 
 func TestReceivePackGiteaAppliesSharedPushPolicy(t *testing.T) {
 	for _, test := range []struct {
-		name      string
-		push      config.PushPolicy
-		ref       string
-		want      repowolfv1.GitTerminalCategory
-		wantInput bool
+		name        string
+		push        config.PushPolicy
+		prefix      []byte
+		want        repowolfv1.GitTerminalCategory
+		wantOutcome audit.Outcome
+		wantRefs    []string
 	}{
-		{name: "allowed", push: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 4}, ref: "refs/heads/feature", want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED, wantInput: true},
-		{name: "denied ref", push: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 4}, ref: "refs/heads/main", want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST},
+		{name: "allowed", push: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, DenyDeletes: true, MaxRefUpdates: 4}, prefix: receivePrefix("refs/heads/feature"), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED, wantOutcome: audit.OutcomeCompleted, wantRefs: []string{"refs/heads/feature"}},
+		{name: "denied ref", push: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 4}, prefix: receivePrefix("refs/heads/main"), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST, wantOutcome: audit.OutcomeDenied, wantRefs: []string{"refs/heads/main"}},
+		{name: "denied delete", push: config.PushPolicy{DenyDeletes: true, MaxRefUpdates: 4}, prefix: receiveDeletePrefix("refs/heads/feature"), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST, wantOutcome: audit.OutcomeDenied, wantRefs: []string{"refs/heads/feature"}},
+		{name: "too many updates", push: config.PushPolicy{MaxRefUpdates: 1}, prefix: receiveTwoUpdatePrefix(), want: repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST, wantOutcome: audit.OutcomeFailed},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			service, capture, auditOutput := receiveExecutableGiteaService(t, test.push)
-			client := receivePrefix(test.ref)
-			stream := giteaReceiveStream(client)
+			stream := giteaReceiveStream(test.prefix)
 			if err := service.receivePack(stream); err != nil {
 				t.Fatal(err)
 			}
@@ -131,15 +134,65 @@ func TestReceivePackGiteaAppliesSharedPushPolicy(t *testing.T) {
 			if err != nil && !os.IsNotExist(err) {
 				t.Fatal(err)
 			}
-			if (len(input) > 0) != test.wantInput {
-				t.Fatalf("provider input bytes = %d, wantInput=%t", len(input), test.wantInput)
+			wantInput := test.want == repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_COMPLETED
+			if wantInput && !bytes.Equal(input, test.prefix) {
+				t.Fatalf("provider input = %q, want exact %q", input, test.prefix)
+			}
+			if !wantInput && len(input) != 0 {
+				t.Fatalf("provider received %d denied bytes", len(input))
 			}
 			assertTerminalCategory(t, stream, test.want)
 			events := decodeAuditEvents(t, auditOutput)
-			if len(events) != 2 || events[0].Provider != "gitea" || events[1].Repository != "gitea-read" {
+			if len(events) != 2 || events[0].Outcome != audit.OutcomeAccepted || events[0].Provider != "gitea" {
 				t.Fatalf("audit events = %#v", events)
 			}
+			terminal := events[1]
+			if terminal.Outcome != test.wantOutcome || terminal.Repository != "gitea-read" || terminal.Provider != "gitea" || terminal.InputBytes != int64(len(input)) || terminal.UpdateCount != len(test.wantRefs) || !reflect.DeepEqual(terminal.Refs, test.wantRefs) {
+				t.Fatalf("terminal audit = %#v", terminal)
+			}
 		})
+	}
+}
+
+func TestReceivePackGiteaCancellationReapsProviderAndWritesCancelledAudit(t *testing.T) {
+	const sensitive = "sensitive-gitea-cancellation-marker"
+	service, auditOutput, cwdFile, pidFile, readyFile := cancellableGiteaReceiveService(t, sensitive)
+	ctx, cancel := context.WithCancel(auth.WithPrincipal(context.Background(), "agent"))
+	stream := giteaReceiveStream(receivePrefix("refs/heads/feature"))
+	stream.ctx = ctx
+	result := make(chan error, 1)
+	go func() { result <- service.receivePack(stream) }()
+
+	deadline := time.Now().Add(time.Second)
+	for fileSizeForTest(readyFile) < 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if fileSizeForTest(readyFile) < 0 {
+		cancel()
+		t.Fatal("Gitea receive-pack provider did not start")
+	}
+	started := time.Now()
+	cancel()
+	var receiveErr error
+	select {
+	case receiveErr = <-result:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("cancelled Gitea receive-pack did not return promptly")
+	}
+	if elapsed := time.Since(started); elapsed >= 500*time.Millisecond {
+		t.Fatalf("cancelled Gitea receive-pack took %v", elapsed)
+	}
+	assertProcessCleanup(t, cwdFile, pidFile)
+	events := decodeAuditEvents(t, auditOutput)
+	if len(events) != 2 || events[0].Outcome != audit.OutcomeAccepted {
+		t.Fatalf("audit events = %#v", events)
+	}
+	terminal := events[1]
+	if terminal.Outcome != audit.OutcomeCancelled || terminal.Provider != "gitea" || terminal.Repository != "gitea-read" || terminal.Operation != "git.receive-pack" {
+		t.Fatalf("terminal audit = %#v", terminal)
+	}
+	if strings.Contains(fmt.Sprint(receiveErr), sensitive) || bytes.Contains(auditOutput.Bytes(), []byte(sensitive)) {
+		t.Fatal("sensitive cancellation marker escaped into error or audit")
 	}
 }
 
@@ -201,6 +254,47 @@ func TestReceivePackGiteaAuthorizationDenialsBeforeInput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func cancellableGiteaReceiveService(t *testing.T, sensitive string) (*Service, *bytes.Buffer, string, string, string) {
+	t.Helper()
+	service, _, auditOutput := receiveExecutableGiteaService(t, config.PushPolicy{MaxRefUpdates: 4})
+	service.options.Limits.IdleStreamTimeout = time.Second
+	directory := t.TempDir()
+	path := filepath.Join(directory, "ssh")
+	cwdFile := filepath.Join(directory, "cwd")
+	pidFile := filepath.Join(directory, "pid")
+	readyFile := filepath.Join(directory, "ready")
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := exec.LookPath("cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := "#!" + shell + "\n" +
+		"pwd >\"$CWDFILE\"\nprintf '%s\\n' \"$$\" >\"$PIDFILE\"\n" +
+		"printf '" + shellOctal(advertisement()) + "'\n" +
+		"\"$CAT\" >/dev/null\n: >\"$READYFILE\"\nexec \"$SLEEP\" 30\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	service.options.SSHPath = path
+	service.options.Environment = []string{"CAT=" + cat, "SLEEP=" + sleep, "CWDFILE=" + cwdFile, "PIDFILE=" + pidFile, "READYFILE=" + readyFile, "SENSITIVE=" + sensitive}
+	return service, auditOutput, cwdFile, pidFile, readyFile
+}
+
+func fileSizeForTest(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return -1
+	}
+	return info.Size()
 }
 
 func receiveExecutableGiteaService(t *testing.T, push config.PushPolicy) (*Service, string, *bytes.Buffer) {
@@ -321,6 +415,16 @@ func advertisement() []byte {
 
 func receivePrefix(ref string) []byte {
 	return append(pkt(testOID1+" "+testOID2+" "+ref+"\x00report-status"), []byte("0000")...)
+}
+
+func receiveDeletePrefix(ref string) []byte {
+	return append(pkt(testOID1+" "+strings.Repeat("0", 40)+" "+ref+"\x00report-status"), []byte("0000")...)
+}
+
+func receiveTwoUpdatePrefix() []byte {
+	prefix := pkt(testOID1 + " " + testOID2 + " refs/heads/feature\x00report-status")
+	prefix = append(prefix, pkt(testOID1+" "+testOID2+" refs/heads/other")...)
+	return append(prefix, []byte("0000")...)
 }
 
 func pkt(payload string) []byte { return []byte(fmt.Sprintf("%04x%s", len(payload)+4, payload)) }
