@@ -27,6 +27,7 @@ type RepositorySelector struct {
 	Owner         string                 `protobuf:"bytes,2,opt,name=owner,proto3" json:"owner,omitempty"`
 	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	SshPort       uint32                 `protobuf:"varint,4,opt,name=ssh_port,json=sshPort,proto3" json:"ssh_port,omitempty"`
+	SshUser       string                 `protobuf:"bytes,5,opt,name=ssh_user,json=sshUser,proto3" json:"ssh_user,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -87,6 +88,13 @@ func (x *RepositorySelector) GetSshPort() uint32 {
 		return x.SshPort
 	}
 	return 0
+}
+
+func (x *RepositorySelector) GetSshUser() string {
+	if x != nil {
+		return x.SshUser
+	}
+	return ""
 }
 
 type RequestContext struct {
@@ -205,12 +213,13 @@ var File_repowolf_v1_common_proto protoreflect.FileDescriptor
 
 const file_repowolf_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x18repowolf/v1/common.proto\x12\vrepowolf.v1\"m\n" +
+	"\x18repowolf/v1/common.proto\x12\vrepowolf.v1\"\x88\x01\n" +
 	"\x12RepositorySelector\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x14\n" +
 	"\x05owner\x18\x02 \x01(\tR\x05owner\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x19\n" +
-	"\bssh_port\x18\x04 \x01(\rR\asshPort\"Q\n" +
+	"\bssh_port\x18\x04 \x01(\rR\asshPort\x12\x19\n" +
+	"\bssh_user\x18\x05 \x01(\tR\asshUser\"Q\n" +
 	"\x0eRequestContext\x12?\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x1f.repowolf.v1.RepositorySelectorR\n" +

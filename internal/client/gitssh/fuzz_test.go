@@ -64,7 +64,10 @@ func FuzzParseSSHArgs(f *testing.F) {
 		{"-p", "0", "git@github.example", "git-upload-pack 'owner/repo.git'"},
 		{"-p", "65536", "git@github.example", "git-upload-pack 'owner/repo.git'"},
 		{"-o", "ProxyCommand=sh", "git@github.example", "git-upload-pack 'owner/repo.git'"},
-		{"root@github.example", "git-upload-pack 'owner/repo.git'"},
+		{"forge_user$@gitea.example", "git-upload-pack 'Team_Name/repo.with_dot.git'"},
+		{"Git@github.example", "git-upload-pack 'owner/repo.git'"},
+		{"git$$@github.example", "git-upload-pack 'owner/repo.git'"},
+		{"git@github.example", "git-upload-pack './repo.git'"},
 		{"git@github.example", "sh"},
 	} {
 		f.Add(strings.Join(args, "\x00"))

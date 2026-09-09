@@ -182,6 +182,18 @@ func gitAuditExpectations(allowedRef, deniedRef string) [][]auditExpectation {
 	}
 }
 
+func giteaUploadAuditExpectations() [][]auditExpectation {
+	acceptedFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}
+	providerFields := append(append([]string(nil), acceptedFields...), "reason", "input_bytes", "output_bytes")
+	streamFields := []string{"timestamp", "request_id", "principal", "operation", "outcome", "reason"}
+	invocation := []auditExpectation{
+		{operation: "git.upload-pack", outcome: "accepted", principal: "agent", provider: "gitea", repository: "gitea-read", required: acceptedFields, optional: []string{"duration_ms"}},
+		{operation: "git.upload-pack", outcome: "completed", principal: "agent", provider: "gitea", repository: "gitea-read", reason: "GIT_TERMINAL_CATEGORY_COMPLETED", required: providerFields, optional: []string{"duration_ms"}, inputPositive: true, outputPositive: true},
+		{operation: "/repowolf.v1.GitService/UploadPack", outcome: "completed", principal: "agent", reason: "OK", required: streamFields, optional: []string{"duration_ms"}},
+	}
+	return [][]auditExpectation{invocation, invocation}
+}
+
 func auditLeakMarkers() []string {
 	return []string{agentToken, providerCredential, giteaCredential, ambientGHCredential, ambientGitHubCredential, providerStderr, environmentMarker, issueBodyMarker, commentMarker, argvMarker, packMarker, sshStderrMarker}
 }

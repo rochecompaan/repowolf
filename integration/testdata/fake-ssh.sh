@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-: "${FAKE_SSH_REPOSITORY:?}"
+: "${FAKE_SSH_GITHUB_REPOSITORY:?}"
+: "${FAKE_SSH_GITEA_REPOSITORY:?}"
 : "${FAKE_SSH_ARGV_LOG:?}"
 : "${FAKE_SSH_ENV_LOG:?}"
 : "${FAKE_SSH_STDERR:?}"
@@ -34,15 +35,21 @@ for argument in "$@"; do remote=$argument; done
 case "$remote" in
   "git-upload-pack 'alpha/repo.git'")
     : "${FAKE_GIT_UPLOAD_PACK:?}"
-    : "${FAKE_SSH_UPLOAD_INPUT:?}"
-    : > "$FAKE_SSH_UPLOAD_INPUT"
-    "$FAKE_TEE" "$FAKE_SSH_UPLOAD_INPUT" | "$FAKE_GIT_UPLOAD_PACK" "$FAKE_SSH_REPOSITORY"
+    : "${FAKE_SSH_GITHUB_UPLOAD_INPUT:?}"
+    : > "$FAKE_SSH_GITHUB_UPLOAD_INPUT"
+    "$FAKE_TEE" "$FAKE_SSH_GITHUB_UPLOAD_INPUT" | "$FAKE_GIT_UPLOAD_PACK" "$FAKE_SSH_GITHUB_REPOSITORY"
     ;;
   "git-receive-pack 'alpha/repo.git'")
     : "${FAKE_GIT_RECEIVE_PACK:?}"
-    : "${FAKE_SSH_RECEIVE_INPUT:?}"
-    : > "$FAKE_SSH_RECEIVE_INPUT"
-    "$FAKE_TEE" "$FAKE_SSH_RECEIVE_INPUT" | "$FAKE_GIT_RECEIVE_PACK" "$FAKE_SSH_REPOSITORY"
+    : "${FAKE_SSH_GITHUB_RECEIVE_INPUT:?}"
+    : > "$FAKE_SSH_GITHUB_RECEIVE_INPUT"
+    "$FAKE_TEE" "$FAKE_SSH_GITHUB_RECEIVE_INPUT" | "$FAKE_GIT_RECEIVE_PACK" "$FAKE_SSH_GITHUB_REPOSITORY"
+    ;;
+  "git-upload-pack 'Team_Name/Repo.One.git'")
+    : "${FAKE_GIT_UPLOAD_PACK:?}"
+    : "${FAKE_SSH_GITEA_UPLOAD_INPUT:?}"
+    : > "$FAKE_SSH_GITEA_UPLOAD_INPUT"
+    "$FAKE_TEE" "$FAKE_SSH_GITEA_UPLOAD_INPUT" | "$FAKE_GIT_UPLOAD_PACK" "$FAKE_SSH_GITEA_REPOSITORY"
     ;;
   *)
     printf 'unexpected fake ssh command\n' >&2

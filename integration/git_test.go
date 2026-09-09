@@ -109,6 +109,60 @@ func TestRealGitDefaultPortStreamsOfflineAndDeniesDefaultMainBeforeProviderInput
 	assertRepositoryUnchanged(t, fixture.sourceStatus)
 }
 
+func TestRealGitGiteaCloneFetchAndFailClosedDenials(t *testing.T) {
+	fixture := newGitFixture(t)
+	checkout := filepath.Join(fixture.root, "gitea-checkout")
+	clone := fixture.git(t, fixture.root, "clone", "ssh://forge_user@gitea.example.invalid:2222/team_name/repo.one.git", checkout)
+	if clone.err != nil {
+		t.Fatalf("Gitea clone: %v; stdout=%q stderr=%q", clone.err, clone.stdout, clone.stderr)
+	}
+	if got := string(mustRead(filepath.Join(checkout, "gitea.txt"))); got != "gitea seed\n" {
+		t.Fatalf("Gitea checkout = %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.giteaSeed, "fetched.txt"), []byte("fetched\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixture.gitOK(t, fixture.giteaSeed, "add", "fetched.txt")
+	fixture.gitOK(t, fixture.giteaSeed, "commit", "-m", "update Gitea fixture")
+	fixture.gitOK(t, fixture.giteaSeed, "push", fixture.giteaRemote, "main")
+	want := strings.TrimSpace(fixture.gitOK(t, fixture.giteaSeed, "rev-parse", "HEAD").stdout)
+	fixture.gitOK(t, checkout, "fetch", "origin")
+	if got := strings.TrimSpace(fixture.gitOK(t, checkout, "rev-parse", "origin/main").stdout); got != want {
+		t.Fatalf("fetched origin/main = %q, want %q", got, want)
+	}
+	invocations := strings.Count(string(mustRead(fixture.sshArgv)), "BEGIN\n")
+	auditBefore := string(mustRead(fixture.server.AuditPath))
+	command := exec.Command(fixture.binaries.GitSSH, "-o", "ProxyCommand=sh", "forge_user@gitea.example.invalid", "git-upload-pack 'Team_Name/Repo.One.git'")
+	command.Env = isolatedGitEnvironment(fixture.root, fixture.gitPath, fixture.gitExecPath)
+	if err := command.Run(); err == nil {
+		t.Fatal("malformed shim argv accepted")
+	}
+	if got := string(mustRead(fixture.server.AuditPath)); got != auditBefore {
+		t.Fatal("malformed request reached the broker audit path")
+	}
+	if denied := fixture.git(t, fixture.root, "ls-remote", "ssh://forge_user@gitea.example.invalid:2222/team_name/missing.git"); denied.err == nil {
+		t.Fatal("ungranted Gitea repository accepted")
+	}
+	if pushed := fixture.git(t, checkout, "push", "origin", "HEAD:refs/heads/denied"); pushed.err == nil {
+		t.Fatal("Gitea push accepted")
+	}
+	if got := strings.Count(string(mustRead(fixture.sshArgv)), "BEGIN\n"); got != invocations {
+		t.Fatalf("denials started SSH: invocations=%d want=%d", got, invocations)
+	}
+	fixture.server.Stop(t)
+	argv := string(mustRead(fixture.sshArgv))
+	if !strings.Contains(argv, "forge_user@gitea.example.invalid\ngit-upload-pack 'Team_Name/Repo.One.git'") {
+		t.Fatalf("missing trusted Gitea argv in %q", argv)
+	}
+	assertSSHEnvironment(t, string(mustRead(fixture.sshEnvironment)))
+	auditLog := string(mustRead(fixture.server.AuditPath))
+	if strings.Count(auditLog, `"provider":"gitea"`) != 4 || strings.Count(auditLog, `"repository":"gitea-read"`) != 4 {
+		t.Fatalf("Gitea audit pairs missing: %s", auditLog)
+	}
+	assertNoFixtureProcess(t, fixture.root)
+	assertRepositoryUnchanged(t, fixture.sourceStatus)
+}
+
 func assertSSHEnvironment(t *testing.T, environment string) {
 	t.Helper()
 	for _, expected := range []string{
@@ -127,10 +181,11 @@ func assertSSHEnvironment(t *testing.T, environment string) {
 }
 
 type gitFixture struct {
-	root, remote, gitPath, gitExecPath, uploadInput, receiveInput, sshArgv, sshEnvironment string
-	sourceStatus                                                                           string
-	binaries                                                                               testutil.Binaries
-	server                                                                                 *testutil.Server
+	root, remote, giteaRemote, giteaSeed, gitPath, gitExecPath           string
+	uploadInput, receiveInput, giteaUploadInput, sshArgv, sshEnvironment string
+	sourceStatus                                                         string
+	binaries                                                             testutil.Binaries
+	server                                                               *testutil.Server
 }
 
 type commandResult struct {
@@ -163,10 +218,11 @@ func newGitFixture(t *testing.T) *gitFixture {
 		t.Fatal(err)
 	}
 	fixture := &gitFixture{
-		root: root, sourceStatus: sourceStatus, remote: filepath.Join(root, "remote.git"), gitPath: gitPath,
+		root: root, sourceStatus: sourceStatus, remote: filepath.Join(root, "remote.git"),
+		giteaRemote: filepath.Join(root, "gitea-remote.git"), giteaSeed: filepath.Join(root, "gitea-seed"), gitPath: gitPath,
 		gitExecPath: strings.TrimSpace(string(execPath)), uploadInput: filepath.Join(root, "upload.input"),
-		receiveInput: filepath.Join(root, "receive.input"), sshArgv: filepath.Join(root, "ssh.argv"),
-		sshEnvironment: filepath.Join(root, "ssh.environment"),
+		receiveInput: filepath.Join(root, "receive.input"), giteaUploadInput: filepath.Join(root, "gitea-upload.input"),
+		sshArgv: filepath.Join(root, "ssh.argv"), sshEnvironment: filepath.Join(root, "ssh.environment"),
 	}
 	fixture.gitOK(t, root, "init", "--bare", fixture.remote)
 	seed := filepath.Join(root, "seed")
@@ -180,6 +236,19 @@ func newGitFixture(t *testing.T) *gitFixture {
 	fixture.gitOK(t, seed, "push", fixture.remote, "main")
 	fixture.gitOK(t, fixture.remote, "symbolic-ref", "HEAD", "refs/heads/main")
 
+	fixture.gitOK(t, root, "init", "--bare", fixture.giteaRemote)
+	fixture.gitOK(t, root, "init", fixture.giteaSeed)
+	fixture.gitOK(t, fixture.giteaSeed, "config", "user.name", "Gitea Operator")
+	fixture.gitOK(t, fixture.giteaSeed, "config", "user.email", "gitea@invalid")
+	if err := os.WriteFile(filepath.Join(fixture.giteaSeed, "gitea.txt"), []byte("gitea seed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixture.gitOK(t, fixture.giteaSeed, "add", "gitea.txt")
+	fixture.gitOK(t, fixture.giteaSeed, "commit", "-m", "seed Gitea fixture")
+	fixture.gitOK(t, fixture.giteaSeed, "branch", "-M", "main")
+	fixture.gitOK(t, fixture.giteaSeed, "push", fixture.giteaRemote, "main")
+	fixture.gitOK(t, fixture.giteaRemote, "symbolic-ref", "HEAD", "refs/heads/main")
+
 	binDir := filepath.Join(root, "bin")
 	fixture.binaries = testutil.BuildBinaries(t, binDir)
 	provider := testutil.InstallExecutable(t, filepath.Join("testdata", "fake-provider.sh"), filepath.Join(binDir, "fake-provider"))
@@ -192,9 +261,10 @@ func newGitFixture(t *testing.T) *gitFixture {
 			"REPOWOLF_TOKEN_GITEA=" + giteaCredential, "GH_TOKEN=" + ambientGHCredential,
 			"GITHUB_TOKEN=" + ambientGitHubCredential, "SSH_AUTH_SOCK=/run/test-agent.sock",
 			"GIT_PROTOCOL=version=2",
-			"FAKE_SSH_REPOSITORY=" + fixture.remote, "FAKE_SSH_ARGV_LOG=" + fixture.sshArgv,
-			"FAKE_SSH_ENV_LOG=" + fixture.sshEnvironment, "FAKE_SSH_STDERR=" + sshStderrMarker,
-			"FAKE_SSH_UPLOAD_INPUT=" + fixture.uploadInput, "FAKE_SSH_RECEIVE_INPUT=" + fixture.receiveInput,
+			"FAKE_SSH_GITHUB_REPOSITORY=" + fixture.remote, "FAKE_SSH_GITEA_REPOSITORY=" + fixture.giteaRemote,
+			"FAKE_SSH_ARGV_LOG=" + fixture.sshArgv, "FAKE_SSH_ENV_LOG=" + fixture.sshEnvironment,
+			"FAKE_SSH_STDERR=" + sshStderrMarker, "FAKE_SSH_GITHUB_UPLOAD_INPUT=" + fixture.uploadInput,
+			"FAKE_SSH_GITHUB_RECEIVE_INPUT=" + fixture.receiveInput, "FAKE_SSH_GITEA_UPLOAD_INPUT=" + fixture.giteaUploadInput,
 			"FAKE_GIT_UPLOAD_PACK=" + upload, "FAKE_GIT_RECEIVE_PACK=" + receive, "FAKE_TEE=" + tee,
 		},
 	})

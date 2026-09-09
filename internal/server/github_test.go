@@ -112,6 +112,19 @@ func TestGitHubServiceRejectsMalformedTypedRequestBeforeExecution(t *testing.T) 
 	}
 }
 
+func TestGitHubServiceRejectsGitOnlySSHUserField(t *testing.T) {
+	executor := &fakeGitHubExecutor{}
+	service := newGitHubService(githubPolicy(t, config.IssuesRead, config.ProviderGitHub), executor, &eventSink{})
+	request := githubServerRequest(&repowolfv1.GitHubRequest_IssueView{IssueView: &repowolfv1.GitHubIssueViewRequest{Number: 1}})
+	request.Context.Repository.SshUser = "git"
+	if _, err := service.Execute(auth.WithPrincipal(context.Background(), "agent"), request); err == nil {
+		t.Fatal("Git-only SSH user accepted by GitHub API")
+	}
+	if executor.calls != 0 {
+		t.Fatalf("calls=%d", executor.calls)
+	}
+}
+
 func githubServerRequest(operation any) *repowolfv1.GitHubRequest {
 	request := requestWithOperation(operation)
 	request.Context = &repowolfv1.RequestContext{Repository: &repowolfv1.RepositorySelector{Host: "github.example", Owner: "owner", Name: "repo"}}

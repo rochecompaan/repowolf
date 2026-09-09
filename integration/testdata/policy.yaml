@@ -18,7 +18,7 @@ providers:
     kind: gitea
     apiHost: gitea.example.invalid
     gitHost: gitea.example.invalid
-    sshUser: git
+    sshUser: forge_user
     sshPort: 2222
     tokenEnv: REPOWOLF_TOKEN_GITEA
 repositories:
@@ -39,10 +39,10 @@ repositories:
     git:
       denyDeletes: true
       maxRefUpdates: 16
-  gitea-unused:
+  gitea-read:
     provider: gitea-lab
-    owner: alpha
-    name: gitea-repo
+    owner: Team_Name
+    name: Repo.One
     git:
       denyDeletes: true
       maxRefUpdates: 16
@@ -62,6 +62,9 @@ principals:
           - statuses:read
           - git:read
           - git:write
+      - repository: gitea-read
+        capabilities:
+          - git:read
 limits:
   maxConcurrentRequests: 16
   maxConcurrentRequestsPerPrincipal: 8

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -86,6 +88,31 @@ func TestReceivePackMalformedPrefixForwardsZeroClientBytes(t *testing.T) {
 		t.Fatalf("provider received %d malformed update bytes", len(got))
 	}
 	assertTerminalCategory(t, stream, repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_INVALID_REQUEST)
+}
+
+func TestReceivePackGiteaDenialBeforeInput(t *testing.T) {
+	service := newGiteaTestService(t, config.GitRead)
+	counter := &countingProcessRunner{}
+	service.options.Runner = counter
+	service.options.Audit = audit.NewWriter(io.Discard)
+	stream := &memoryStream{ctx: auth.WithPrincipal(context.Background(), "agent"), received: []*repowolfv1.GitFrame{
+		{Payload: &repowolfv1.GitFrame_Open{Open: &repowolfv1.GitOpen{Repository: &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one", SshPort: 2222}}}},
+		dataFrame([]byte("must remain unread")),
+	}}
+
+	if err := service.receivePack(stream); err != nil {
+		t.Fatal(err)
+	}
+	if counter.starts != 0 || stream.recvAt != 1 || stream.sent[0].GetTerminal().GetCategory() != repowolfv1.GitTerminalCategory_GIT_TERMINAL_CATEGORY_PERMISSION_DENIED {
+		t.Fatalf("starts=%d recvAt=%d sent=%#v", counter.starts, stream.recvAt, stream.sent)
+	}
+}
+
+type countingProcessRunner struct{ starts int }
+
+func (counter *countingProcessRunner) Start(context.Context, runner.Command) (*runner.Process, error) {
+	counter.starts++
+	return nil, errors.New("unexpected process start")
 }
 
 func receiveExecutableService(t *testing.T) (*Service, string, *bytes.Buffer) {
