@@ -621,7 +621,7 @@ Run:
 ```bash
 git status --short
 git diff --name-only a988c95..HEAD
-! git diff a988c95..HEAD --name-only | grep -E '(^proto/|^gen/|tea)'
+! git diff a988c95..HEAD --name-only | grep -E '(^proto/|^gen/|(^|/)tea(/|$))'
 rg -n 'SetToken|InsecureSkipVerify|CheckRedirect|MinVersion|MaxResponseBytes|caFile' internal docs/configuration.md
 ```
 
