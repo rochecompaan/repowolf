@@ -2,7 +2,9 @@ package gitea
 
 import (
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -42,11 +44,50 @@ func newClient(baseURL string, options providerhttp.Options) (*sdk.Client, error
 	if err != nil {
 		return nil, fmt.Errorf("construct Gitea HTTP client: %w", err)
 	}
+	httpClient.Transport = &errorResponseRedactingTransport{base: httpClient.Transport}
 	client, err := sdk.NewClient("https://"+parsed.Host+"/", sdk.SetHTTPClient(httpClient), sdk.SetGiteaVersion(""))
 	if err != nil {
 		return nil, fmt.Errorf("construct Gitea SDK client: %w", err)
 	}
 	return client, nil
+}
+
+type errorResponseRedactingTransport struct {
+	base http.RoundTripper
+}
+
+func (transport *errorResponseRedactingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := transport.base.RoundTrip(request)
+	if err != nil || response == nil || response.StatusCode/100 == 2 {
+		return response, err
+	}
+	if response.Body != nil {
+		_, readErr := io.Copy(io.Discard, response.Body)
+		closeErr := response.Body.Close()
+		if readErr != nil {
+			return nil, &errorResponseBodyReadError{cause: readErr}
+		}
+		if closeErr != nil {
+			return nil, &errorResponseBodyReadError{cause: closeErr}
+		}
+	}
+	response.Header = response.Header.Clone()
+	response.Header.Del("Content-Length")
+	response.ContentLength = 0
+	response.Body = http.NoBody
+	return response, nil
+}
+
+type errorResponseBodyReadError struct {
+	cause error
+}
+
+func (err *errorResponseBodyReadError) Error() string {
+	return "provider HTTP error response rejected"
+}
+
+func (err *errorResponseBodyReadError) Unwrap() error {
+	return err.cause
 }
 
 func validAPIHost(host string) bool {

@@ -71,6 +71,38 @@ func TestSDKServerVersionUsesBoundedAuthenticatedTransport(t *testing.T) {
 	}
 }
 
+func TestSDKErrorResponsesDoNotDiscloseBody(t *testing.T) {
+	const token = "sdk-failure-secret"
+	for _, test := range []struct {
+		name        string
+		contentType string
+		body        string
+	}{
+		{name: "reflected token in JSON message", contentType: "application/json", body: `{"message":"` + token + `"}`},
+		{name: "short raw body", contentType: "text/plain", body: "short-provider-body"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, certificate := sdkTLSServer(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.Header().Set("Content-Type", test.contentType)
+				writer.WriteHeader(http.StatusInternalServerError)
+				_, _ = io.WriteString(writer, test.body)
+			}))
+			defer server.Close()
+			client, err := newClient(server.URL, providerhttp.Options{Token: token, CAFile: certificate.CAFile, Timeout: time.Second, MaxResponseBytes: 1024})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = client.ServerVersion()
+			if err == nil {
+				t.Fatal("ServerVersion() unexpectedly succeeded")
+			}
+			if strings.Contains(err.Error(), token) || strings.Contains(err.Error(), test.body) || strings.Contains(err.Error(), "short-provider-body") {
+				t.Fatalf("error disclosed provider response body: %v", err)
+			}
+		})
+	}
+}
+
 func TestSDKTransportFailuresAreStableAndSafe(t *testing.T) {
 	const token = "sdk-failure-secret"
 	tests := []struct {
