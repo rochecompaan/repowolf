@@ -73,6 +73,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
+      - name: Confirm Nix Go 1.26
+        run: nix develop -c sh -c "go env GOVERSION | grep -Eq '^go1[.]26([.]|$)'"
       - name: Build and smoke-test OCI image
         run: scripts/ci/oci/smoke-image.sh "${{ matrix.arch }}"
       - name: Publish architecture image

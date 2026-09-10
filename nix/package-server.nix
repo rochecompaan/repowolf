@@ -5,7 +5,7 @@ buildGo126Module {
   version = "dev";
 
   src = lib.cleanSource ../.;
-  vendorHash = "sha256-YKhXG4tUfIsAXCEMSKnW2pdrOKIh4Gu7iSRFHk6j7MU=";
+  vendorHash = "sha256-Hi2HJappaY+TJ2PyT7VjxICn7chQunPdxgGmFD1nAi0=";
 
   subPackages = [ "cmd/repowolf" ];
   env.CGO_ENABLED = "0";

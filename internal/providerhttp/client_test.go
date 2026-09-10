@@ -160,6 +160,31 @@ func TestWholeOperationDeadlineIncludesResponseBody(t *testing.T) {
 	}
 }
 
+func TestCallerCancellationClosesResponseBody(t *testing.T) {
+	providerBody := &blockingBody{closed: make(chan struct{})}
+	client, err := New(Options{Authority: "example.com", Token: "secret", Timeout: time.Second, MaxResponseBytes: 1024, Base: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: providerBody, Request: request}, nil
+	})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/", nil)
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case <-providerBody.closed:
+	case <-time.After(time.Second):
+		t.Fatal("caller cancellation did not close provider body")
+	}
+	if _, err := response.Body.Read(make([]byte, 1)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Read() error = %v, want cancellation", err)
+	}
+}
+
 func TestDecodedResponseLimitInclusiveForAllStatuses(t *testing.T) {
 	const limit = int64(8 << 20)
 	for _, status := range []int{http.StatusOK, http.StatusBadGateway} {
@@ -234,6 +259,23 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return function(request)
+}
+
+type blockingBody struct {
+	closed chan struct{}
+	once   atomic.Bool
+}
+
+func (body *blockingBody) Read([]byte) (int, error) {
+	<-body.closed
+	return 0, io.ErrClosedPipe
+}
+
+func (body *blockingBody) Close() error {
+	if body.once.CompareAndSwap(false, true) {
+		close(body.closed)
+	}
+	return nil
 }
 
 type countingBody struct {
