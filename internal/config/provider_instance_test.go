@@ -215,6 +215,35 @@ func TestDecodeDirectProviderMapEntryOverridesMergedNull(t *testing.T) {
 	}
 }
 
+func TestValidProviderHostGrammar(t *testing.T) {
+	for _, test := range []struct {
+		host string
+		want bool
+	}{
+		{host: "gitea.example.com", want: true},
+		{host: "GITEA.EXAMPLE.COM", want: true},
+		{host: "127.0.0.1", want: true},
+		{host: "localhost", want: true},
+		{host: ""},
+		{host: "https://gitea.example.com"},
+		{host: "gitea.example.com:3000"},
+		{host: "user@gitea.example.com"},
+		{host: "gitea.example.com/path"},
+		{host: "gitea example.com"},
+		{host: "bad_label.example.com"},
+		{host: "-gitea.example.com"},
+		{host: "gitea-.example.com"},
+		{host: "gitea..example.com"},
+		{host: "2001:db8::1"},
+	} {
+		t.Run(test.host, func(t *testing.T) {
+			if got := ValidProviderHost(test.host); got != test.want {
+				t.Fatalf("ValidProviderHost(%q) = %v, want %v", test.host, got, test.want)
+			}
+		})
+	}
+}
+
 func TestValidateProviderCAFileRules(t *testing.T) {
 	cfg := validConfig()
 	provider := cfg.Providers["github"]

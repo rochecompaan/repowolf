@@ -3,10 +3,8 @@ package gitea
 import (
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	sdk "code.gitea.io/sdk/gitea"
@@ -23,7 +21,7 @@ func New(provider config.Provider, token string) (*sdk.Client, error) {
 	if provider.Kind != config.ProviderGitea {
 		return nil, fmt.Errorf("construct Gitea client: provider kind must be Gitea")
 	}
-	if !validAPIHost(provider.APIHost) {
+	if !config.ValidProviderHost(provider.APIHost) {
 		return nil, fmt.Errorf("construct Gitea client: invalid apiHost")
 	}
 	return newClient("https://"+provider.APIHost+"/", providerhttp.Options{
@@ -88,24 +86,4 @@ func (err *errorResponseBodyReadError) Error() string {
 
 func (err *errorResponseBodyReadError) Unwrap() error {
 	return err.cause
-}
-
-func validAPIHost(host string) bool {
-	if host == "" || len(host) > 253 || strings.ContainsAny(host, ":/@ ") {
-		return false
-	}
-	if net.ParseIP(host) != nil {
-		return true
-	}
-	for _, label := range strings.Split(host, ".") {
-		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, character := range label {
-			if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '-') {
-				return false
-			}
-		}
-	}
-	return true
 }
