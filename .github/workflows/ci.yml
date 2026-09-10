@@ -32,7 +32,7 @@ jobs:
       - name: Test pinned Gitea Git interoperability
         env:
           REPOWOLF_GITEA_INTEGRATION: "1"
-        run: go test ./integration -run '^TestPinnedGiteaCloneFetch$' -count=1 -v
+        run: go test ./integration -run '^TestPinnedGiteaGitInteroperability$' -count=1 -v
       - name: Permit Bubblewrap user namespaces
         run: |
           if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then

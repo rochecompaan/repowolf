@@ -2,10 +2,10 @@ package integration_test
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,131 +18,37 @@ const (
 	pinnedGiteaPrincipalMarker = "rw1_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
 )
 
-func TestPinnedGiteaCloneFetch(t *testing.T) {
+func TestPinnedGiteaGitInteroperability(t *testing.T) {
 	if os.Getenv("REPOWOLF_GITEA_INTEGRATION") != "1" {
 		t.Skip("set REPOWOLF_GITEA_INTEGRATION=1 to run pinned Gitea interoperability")
 	}
-	gitea := testutil.StartGitea(t)
-	seedCommit := gitea.Seed(t, "seed.txt", "seeded through operator setup\n")
-	access := gitea.StartSSHAccess(t)
-	root := t.TempDir()
-	binaries := testutil.BuildBinaries(t, filepath.Join(root, "bin"))
-	certificate := testutil.GenerateCertificate(t, filepath.Join(root, "tls"))
-	sshPath, err := exec.LookPath("ssh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	capture := filepath.Join(root, "ssh.capture")
-	wrapper := filepath.Join(root, "ssh-wrapper")
-	wrapperScript := fmt.Sprintf(`#!/bin/sh
-set -eu
-{
-  printf 'BEGIN\n'
-  printf 'HOME=%%s\n' "${HOME-unset}"
-  printf 'SSH_AUTH_SOCK=%%s\n' "${SSH_AUTH_SOCK-unset}"
-  printf 'REPOWOLF_TOKEN_AGENT=%%s\n' "${REPOWOLF_TOKEN_AGENT-unset}"
-  printf 'REPOWOLF_TOKEN_GITEA=%%s\n' "${REPOWOLF_TOKEN_GITEA-unset}"
-  printf 'GH_TOKEN=%%s\n' "${GH_TOKEN-unset}"
-  printf 'GITHUB_TOKEN=%%s\n' "${GITHUB_TOKEN-unset}"
-  printf '%%s\n' "$@"
-  printf 'END\n'
-} >> "${SSH_CAPTURE_PATH:?}"
-exec %q -i %q -o IdentitiesOnly=yes -o UserKnownHostsFile=%q -o StrictHostKeyChecking=yes "$@"
-`, sshPath, filepath.Join(access.Home, ".ssh", "id_ed25519"), filepath.Join(access.Home, ".ssh", "known_hosts"))
-	if err := os.WriteFile(wrapper, []byte(wrapperScript), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	policyPath := filepath.Join(root, "policy.yaml")
-	policy := fmt.Sprintf(`apiVersion: repowolf.dev/v1alpha1
-listen: __LISTEN__
-tls:
-  certificate: __CERTIFICATE__
-  privateKey: __PRIVATE_KEY__
-tools:
-  ssh: __SSH__
-providers:
-  gitea:
-    kind: gitea
-    apiHost: gitea.example.invalid
-    gitHost: %s
-    sshUser: %s
-    sshPort: %d
-    tokenEnv: REPOWOLF_TOKEN_GITEA
-repositories:
-  pinned-gitea:
-    provider: gitea
-    owner: %s
-    name: %s
-    git:
-      denyDeletes: true
-      maxRefUpdates: 16
-principals:
-  agent:
-    tokenEnvs:
-      - REPOWOLF_TOKEN_AGENT
-    grants:
-      - repository: pinned-gitea
-        capabilities:
-          - git:read
-limits:
-  maxConcurrentRequests: 16
-  maxConcurrentRequestsPerPrincipal: 8
-  maxMessageBytes: 1048576
-  maxStreamChunkBytes: 65536
-  maxPushPrefixBytes: 1048576
-  maxGitBytesPerDirection: 1073741824
-  initialStreamTimeout: 5s
-  operationTimeout: 30s
-  idleStreamTimeout: 5s
-`, gitea.SSHHost, gitea.SSHUser, gitea.SSHPort, gitea.Owner, gitea.Repository)
-	if err := os.WriteFile(policyPath, []byte(policy), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	server := testutil.StartServer(t, testutil.ServerOptions{
-		Binary: binaries.Service, PolicyPath: policyPath, Certificate: certificate, SSHPath: wrapper,
-		Environment: []string{
-			"REPOWOLF_TOKEN_AGENT=" + pinnedGiteaPrincipalMarker,
-			"REPOWOLF_TOKEN_GITEA=" + pinnedGiteaProviderMarker,
-			"HOME=" + access.Home, "SSH_AUTH_SOCK=" + access.AgentSocket,
-			"SSH_CAPTURE_PATH=" + capture, "GIT_PROTOCOL=version=2",
-		},
-	})
-	gitPath, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
-	execPath, err := exec.Command(gitPath, "--exec-path").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	gitEnv := isolatedGitEnvironment(root, gitPath, strings.TrimSpace(string(execPath)))
-	gitEnv = testutil.Environment(gitEnv,
-		"GIT_SSH_COMMAND="+binaries.GitSSH,
-		"REPOWOLF_ENDPOINT="+server.Endpoint, "REPOWOLF_CA_FILE="+server.Certificate.CAFile,
-		"REPOWOLF_SERVER_NAME="+server.Certificate.ServerName, "REPOWOLF_TOKEN="+pinnedGiteaPrincipalMarker,
-	)
-	checkout := filepath.Join(root, "checkout")
-	remote := "ssh://" + gitea.SSHUser + "@" + gitea.SSHHost + ":" + strconv.Itoa(gitea.SSHPort) + "/team_name/repo.one.git"
-	clone := runPinnedGit(gitPath, root, gitEnv, "clone", remote, checkout)
-	if clone.err != nil {
-		t.Fatalf("pinned Gitea clone: %v; stdoutBytes=%d stderrBytes=%d captureBytes=%d auditBytes=%d brokerStderrBytes=%d", clone.err, len(clone.stdout), len(clone.stderr), fileSize(capture), fileSize(server.AuditPath), fileSize(server.StderrPath))
-	}
-	if got := strings.TrimSpace(runPinnedGitOK(t, gitPath, checkout, gitEnv, "rev-parse", "HEAD").stdout); got != seedCommit {
-		t.Fatalf("cloned HEAD = %q, want %q", got, seedCommit)
-	}
-	updatedCommit := gitea.Update(t, "fetched.txt", "fetched through operator setup\n")
-	fetch := runPinnedGitOK(t, gitPath, checkout, gitEnv, "fetch", "origin")
-	if got := strings.TrimSpace(runPinnedGitOK(t, gitPath, checkout, gitEnv, "rev-parse", "origin/main").stdout); got != updatedCommit {
-		t.Fatalf("fetched origin/main = %q, want %q", got, updatedCommit)
-	}
-	server.Stop(t)
-	auditLog := string(mustRead(server.AuditPath))
-	captureLog := string(mustRead(capture))
-	checkoutContents := string(mustRead(filepath.Join(checkout, "seed.txt")))
+	fixture := newPinnedGiteaGitFixture(t)
+	clone, fetch := fixture.cloneAndFetch(t)
+	allowed, denied := fixture.pushAllowedAndDenied(t)
+	cancelledOutput := fixture.cancelActivePush(t)
+	fixture.server.Stop(t)
+	fixture.assertCompletion(t, clone, fetch, allowed, denied, cancelledOutput)
+}
+
+func (fixture *pinnedGiteaGitFixture) assertCompletion(t *testing.T, clone, fetch, allowed, denied pinnedGitResult, cancelledOutput string) {
+	t.Helper()
+	auditLog := string(mustRead(fixture.server.AuditPath))
+	captureLog := string(mustRead(fixture.capture))
+	checkoutContents := string(mustRead(filepath.Join(fixture.checkout, "seed.txt")))
+	assertPinnedGiteaLeaks(t, fixture, clone, fetch, allowed, denied, cancelledOutput, auditLog, captureLog, checkoutContents)
+	assertPinnedGiteaAudit(t, auditLog)
+	assertPinnedGiteaSSHInvocations(t, fixture.gitea, captureLog)
+}
+
+func assertPinnedGiteaLeaks(t *testing.T, fixture *pinnedGiteaGitFixture, clone, fetch, allowed, denied pinnedGitResult, cancelledOutput, auditLog, captureLog, checkoutContents string) {
+	t.Helper()
 	for channel, contents := range map[string]string{
 		"clone stdout": clone.stdout, "clone stderr": clone.stderr,
 		"fetch stdout": fetch.stdout, "fetch stderr": fetch.stderr,
-		"broker stderr": string(mustRead(server.StderrPath)), "audit": auditLog,
+		"allowed push stdout": allowed.stdout, "allowed push stderr": allowed.stderr,
+		"denied push stdout": denied.stdout, "denied push stderr": denied.stderr,
+		"cancelled push": cancelledOutput, "receive capture": string(mustRead(fixture.receiveCapture)),
+		"broker stderr": string(mustRead(fixture.server.StderrPath)), "audit": auditLog,
 		"checkout": checkoutContents, "ssh environment": captureLog,
 	} {
 		for _, marker := range []string{pinnedGiteaProviderMarker, pinnedGiteaPrincipalMarker} {
@@ -151,21 +57,71 @@ limits:
 			}
 		}
 	}
-	providerEvents := strings.Count(auditLog, `"provider":"gitea"`)
-	repositoryEvents := strings.Count(auditLog, `"repository":"pinned-gitea"`)
-	if providerEvents != 4 || repositoryEvents != 4 {
-		t.Fatalf("missing Gitea upload-pack audit pairs: providerEvents=%d repositoryEvents=%d auditBytes=%d", providerEvents, repositoryEvents, len(auditLog))
+}
+
+func assertPinnedGiteaAudit(t *testing.T, auditLog string) {
+	t.Helper()
+	if providerEvents, repositoryEvents := strings.Count(auditLog, `"provider":"gitea"`), strings.Count(auditLog, `"repository":"pinned-gitea"`); providerEvents != 10 || repositoryEvents != 10 {
+		t.Fatalf("missing Gitea Git audit pairs: providerEvents=%d repositoryEvents=%d auditBytes=%d", providerEvents, repositoryEvents, len(auditLog))
 	}
+	records, err := parseAuditRecords([]byte(auditLog), []string{pinnedGiteaProviderMarker, pinnedGiteaPrincipalMarker})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lifecycle []string
+	var receiveTerminals []auditRecord
+	for _, record := range records {
+		if record.event.Provider != "gitea" {
+			continue
+		}
+		lifecycle = append(lifecycle, record.event.Operation+":"+string(record.event.Outcome))
+		if record.event.Operation == "git.receive-pack" && string(record.event.Outcome) != "accepted" {
+			receiveTerminals = append(receiveTerminals, record)
+		}
+	}
+	wantLifecycle := []string{
+		"git.upload-pack:accepted", "git.upload-pack:completed",
+		"git.upload-pack:accepted", "git.upload-pack:completed",
+		"git.receive-pack:accepted", "git.receive-pack:completed",
+		"git.receive-pack:accepted", "git.receive-pack:denied",
+		"git.receive-pack:accepted", "git.receive-pack:cancelled",
+	}
+	if !reflect.DeepEqual(lifecycle, wantLifecycle) {
+		t.Fatalf("Gitea audit lifecycle = %v, want %v", lifecycle, wantLifecycle)
+	}
+	assertPinnedGiteaReceiveTerminals(t, receiveTerminals)
+}
+
+func assertPinnedGiteaReceiveTerminals(t *testing.T, terminals []auditRecord) {
+	t.Helper()
+	if len(terminals) != 3 {
+		t.Fatalf("receive-pack terminal audit count = %d, want 3", len(terminals))
+	}
+	allowed, denied, cancelled := terminals[0], terminals[1], terminals[2]
+	if string(allowed.event.Outcome) != "completed" || allowed.event.Reason != "GIT_TERMINAL_CATEGORY_COMPLETED" || !reflect.DeepEqual(allowed.event.Refs, []string{"refs/heads/feature/allowed"}) || allowed.event.UpdateCount != 1 || allowed.event.InputBytes <= 0 || allowed.event.OutputBytes <= 0 || !allowed.fields["input_bytes"] || !allowed.fields["output_bytes"] {
+		t.Fatalf("unsafe or incomplete allowed receive-pack terminal audit: %#v fields=%v", allowed.event, allowed.fields)
+	}
+	if string(denied.event.Outcome) != "denied" || denied.event.Reason != "GIT_TERMINAL_CATEGORY_INVALID_REQUEST" || !reflect.DeepEqual(denied.event.Refs, []string{"refs/heads/denied"}) || denied.event.UpdateCount != 1 || denied.event.InputBytes != 0 || denied.fields["input_bytes"] || denied.event.OutputBytes <= 0 || !denied.fields["output_bytes"] {
+		t.Fatalf("unsafe or incomplete denied receive-pack terminal audit: %#v fields=%v", denied.event, denied.fields)
+	}
+	if string(cancelled.event.Outcome) != "cancelled" || cancelled.event.Reason != "GIT_TERMINAL_CATEGORY_UNAVAILABLE" || len(cancelled.event.Refs) != 0 || cancelled.event.UpdateCount != 0 || cancelled.event.InputBytes != 0 || cancelled.fields["input_bytes"] {
+		t.Fatalf("unsafe or incomplete cancelled receive-pack terminal audit: %#v fields=%v", cancelled.event, cancelled.fields)
+	}
+}
+
+func assertPinnedGiteaSSHInvocations(t *testing.T, gitea *testutil.Gitea, captureLog string) {
+	t.Helper()
 	invocations := strings.Count(captureLog, "BEGIN\n")
 	giteaTokenUnset := strings.Contains(captureLog, "REPOWOLF_TOKEN_GITEA=unset")
 	principalTokenUnset := strings.Contains(captureLog, "REPOWOLF_TOKEN_AGENT=unset")
-	if invocations != 2 || !giteaTokenUnset || !principalTokenUnset {
+	if invocations != 5 || !giteaTokenUnset || !principalTokenUnset {
 		t.Fatalf("unexpected SSH environment capture: invocations=%d giteaTokenUnset=%t principalTokenUnset=%t captureBytes=%d", invocations, giteaTokenUnset, principalTokenUnset, len(captureLog))
 	}
-	trustedArgs := "-T\n-p\n" + strconv.Itoa(gitea.SSHPort) + "\n--\n" + gitea.SSHUser + "@" + gitea.SSHHost + "\ngit-upload-pack '" + gitea.Owner + "/" + gitea.Repository + ".git'"
-	trustedInvocations := strings.Count(captureLog, trustedArgs)
-	if trustedInvocations != 2 {
-		t.Fatalf("SSH wrapper did not preserve trusted argv: trustedInvocations=%d captureBytes=%d", trustedInvocations, len(captureLog))
+	trustedPrefix := "-T\n-p\n" + strconv.Itoa(gitea.SSHPort) + "\n--\n" + gitea.SSHUser + "@" + gitea.SSHHost + "\n"
+	trustedUploads := strings.Count(captureLog, trustedPrefix+"git-upload-pack '"+gitea.Owner+"/"+gitea.Repository+".git'")
+	trustedReceives := strings.Count(captureLog, trustedPrefix+"git-receive-pack '"+gitea.Owner+"/"+gitea.Repository+".git'")
+	if trustedUploads != 2 || trustedReceives != 3 {
+		t.Fatalf("SSH wrapper did not preserve trusted argv: uploads=%d receives=%d captureBytes=%d", trustedUploads, trustedReceives, len(captureLog))
 	}
 }
 

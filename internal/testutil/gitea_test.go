@@ -2,6 +2,32 @@ package testutil
 
 import "testing"
 
+func TestParseLSRemoteRef(t *testing.T) {
+	const ref = "refs/heads/feature/allowed"
+	const oid = "0123456789abcdef0123456789abcdef01234567"
+	for _, test := range []struct {
+		name    string
+		output  string
+		want    string
+		found   bool
+		wantErr bool
+	}{
+		{name: "exact", output: oid + "\t" + ref + "\n", want: oid, found: true},
+		{name: "empty"},
+		{name: "different ref", output: oid + "\trefs/heads/main\n"},
+		{name: "malformed fields", output: oid + " " + ref + "\n", wantErr: true},
+		{name: "invalid oid", output: "not-an-object-id\t" + ref + "\n", wantErr: true},
+		{name: "duplicate", output: oid + "\t" + ref + "\n" + oid + "\t" + ref + "\n", wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, found, err := parseLSRemoteRef(test.output, ref)
+			if (err != nil) != test.wantErr || got != test.want || found != test.found {
+				t.Fatalf("parseLSRemoteRef() = %q, %t, %v; want %q, %t, error=%t", got, found, err, test.want, test.found, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestParseAgentPIDRequiresPositiveInteger(t *testing.T) {
 	for name, test := range map[string]struct {
 		output string

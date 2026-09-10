@@ -16,6 +16,12 @@ import (
 )
 
 func TestMarkersRemainInTheirIntendedChannels(t *testing.T) {
+	const (
+		giteaAllowedContentMarker = "gitea-allowed-content-marker"
+		giteaDeniedContentMarker  = "gitea-denied-content-marker"
+		giteaAllowedRef           = "refs/heads/feature/leak-allowed"
+		giteaDeniedRef            = "refs/heads/denied"
+	)
 	forge := newFixture(t)
 	listOut, listErr := forge.runGH(t, "issue", "list", "--repo", "alpha/repo")
 	createOut, createErr := forge.runGH(t, "issue", "create", "--repo", "alpha/repo", "--title", "typed write", "--body", issueBodyMarker)
@@ -80,63 +86,109 @@ func TestMarkersRemainInTheirIntendedChannels(t *testing.T) {
 	if giteaFetch.err != nil {
 		t.Fatalf("Gitea fetch: %v; stdout=%q stderr=%q", giteaFetch.err, giteaFetch.stdout, giteaFetch.stderr)
 	}
+	git.gitOK(t, giteaCheckout, "config", "user.name", "Gitea Leak Agent")
+	git.gitOK(t, giteaCheckout, "config", "user.email", "gitea-leak@invalid")
+	if err := os.WriteFile(filepath.Join(giteaCheckout, "allowed-push.txt"), []byte(giteaAllowedContentMarker+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git.gitOK(t, giteaCheckout, "add", "allowed-push.txt")
+	git.gitOK(t, giteaCheckout, "commit", "-m", "allowed Gitea leak push")
+	giteaAllowedPush := git.git(t, giteaCheckout, "push", "origin", "HEAD:"+giteaAllowedRef)
+	if giteaAllowedPush.err != nil {
+		t.Fatalf("allowed Gitea push: %v; stdout=%q stderr=%q", giteaAllowedPush.err, giteaAllowedPush.stdout, giteaAllowedPush.stderr)
+	}
+	giteaAllowedReceiveInput := string(mustRead(git.giteaReceiveInput))
+	if giteaAllowedReceiveInput == "" {
+		t.Fatal("allowed Gitea receive-pack forwarded no bytes")
+	}
+	giteaAllowedRemote := git.git(t, git.giteaRemote, "show", giteaAllowedRef+":allowed-push.txt")
+	if giteaAllowedRemote.err != nil || giteaAllowedRemote.stdout != giteaAllowedContentMarker+"\n" {
+		t.Fatalf("allowed Gitea remote content: %v; stdout=%q stderr=%q", giteaAllowedRemote.err, giteaAllowedRemote.stdout, giteaAllowedRemote.stderr)
+	}
+	if err := os.WriteFile(filepath.Join(giteaCheckout, "denied-push.txt"), []byte(giteaDeniedContentMarker+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git.gitOK(t, giteaCheckout, "add", "denied-push.txt")
+	git.gitOK(t, giteaCheckout, "commit", "-m", "denied Gitea leak push")
+	giteaDeniedPush := git.git(t, giteaCheckout, "push", "origin", "HEAD:"+giteaDeniedRef)
+	if giteaDeniedPush.err == nil || !strings.Contains(giteaDeniedPush.stderr, "repowolf git transport failed") {
+		t.Fatalf("denied Gitea push: %v; stdout=%q stderr=%q", giteaDeniedPush.err, giteaDeniedPush.stdout, giteaDeniedPush.stderr)
+	}
+	giteaDeniedReceiveInput := string(mustRead(git.giteaReceiveInput))
+	if giteaDeniedReceiveInput != "" {
+		t.Fatalf("denied Gitea receive-pack forwarded %d bytes", len(giteaDeniedReceiveInput))
+	}
+	giteaDeniedRemote := git.git(t, git.giteaRemote, "show", giteaDeniedRef+":denied-push.txt")
+	if giteaDeniedRemote.err == nil || giteaDeniedRemote.stdout != "" {
+		t.Fatalf("denied Gitea remote content exists: %v; stdout=%q stderr=%q", giteaDeniedRemote.err, giteaDeniedRemote.stdout, giteaDeniedRemote.stderr)
+	}
 	git.server.Stop(t)
 
 	channels := map[string]string{
-		"forge.client.stdout":   listOut + createOut + commentOut,
-		"forge.client.stderr":   listErr + createErr + commentErr,
-		"git.clone.stdout":      clone.stdout,
-		"git.clone.stderr":      clone.stderr,
-		"git.allowed.stdout":    allowedPush.stdout,
-		"git.allowed.stderr":    allowedPush.stderr,
-		"git.denied.stdout":     deniedPush.stdout,
-		"git.denied.stderr":     deniedPush.stderr,
-		"git.remote.stdout":     allowedRemote.stdout + deniedRemote.stdout,
-		"git.remote.stderr":     allowedRemote.stderr + deniedRemote.stderr,
-		"forge.audit":           forge.audit(),
-		"git.audit":             string(mustRead(git.server.AuditPath)),
-		"server.stderr":         string(mustRead(forge.server.StderrPath)) + string(mustRead(git.server.StderrPath)),
-		"provider.argv":         string(mustRead(forge.providerArgvPath)),
-		"provider.stdin":        string(mustRead(forge.providerInputPath)),
-		"provider.stdout":       string(mustRead(forge.providerOutputPath)),
-		"provider.environment":  string(mustRead(forge.providerEnvPath)),
-		"provider.stderr":       string(mustRead(forge.providerStderrPath)),
-		"ssh.argv":              string(mustRead(git.sshArgv)),
-		"ssh.environment":       string(mustRead(git.sshEnvironment)),
-		"ssh.upload.input":      string(mustRead(git.uploadInput)),
-		"ssh.receive.allowed":   allowedReceiveInput,
-		"ssh.receive.denied":    deniedReceiveInput,
-		"git.checkout.contents": string(mustRead(filepath.Join(checkout, "pack.txt"))) + string(mustRead(filepath.Join(checkout, "allowed.txt"))) + string(mustRead(filepath.Join(checkout, "denied.txt"))) + string(mustRead(filepath.Join(giteaCheckout, "gitea.txt"))),
-		"gitea.clone.stdout":    giteaClone.stdout,
-		"gitea.clone.stderr":    giteaClone.stderr,
-		"gitea.fetch.stdout":    giteaFetch.stdout,
-		"gitea.fetch.stderr":    giteaFetch.stderr,
-		"gitea.upload.input":    string(mustRead(git.giteaUploadInput)),
+		"forge.client.stdout":         listOut + createOut + commentOut,
+		"forge.client.stderr":         listErr + createErr + commentErr,
+		"git.clone.stdout":            clone.stdout,
+		"git.clone.stderr":            clone.stderr,
+		"git.allowed.stdout":          allowedPush.stdout,
+		"git.allowed.stderr":          allowedPush.stderr,
+		"git.denied.stdout":           deniedPush.stdout,
+		"git.denied.stderr":           deniedPush.stderr,
+		"git.remote.stdout":           allowedRemote.stdout + deniedRemote.stdout,
+		"git.remote.stderr":           allowedRemote.stderr + deniedRemote.stderr,
+		"forge.audit":                 forge.audit(),
+		"git.audit":                   string(mustRead(git.server.AuditPath)),
+		"server.stderr":               string(mustRead(forge.server.StderrPath)) + string(mustRead(git.server.StderrPath)),
+		"provider.argv":               string(mustRead(forge.providerArgvPath)),
+		"provider.stdin":              string(mustRead(forge.providerInputPath)),
+		"provider.stdout":             string(mustRead(forge.providerOutputPath)),
+		"provider.environment":        string(mustRead(forge.providerEnvPath)),
+		"provider.stderr":             string(mustRead(forge.providerStderrPath)),
+		"ssh.argv":                    string(mustRead(git.sshArgv)),
+		"ssh.environment":             string(mustRead(git.sshEnvironment)),
+		"ssh.upload.input":            string(mustRead(git.uploadInput)),
+		"ssh.receive.allowed":         allowedReceiveInput,
+		"ssh.receive.denied":          deniedReceiveInput,
+		"git.checkout.contents":       string(mustRead(filepath.Join(checkout, "pack.txt"))) + string(mustRead(filepath.Join(checkout, "allowed.txt"))) + string(mustRead(filepath.Join(checkout, "denied.txt"))) + string(mustRead(filepath.Join(giteaCheckout, "gitea.txt"))) + string(mustRead(filepath.Join(giteaCheckout, "allowed-push.txt"))) + string(mustRead(filepath.Join(giteaCheckout, "denied-push.txt"))),
+		"gitea.clone.stdout":          giteaClone.stdout,
+		"gitea.clone.stderr":          giteaClone.stderr,
+		"gitea.fetch.stdout":          giteaFetch.stdout,
+		"gitea.fetch.stderr":          giteaFetch.stderr,
+		"gitea.allowed.stdout":        giteaAllowedPush.stdout,
+		"gitea.allowed.stderr":        giteaAllowedPush.stderr,
+		"gitea.denied.stdout":         giteaDeniedPush.stdout,
+		"gitea.denied.stderr":         giteaDeniedPush.stderr,
+		"gitea.remote.stdout":         giteaAllowedRemote.stdout + giteaDeniedRemote.stdout,
+		"gitea.remote.stderr":         giteaAllowedRemote.stderr + giteaDeniedRemote.stderr,
+		"gitea.upload.input":          string(mustRead(git.giteaUploadInput)),
+		"gitea.receive.allowed.input": giteaAllowedReceiveInput,
+		"gitea.receive.denied.input":  giteaDeniedReceiveInput,
 	}
 	assertAuditInvocations(t, channels["forge.audit"], forgeAuditExpectations(
 		"github.issue_list", "github.issue_create", "github.issue_comment",
 	), auditLeakMarkers())
-	gitForbidden := append(auditLeakMarkers(), allowedContentMarker, deniedContentMarker)
+	gitForbidden := append(auditLeakMarkers(), allowedContentMarker, deniedContentMarker, giteaAllowedContentMarker, giteaDeniedContentMarker)
 	gitExpectations := gitAuditExpectations("refs/heads/"+allowedUpdateMarker, "refs/heads/"+deniedUpdateMarker)
-	gitExpectations = append(gitExpectations, giteaUploadAuditExpectations()...)
+	gitExpectations = append(gitExpectations, giteaControlledPushAuditExpectations(giteaAllowedRef, giteaDeniedRef)...)
 	assertAuditInvocations(t, channels["git.audit"], gitExpectations, gitForbidden)
 	allowed := map[string]map[string]bool{
-		agentToken:              {},
-		providerCredential:      {"provider.environment": true},
-		giteaCredential:         {},
-		ambientGHCredential:     {},
-		ambientGitHubCredential: {},
-		environmentMarker:       {},
-		issueBodyMarker:         {"forge.client.stdout": true, "provider.stdin": true, "provider.stdout": true},
-		commentMarker:           {"provider.stdin": true, "provider.stdout": true},
-		packMarker:              {"git.checkout.contents": true},
-		allowedContentMarker:    {"git.checkout.contents": true, "git.remote.stdout": true},
-		deniedContentMarker:     {"git.checkout.contents": true},
-		allowedUpdateMarker:     {"git.allowed.stderr": true, "git.audit": true, "ssh.receive.allowed": true},
-		deniedUpdateMarker:      {"git.audit": true, "git.remote.stderr": true},
-		providerStderr:          {"provider.stderr": true},
-		argvMarker:              {"provider.argv": true},
-		sshStderrMarker:         {},
+		agentToken:                {},
+		providerCredential:        {"provider.environment": true},
+		giteaCredential:           {},
+		ambientGHCredential:       {},
+		ambientGitHubCredential:   {},
+		environmentMarker:         {},
+		issueBodyMarker:           {"forge.client.stdout": true, "provider.stdin": true, "provider.stdout": true},
+		commentMarker:             {"provider.stdin": true, "provider.stdout": true},
+		packMarker:                {"git.checkout.contents": true},
+		allowedContentMarker:      {"git.checkout.contents": true, "git.remote.stdout": true},
+		deniedContentMarker:       {"git.checkout.contents": true},
+		giteaAllowedContentMarker: {"git.checkout.contents": true, "gitea.remote.stdout": true},
+		giteaDeniedContentMarker:  {"git.checkout.contents": true},
+		allowedUpdateMarker:       {"git.allowed.stderr": true, "git.audit": true, "ssh.receive.allowed": true},
+		deniedUpdateMarker:        {"git.audit": true, "git.remote.stderr": true},
+		providerStderr:            {"provider.stderr": true},
+		argvMarker:                {"provider.argv": true},
+		sshStderrMarker:           {},
 	}
 	for marker, intended := range allowed {
 		locations := markerLocations(channels, marker)

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,6 +19,8 @@ import (
 
 // PinnedGiteaImage is the interoperability image certified by the Git test.
 const PinnedGiteaImage = "docker.gitea.com/gitea:1.27.2@sha256:d20286ca2b2e170fdf628e7231b8a31a3220ade39ff462b55041d43d1fc757dd"
+
+var gitObjectID = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // Gitea exposes only the non-secret coordinates needed by integration tests.
 type Gitea struct {
@@ -118,6 +121,46 @@ func (fixture *Gitea) Update(t testing.TB, filename, contents string) string {
 	runGit(t, work, fixture.gitEnvironment(), "commit", "-m", "update fixture")
 	runGit(t, work, fixture.gitEnvironment(), "push", "origin", "main")
 	return strings.TrimSpace(runGit(t, work, fixture.gitEnvironment(), "rev-parse", "HEAD"))
+}
+
+// Ref returns the exact object ID for a branch ref, if it exists.
+func (fixture *Gitea) Ref(t testing.TB, ref string) (string, bool) {
+	t.Helper()
+	if !strings.HasPrefix(ref, "refs/heads/") {
+		t.Fatalf("Gitea ref must be a branch ref")
+	}
+	command := exec.Command("git", "ls-remote", "--refs", fixture.remoteURL(), ref)
+	command.Env = fixture.gitEnvironment()
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("lookup Gitea ref: %v", err)
+	}
+	oid, found, err := parseLSRemoteRef(string(output), ref)
+	if err != nil {
+		t.Fatalf("parse Gitea ref lookup: %v", err)
+	}
+	return oid, found
+}
+
+func parseLSRemoteRef(output, ref string) (string, bool, error) {
+	var match string
+	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) != 2 || !gitObjectID.MatchString(fields[0]) {
+			return "", false, fmt.Errorf("malformed ls-remote output")
+		}
+		if fields[1] != ref {
+			continue
+		}
+		if match != "" {
+			return "", false, fmt.Errorf("duplicate ref in ls-remote output")
+		}
+		match = fields[0]
+	}
+	return match, match != "", nil
 }
 
 // StartSSHAccess creates verified known-host state and a private ssh-agent.
