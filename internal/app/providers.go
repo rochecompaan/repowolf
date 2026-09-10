@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	giteasdk "code.gitea.io/sdk/gitea"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/credentials"
 	providergithub "github.com/rochecompaan/repowolf/internal/provider/github"
@@ -17,7 +18,10 @@ type providerInstance struct {
 	token    string
 	legacy   bool
 	github   server.GitHubExecutor
+	gitea    *giteasdk.Client
 }
+
+type giteaClientConstructor func(config.Provider, string) (*giteasdk.Client, error)
 
 func buildProviderInstances(
 	cfg config.Config,
@@ -25,6 +29,7 @@ func buildProviderInstances(
 	tools runner.Toolset,
 	tokenFreeEnvironment []string,
 	caller providergithub.Caller,
+	newGiteaClient giteaClientConstructor,
 ) (map[string]providerInstance, error) {
 	instances := make(map[string]providerInstance, len(cfg.Providers))
 	for _, id := range sortedProviderIDs(cfg.Providers) {
@@ -53,7 +58,11 @@ func buildProviderInstances(
 			}
 			instance.github = adapter
 		case config.ProviderGitea:
-			// Issue 4 constructs the Gitea SDK client.
+			client, err := newGiteaClient(provider, token)
+			if err != nil {
+				return nil, fmt.Errorf("create Gitea provider %q: %w", id, err)
+			}
+			instance.gitea = client
 		default:
 			return nil, fmt.Errorf("create provider %q: unsupported kind", id)
 		}
