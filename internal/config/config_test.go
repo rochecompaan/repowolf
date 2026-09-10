@@ -24,6 +24,9 @@ func TestDecodeFixturesAndDefaults(t *testing.T) {
 	if cfg.Providers["github"].SSHPort != 22 {
 		t.Fatalf("SSHPort = %d, want 22", cfg.Providers["github"].SSHPort)
 	}
+	if cfg.Providers["github"].CAFile != "" {
+		t.Fatalf("CAFile = %q, want omitted", cfg.Providers["github"].CAFile)
+	}
 	if got, want := cfg.Repositories["sample-project"].Git.DenyRefs, []string{"refs/heads/main"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("default DenyRefs = %v, want %v", got, want)
 	}

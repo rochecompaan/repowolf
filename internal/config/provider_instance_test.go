@@ -118,6 +118,88 @@ func TestDecodeDistinguishesRootMergedProviderTokenEnvironmentStates(t *testing.
 	}
 }
 
+func TestDecodeDistinguishesProviderCAFileStates(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		caLine     string
+		wantCAFile string
+		wantError  bool
+	}{
+		{name: "omitted"},
+		{name: "non-empty", caLine: "    caFile: /run/gitea-ca.pem\n", wantCAFile: "/run/gitea-ca.pem"},
+		{name: "empty", caLine: "    caFile: \"\"\n", wantError: true},
+		{name: "null", caLine: "    caFile: null\n", wantError: true},
+		{name: "non-string", caLine: "    caFile: 7\n", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			yaml := providerYAML("gitea", "    tokenEnv: REPOWOLF_TOKEN_GITEA\n"+test.caLine)
+			cfg, err := Decode(strings.NewReader(yaml))
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "caFile") {
+					t.Fatalf("Decode() error = %v, want caFile error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cfg.Providers["provider"].CAFile; got != test.wantCAFile {
+				t.Fatalf("CAFile = %q, want %q", got, test.wantCAFile)
+			}
+		})
+	}
+}
+
+func TestDecodeDistinguishesMergedProviderCAFileStates(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		merged    string
+		direct    string
+		want      string
+		wantError bool
+	}{
+		{name: "merge-only", merged: "/merged.pem", want: "/merged.pem"},
+		{name: "direct-over-merge", merged: "/merged.pem", direct: "    caFile: /direct.pem\n", want: "/direct.pem"},
+		{name: "merged-null", merged: "null", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			yaml := mergedProviderYAML("REPOWOLF_TOKEN_GITHUB", test.direct)
+			yaml = strings.Replace(yaml, "      tokenEnv: REPOWOLF_TOKEN_GITHUB\n", "      tokenEnv: REPOWOLF_TOKEN_GITEA\n      caFile: "+test.merged+"\n", 1)
+			yaml = strings.Replace(yaml, "      kind: github", "      kind: gitea", 1)
+			cfg, err := Decode(strings.NewReader(yaml))
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "caFile") {
+					t.Fatalf("Decode() error = %v, want caFile error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cfg.Providers["provider"].CAFile; got != test.want {
+				t.Fatalf("CAFile = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestValidateProviderCAFileRules(t *testing.T) {
+	cfg := validConfig()
+	provider := cfg.Providers["github"]
+	provider.CAFile = "/ca.pem"
+	cfg.Providers["github"] = provider
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "github") || !strings.Contains(err.Error(), "caFile") {
+		t.Fatalf("Validate() error = %v, want provider ID and caFile", err)
+	}
+
+	provider.Kind = ProviderGitea
+	provider.TokenEnv = "REPOWOLF_TOKEN_GITEA"
+	cfg.Providers["github"] = provider
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() rejected Gitea caFile: %v", err)
+	}
+}
+
 func TestValidateProviderTokenEnvironmentRules(t *testing.T) {
 	for _, test := range []struct {
 		name      string

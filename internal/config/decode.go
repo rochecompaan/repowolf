@@ -28,6 +28,7 @@ type rawProvider struct {
 	SSHUser  string            `yaml:"sshUser"`
 	SSHPort  *uint16           `yaml:"sshPort"`
 	TokenEnv rawOptionalString `yaml:"tokenEnv"`
+	CAFile   rawCAFile         `yaml:"caFile"`
 }
 
 type rawOptionalString struct {
@@ -39,6 +40,17 @@ func (value *rawOptionalString) UnmarshalYAML(node *yaml.Node) error {
 	value.present = true
 	if node.Tag != "!!str" {
 		return fmt.Errorf("tokenEnv must be a string")
+	}
+	value.value = node.Value
+	return nil
+}
+
+type rawCAFile rawOptionalString
+
+func (value *rawCAFile) UnmarshalYAML(node *yaml.Node) error {
+	value.present = true
+	if node.Tag != "!!str" {
+		return fmt.Errorf("caFile must be a string")
 	}
 	value.value = node.Value
 	return nil
@@ -122,7 +134,7 @@ func rejectDuplicateKeys(data []byte) error {
 	if err := duplicateKey(&document); err != nil {
 		return err
 	}
-	if err := rejectNullProviderTokenEnv(&document); err != nil {
+	if err := rejectNullProviderFields(&document); err != nil {
 		return err
 	}
 	var second yaml.Node
@@ -135,7 +147,7 @@ func rejectDuplicateKeys(data []byte) error {
 	return nil
 }
 
-func rejectNullProviderTokenEnv(document *yaml.Node) error {
+func rejectNullProviderFields(document *yaml.Node) error {
 	// yaml.v3 bypasses UnmarshalYAML for explicit null values.
 	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
 		return nil
@@ -152,9 +164,11 @@ func rejectNullProviderTokenEnv(document *yaml.Node) error {
 		return nil
 	}
 	for providerIndex := 1; providerIndex < len(providers.Content); providerIndex += 2 {
-		value, ok := effectiveMappingValue(providers.Content[providerIndex], "tokenEnv", make(map[*yaml.Node]struct{}))
-		if ok && isNullNode(value) {
-			return fmt.Errorf("tokenEnv must be a string")
+		for _, field := range []string{"tokenEnv", "caFile"} {
+			value, ok := effectiveMappingValue(providers.Content[providerIndex], field, make(map[*yaml.Node]struct{}))
+			if ok && isNullNode(value) {
+				return fmt.Errorf("%s must be a string", field)
+			}
 		}
 	}
 	return nil
@@ -271,11 +285,14 @@ func normalize(raw rawConfig) (Config, error) {
 		if provider.TokenEnv.present && provider.TokenEnv.value == "" {
 			return Config{}, fmt.Errorf("provider %q tokenEnv must not be empty", id)
 		}
+		if provider.CAFile.present && provider.CAFile.value == "" {
+			return Config{}, fmt.Errorf("provider %q caFile must not be empty", id)
+		}
 		port := uint16(defaultSSHPort)
 		if provider.SSHPort != nil {
 			port = *provider.SSHPort
 		}
-		cfg.Providers[id] = Provider{Kind: provider.Kind, APIHost: provider.APIHost, GitHost: provider.GitHost, SSHUser: provider.SSHUser, SSHPort: port, TokenEnv: provider.TokenEnv.value}
+		cfg.Providers[id] = Provider{Kind: provider.Kind, APIHost: provider.APIHost, GitHost: provider.GitHost, SSHUser: provider.SSHUser, SSHPort: port, TokenEnv: provider.TokenEnv.value, CAFile: provider.CAFile.value}
 	}
 	for id, repository := range raw.Repositories {
 		policy := defaultPushPolicy()
