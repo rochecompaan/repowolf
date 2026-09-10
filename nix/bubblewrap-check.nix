@@ -9,12 +9,12 @@ let
     ];
   };
 in
-pkgs.buildGoModule {
+pkgs.buildGo126Module {
   pname = "repowolf-bubblewrap-check";
   version = "dev";
 
   src = pkgs.lib.cleanSource ../.;
-  vendorHash = "sha256-gTntGkqO04KwcyrJi3jNVwNAevKQddTGU3npLupIWik=";
+  vendorHash = "sha256-CHlDZegb+zk6UmpYmDKZUOdJ6Vs2UKnVbhMJqaULoTg=";
 
   nativeCheckInputs = [
     pkgs.bubblewrap

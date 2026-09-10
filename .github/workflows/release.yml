@@ -27,6 +27,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Confirm Go 1.26
+        run: go env GOVERSION | grep -Eq '^go1\.26([.]|$)'
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
       - name: Confirm native architecture
         run: test "$(go env GOARCH)" = "${{ matrix.arch }}"
@@ -45,6 +47,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
+      - name: Confirm Nix Go 1.26
+        run: nix develop -c sh -c "go env GOVERSION | grep -Eq '^go1[.]26([.]|$)'"
       - name: Publish binary archives and checksums
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

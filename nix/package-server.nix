@@ -1,11 +1,11 @@
-{ lib, buildGoModule }:
+{ lib, buildGo126Module }:
 
-buildGoModule {
+buildGo126Module {
   pname = "repowolf";
   version = "dev";
 
   src = lib.cleanSource ../.;
-  vendorHash = "sha256-gTntGkqO04KwcyrJi3jNVwNAevKQddTGU3npLupIWik=";
+  vendorHash = "sha256-CHlDZegb+zk6UmpYmDKZUOdJ6Vs2UKnVbhMJqaULoTg=";
 
   subPackages = [ "cmd/repowolf" ];
   env.CGO_ENABLED = "0";

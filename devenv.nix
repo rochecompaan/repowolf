@@ -5,7 +5,7 @@ let
 in
 {
   packages = [
-    pkgs.go
+    pkgs.go_1_26
     pkgs.goreleaser
     pkgs.shellcheck
     pkgs.skopeo
