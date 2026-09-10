@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -38,6 +39,11 @@ func normalizeAuthority(host, port string) (authority, error) {
 	if port == "" {
 		port = "443"
 	}
+	portNumber, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || portNumber == 0 {
+		return authority{}, fmt.Errorf("%w: invalid port", ErrAuthority)
+	}
+	port = strconv.FormatUint(portNumber, 10)
 	if address, err := netip.ParseAddr(host); err == nil {
 		host = address.String()
 	} else {
