@@ -194,6 +194,27 @@ func TestDecodeRejectsNullProviderFieldsFromProviderMapMerge(t *testing.T) {
 	}
 }
 
+func TestDecodeDirectProviderMapEntryOverridesMergedNull(t *testing.T) {
+	yaml := strings.Replace(providerMapMergedYAML("caFile"), "providers:\n  <<: *providerMap\n", `providers:
+  <<: *providerMap
+  provider:
+    kind: gitea
+    apiHost: direct.gitea.example.com
+    gitHost: direct.gitea.example.com
+    sshUser: git
+    tokenEnv: REPOWOLF_TOKEN_DIRECT_GITEA
+    caFile: /run/direct-gitea-ca.pem
+`, 1)
+	cfg, err := Decode(strings.NewReader(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := cfg.Providers["provider"]
+	if provider.APIHost != "direct.gitea.example.com" || provider.CAFile != "/run/direct-gitea-ca.pem" {
+		t.Fatalf("direct provider override = %#v", provider)
+	}
+}
+
 func TestValidateProviderCAFileRules(t *testing.T) {
 	cfg := validConfig()
 	provider := cfg.Providers["github"]

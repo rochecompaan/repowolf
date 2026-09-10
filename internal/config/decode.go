@@ -149,43 +149,67 @@ func rejectDuplicateKeys(data []byte) error {
 
 func rejectNullProviderFields(document *yaml.Node) error {
 	// yaml.v3 bypasses UnmarshalYAML for explicit null values.
-	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+	if len(document.Content) == 0 {
 		return nil
 	}
-	root := document.Content[0]
-	providers, ok := effectiveMappingValue(root, "providers", make(map[*yaml.Node]struct{}))
+	root, err := resolveEffectiveMapping(document.Content[0])
+	if err != nil {
+		return err
+	}
+	providers, ok := effectiveMappingValue(root, "providers")
 	if !ok {
 		return nil
 	}
-	for providers != nil && providers.Kind == yaml.AliasNode {
-		providers = providers.Alias
+	providerEntries, err := resolveEffectiveMapping(providers)
+	if err != nil {
+		return err
 	}
-	if providers == nil || providers.Kind != yaml.MappingNode {
-		return nil
-	}
-	return forEachEffectiveMappingValue(providers, make(map[*yaml.Node]struct{}), make(map[string]struct{}), func(provider *yaml.Node) error {
+	for _, provider := range providerEntries {
+		fields, err := resolveEffectiveMapping(provider.value)
+		if err != nil {
+			return err
+		}
 		for _, field := range []string{"tokenEnv", "caFile"} {
-			value, ok := effectiveMappingValue(provider, field, make(map[*yaml.Node]struct{}))
+			value, ok := effectiveMappingValue(fields, field)
 			if ok && isNullNode(value) {
 				return fmt.Errorf("%s must be a string", field)
 			}
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
-func forEachEffectiveMappingValue(node *yaml.Node, active map[*yaml.Node]struct{}, seen map[string]struct{}, visit func(*yaml.Node) error) error {
+type effectiveMappingEntry struct {
+	key   string
+	value *yaml.Node
+}
+
+func resolveEffectiveMapping(node *yaml.Node) ([]effectiveMappingEntry, error) {
+	var entries []effectiveMappingEntry
+	err := collectEffectiveMapping(node, false, make(map[*yaml.Node]struct{}), make(map[string]struct{}), &entries)
+	return entries, err
+}
+
+func collectEffectiveMapping(node *yaml.Node, allowSequence bool, active map[*yaml.Node]struct{}, seen map[string]struct{}, entries *[]effectiveMappingEntry) error {
 	if node == nil {
 		return nil
 	}
 	if _, exists := active[node]; exists {
-		return nil
+		return fmt.Errorf("cyclic YAML alias")
 	}
 	active[node] = struct{}{}
 	defer delete(active, node)
 
 	if node.Kind == yaml.AliasNode {
-		return forEachEffectiveMappingValue(node.Alias, active, seen, visit)
+		return collectEffectiveMapping(node.Alias, allowSequence, active, seen, entries)
+	}
+	if node.Kind == yaml.SequenceNode && allowSequence {
+		for _, mapping := range node.Content {
+			if err := collectEffectiveMapping(mapping, false, active, seen, entries); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	if node.Kind != yaml.MappingNode {
 		return nil
@@ -200,71 +224,23 @@ func forEachEffectiveMappingValue(node *yaml.Node, active map[*yaml.Node]struct{
 			continue
 		}
 		seen[key.Value] = struct{}{}
-		if err := visit(value); err != nil {
-			return err
-		}
+		*entries = append(*entries, effectiveMappingEntry{key: key.Value, value: value})
 	}
 	for index := 0; index < len(node.Content); index += 2 {
 		key, value := node.Content[index], node.Content[index+1]
-		if !isMergeKey(key) {
-			continue
-		}
-		if value.Kind == yaml.SequenceNode {
-			for _, mapping := range value.Content {
-				if err := forEachEffectiveMappingValue(mapping, active, seen, visit); err != nil {
-					return err
-				}
+		if isMergeKey(key) {
+			if err := collectEffectiveMapping(value, true, active, seen, entries); err != nil {
+				return err
 			}
-			continue
-		}
-		if err := forEachEffectiveMappingValue(value, active, seen, visit); err != nil {
-			return err
 		}
 	}
 	return nil
 }
 
-func effectiveMappingValue(node *yaml.Node, field string, active map[*yaml.Node]struct{}) (*yaml.Node, bool) {
-	if node == nil {
-		return nil, false
-	}
-	if _, exists := active[node]; exists {
-		return nil, false
-	}
-	active[node] = struct{}{}
-	defer delete(active, node)
-
-	if node.Kind == yaml.AliasNode {
-		return effectiveMappingValue(node.Alias, field, active)
-	}
-	if node.Kind != yaml.MappingNode {
-		return nil, false
-	}
-
-	var merge *yaml.Node
-	for index := 0; index < len(node.Content); index += 2 {
-		key, value := node.Content[index], node.Content[index+1]
-		if isMergeKey(key) {
-			merge = value
-			continue
-		}
-		if key.Value == field {
-			return value, true
-		}
-	}
-	return mergedMappingValue(merge, field, active)
-}
-
-func mergedMappingValue(node *yaml.Node, field string, active map[*yaml.Node]struct{}) (*yaml.Node, bool) {
-	if node == nil {
-		return nil, false
-	}
-	if node.Kind != yaml.SequenceNode {
-		return effectiveMappingValue(node, field, active)
-	}
-	for _, mapping := range node.Content {
-		if value, ok := effectiveMappingValue(mapping, field, active); ok {
-			return value, true
+func effectiveMappingValue(entries []effectiveMappingEntry, field string) (*yaml.Node, bool) {
+	for _, entry := range entries {
+		if entry.key == field {
+			return entry.value, true
 		}
 	}
 	return nil, false
