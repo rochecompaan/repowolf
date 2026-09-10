@@ -183,6 +183,17 @@ func TestDecodeDistinguishesMergedProviderCAFileStates(t *testing.T) {
 	}
 }
 
+func TestDecodeRejectsNullProviderFieldsFromProviderMapMerge(t *testing.T) {
+	for _, field := range []string{"caFile", "tokenEnv"} {
+		t.Run(field, func(t *testing.T) {
+			_, err := Decode(strings.NewReader(providerMapMergedYAML(field)))
+			if err == nil || !strings.Contains(err.Error(), field) {
+				t.Fatalf("Decode() error = %v, want %s error", err, field)
+			}
+		})
+	}
+}
+
 func TestValidateProviderCAFileRules(t *testing.T) {
 	cfg := validConfig()
 	provider := cfg.Providers["github"]
@@ -405,6 +416,53 @@ providers:
       sshUser: git
       tokenEnv: ` + mergedValue + `
 ` + tokenLine + `repositories:
+  sample-project:
+    provider: provider
+    owner: alpha
+    name: sample-project
+    git:
+      denyDeletes: true
+      maxRefUpdates: 16
+principals:
+  agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_AGENT
+    grants:
+      - repository: sample-project
+        capabilities:
+          - repository:read
+          - git:read
+          - git:write
+`
+}
+
+func providerMapMergedYAML(nullField string) string {
+	kind := "gitea"
+	host := "gitea.example.com"
+	tokenEnv := "REPOWOLF_TOKEN_GITEA"
+	caFileLine := "      caFile: null\n"
+	if nullField == "tokenEnv" {
+		kind = "github"
+		host = "github.com"
+		tokenEnv = "null"
+		caFileLine = ""
+	}
+	return `<<:
+  providers: &providerMap
+    provider:
+      kind: ` + kind + `
+      apiHost: ` + host + `
+      gitHost: ` + host + `
+      sshUser: git
+      tokenEnv: ` + tokenEnv + `
+` + caFileLine + `apiVersion: repowolf.dev/v1alpha1
+listen: :8443
+tls:
+  certificate: /run/repowolf/tls.crt
+  privateKey: /run/repowolf/tls.key
+providers:
+  <<: *providerMap
+repositories:
   sample-project:
     provider: provider
     owner: alpha

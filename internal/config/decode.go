@@ -163,12 +163,62 @@ func rejectNullProviderFields(document *yaml.Node) error {
 	if providers == nil || providers.Kind != yaml.MappingNode {
 		return nil
 	}
-	for providerIndex := 1; providerIndex < len(providers.Content); providerIndex += 2 {
+	return forEachEffectiveMappingValue(providers, make(map[*yaml.Node]struct{}), make(map[string]struct{}), func(provider *yaml.Node) error {
 		for _, field := range []string{"tokenEnv", "caFile"} {
-			value, ok := effectiveMappingValue(providers.Content[providerIndex], field, make(map[*yaml.Node]struct{}))
+			value, ok := effectiveMappingValue(provider, field, make(map[*yaml.Node]struct{}))
 			if ok && isNullNode(value) {
 				return fmt.Errorf("%s must be a string", field)
 			}
+		}
+		return nil
+	})
+}
+
+func forEachEffectiveMappingValue(node *yaml.Node, active map[*yaml.Node]struct{}, seen map[string]struct{}, visit func(*yaml.Node) error) error {
+	if node == nil {
+		return nil
+	}
+	if _, exists := active[node]; exists {
+		return nil
+	}
+	active[node] = struct{}{}
+	defer delete(active, node)
+
+	if node.Kind == yaml.AliasNode {
+		return forEachEffectiveMappingValue(node.Alias, active, seen, visit)
+	}
+	if node.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	for index := 0; index < len(node.Content); index += 2 {
+		key, value := node.Content[index], node.Content[index+1]
+		if isMergeKey(key) {
+			continue
+		}
+		if _, exists := seen[key.Value]; exists {
+			continue
+		}
+		seen[key.Value] = struct{}{}
+		if err := visit(value); err != nil {
+			return err
+		}
+	}
+	for index := 0; index < len(node.Content); index += 2 {
+		key, value := node.Content[index], node.Content[index+1]
+		if !isMergeKey(key) {
+			continue
+		}
+		if value.Kind == yaml.SequenceNode {
+			for _, mapping := range value.Content {
+				if err := forEachEffectiveMappingValue(mapping, active, seen, visit); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if err := forEachEffectiveMappingValue(value, active, seen, visit); err != nil {
+			return err
 		}
 	}
 	return nil
