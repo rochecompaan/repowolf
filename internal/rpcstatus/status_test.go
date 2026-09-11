@@ -25,6 +25,8 @@ func TestErrorMapsDomainFailuresToStableStatuses(t *testing.T) {
 		{"invalid", policy.ErrRefPolicy, codes.InvalidArgument, "invalid request"},
 		{"unsupported", rpcstatus.ErrUnsupported, codes.Unimplemented, "unsupported operation"},
 		{"repository", rpcstatus.ErrRepositoryUnavailable, codes.Unavailable, "repository unavailable"},
+		{"not found", rpcstatus.ErrNotFound, codes.NotFound, "not found"},
+		{"issue kind", rpcstatus.ErrIssueKind, codes.FailedPrecondition, "index is a pull request; use tea pulls"},
 		{"provider", runner.ErrCommandFailed, codes.Unavailable, "provider failure"},
 		{"provider sentinel", rpcstatus.ErrProviderFailure, codes.Unavailable, "provider failure"},
 		{"deadline", context.DeadlineExceeded, codes.DeadlineExceeded, "deadline exceeded"},
@@ -47,8 +49,13 @@ func TestErrorMapsDomainFailuresToStableStatuses(t *testing.T) {
 }
 
 func TestErrorSanitizesExistingGRPCStatus(t *testing.T) {
-	err := rpcstatus.Error(status.Error(codes.PermissionDenied, "repository secret-repo exists"))
-	if status.Code(err) != codes.PermissionDenied || status.Convert(err).Message() != "permission denied" {
-		t.Fatalf("Error() = %v", err)
+	for _, test := range []struct {
+		code codes.Code
+		want string
+	}{{codes.PermissionDenied, "permission denied"}, {codes.NotFound, "not found"}, {codes.FailedPrecondition, "operation precondition failed"}} {
+		err := rpcstatus.Error(status.Error(test.code, "repository secret-repo exists"))
+		if status.Code(err) != test.code || status.Convert(err).Message() != test.want {
+			t.Fatalf("Error() = %v", err)
+		}
 	}
 }

@@ -17,6 +17,8 @@ var (
 	ErrUnsupported           = errors.New("unsupported operation")
 	ErrRepositoryUnavailable = errors.New("repository unavailable")
 	ErrProviderFailure       = errors.New("provider failure")
+	ErrNotFound              = errors.New("not found")
+	ErrIssueKind             = errors.New("issue kind mismatch")
 	ErrResourceExhausted     = errors.New("resource exhausted")
 	ErrServiceUnavailable    = errors.New("service unavailable")
 )
@@ -47,6 +49,10 @@ func mapDomainError(err error) error {
 		return status.Error(codes.Unimplemented, "unsupported operation")
 	case errors.Is(err, ErrRepositoryUnavailable):
 		return status.Error(codes.Unavailable, "repository unavailable")
+	case errors.Is(err, ErrNotFound):
+		return status.Error(codes.NotFound, "not found")
+	case errors.Is(err, ErrIssueKind):
+		return status.Error(codes.FailedPrecondition, "index is a pull request; use tea pulls")
 	case errors.Is(err, context.DeadlineExceeded):
 		return status.Error(codes.DeadlineExceeded, "deadline exceeded")
 	case errors.Is(err, context.Canceled):
@@ -76,6 +82,10 @@ func canonical(code codes.Code) error {
 		return status.Error(code, "unsupported operation")
 	case codes.Unavailable:
 		return status.Error(code, "service unavailable")
+	case codes.NotFound:
+		return status.Error(code, "not found")
+	case codes.FailedPrecondition:
+		return status.Error(code, "operation precondition failed")
 	case codes.DeadlineExceeded:
 		return status.Error(code, "deadline exceeded")
 	case codes.ResourceExhausted:
