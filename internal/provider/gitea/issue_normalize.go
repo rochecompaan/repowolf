@@ -22,7 +22,7 @@ type normalizedIssue struct {
 
 func validProviderString(v string) bool { return utf8.ValidString(v) && !strings.ContainsRune(v, 0) }
 func normalizeIssue(v *sdk.Issue, owner, repo string) (*normalizedIssue, error) {
-	if v == nil || v.PullRequest != nil || v.Index <= 0 || v.Poster == nil || v.Poster.ID <= 0 || v.Comments < 0 || v.Repository == nil || v.Repository.Owner != owner || v.Repository.Name != repo {
+	if v == nil || v.PullRequest != nil || v.Index <= 0 || v.Poster == nil || v.Poster.ID <= 0 || v.Comments < 0 || v.Repository == nil || v.Repository.Owner != owner || v.Repository.Name != repo || v.Repository.FullName != owner+"/"+repo {
 		return nil, fmt.Errorf("invalid issue")
 	}
 	state := repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_UNSPECIFIED

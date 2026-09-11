@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -104,7 +105,15 @@ func renderIssueView(parsed command, result *repowolfv1.GiteaIssueViewResult) ([
 			continue
 		}
 		name, _ := issueFieldName(field)
-		v, p, e := issueFieldValue(result.Issue, field)
+		var v any
+		var p bool
+		var e error
+		if field == repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_COMMENTS {
+			v, e = renderedComments(result.Issue.Comments)
+			p = true
+		} else {
+			v, p, e = issueFieldValue(result.Issue, field)
+		}
 		if e != nil {
 			return nil, e
 		}
@@ -161,10 +170,16 @@ func validateProjectedIssue(issue *repowolfv1.GiteaIssueRecord, fields []repowol
 	if issue == nil || issue.Index <= 0 || issue.State != repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_OPEN && issue.State != repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_CLOSED || issue.Kind != repowolfv1.GiteaIssueKind_GITEA_ISSUE_KIND_ISSUE {
 		return fmt.Errorf("invalid issue identity")
 	}
+	selectedCreated, selectedUpdated := false, false
 	for _, f := range fields {
 		if _, _, e := issueFieldValue(issue, f); e != nil {
 			return e
 		}
+		selectedCreated = selectedCreated || f == repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_CREATED
+		selectedUpdated = selectedUpdated || f == repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_UPDATED
+	}
+	if selectedCreated && selectedUpdated && issue.Updated.AsTime().Before(issue.Created.AsTime()) {
+		return fmt.Errorf("invalid issue timestamp order")
 	}
 	return nil
 }
@@ -180,6 +195,9 @@ func validateIssueRecord(issue *repowolfv1.GiteaIssueRecord, commentsRequested b
 	}
 	if !commentsRequested && len(issue.Comments) > 0 {
 		return fmt.Errorf("unexpected comments")
+	}
+	if commentsRequested && issue.CommentCount != int64(len(issue.Comments)) {
+		return fmt.Errorf("incomplete comments")
 	}
 	var last int64
 	for _, c := range issue.Comments {
@@ -218,7 +236,7 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 		}
 		return nil, false, fmt.Errorf("invalid state")
 	case 3:
-		if i.Author == "" {
+		if i.Author == "" || !validOutputString(i.Author) {
 			return nil, false, fmt.Errorf("invalid author")
 		}
 		return i.Author, true, nil
@@ -228,16 +246,19 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 		}
 		return i.AuthorId, true, nil
 	case 5:
-		if i.Url == "" {
+		if i.Url == "" || !validOutputString(i.Url) {
 			return nil, false, fmt.Errorf("invalid url")
 		}
 		return i.Url, true, nil
 	case 6:
-		if i.Title == "" {
+		if i.Title == "" || !validOutputString(i.Title) {
 			return nil, false, fmt.Errorf("invalid title")
 		}
 		return i.Title, true, nil
 	case 7:
+		if !validOutputString(i.Body) {
+			return nil, false, fmt.Errorf("invalid body")
+		}
 		return i.Body, true, nil
 	case 8:
 		if !validTime(i.Created) {
@@ -258,13 +279,26 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 		}
 		return i.Deadline.AsTime().UTC().Format(time.RFC3339), true, nil
 	case 11:
+		for _, value := range i.Assignees {
+			if value == "" || !validOutputString(value) {
+				return nil, false, fmt.Errorf("invalid assignee")
+			}
+		}
 		return nonnil(i.Assignees), true, nil
 	case 12:
 		if i.Milestone == nil {
 			return nil, false, nil
 		}
+		if i.GetMilestone() == "" || !validOutputString(i.GetMilestone()) {
+			return nil, false, fmt.Errorf("invalid milestone")
+		}
 		return i.GetMilestone(), true, nil
 	case 13:
+		for _, value := range i.Labels {
+			if value == "" || !validOutputString(value) {
+				return nil, false, fmt.Errorf("invalid label")
+			}
+		}
 		return nonnil(i.Labels), true, nil
 	case 14:
 		if len(i.Comments) > 0 {
@@ -283,12 +317,12 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 		}
 		return i.CommentCount, true, nil
 	case 15:
-		if i.Repo == "" {
+		if !validPart(i.Repo) {
 			return nil, false, fmt.Errorf("invalid repo")
 		}
 		return i.Repo, true, nil
 	case 16:
-		if i.Owner == "" {
+		if !validPart(i.Owner) {
 			return nil, false, fmt.Errorf("invalid owner")
 		}
 		return i.Owner, true, nil
@@ -300,8 +334,23 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 	}
 	return nil, false, fmt.Errorf("invalid field")
 }
+func renderedComments(comments []*repowolfv1.GiteaCommentRecord) ([]json.RawMessage, error) {
+	values := make([]json.RawMessage, len(comments))
+	for i, comment := range comments {
+		fields, err := commentFields(comment)
+		if err != nil {
+			return nil, err
+		}
+		values[i], err = marshalOrderedObject(fields)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return values, nil
+}
+
 func commentFields(c *repowolfv1.GiteaCommentRecord) ([]orderedField, error) {
-	if c == nil || c.Id <= 0 || c.AuthorId <= 0 || c.Author == "" || c.Url == "" || !validTime(c.Created) || !validTime(c.Updated) || c.Updated.AsTime().Before(c.Created.AsTime()) {
+	if c == nil || c.Id <= 0 || c.AuthorId <= 0 || c.Author == "" || c.Url == "" || !validOutputString(c.Author) || !validOutputString(c.Url) || !validOutputString(c.Body) || !validTime(c.Created) || !validTime(c.Updated) || c.Updated.AsTime().Before(c.Created.AsTime()) {
 		return nil, fmt.Errorf("invalid comment")
 	}
 	return []orderedField{{"id", c.Id, true}, {"author", c.Author, true}, {"author-id", c.AuthorId, true}, {"url", c.Url, true}, {"created", c.Created.AsTime().UTC().Format(time.RFC3339), true}, {"updated", c.Updated.AsTime().UTC().Format(time.RFC3339), true}, {"body", c.Body, true}}, nil
@@ -351,6 +400,9 @@ func textValue(v any) string {
 	default:
 		return fmt.Sprint(x)
 	}
+}
+func validOutputString(value string) bool {
+	return utf8.ValidString(value) && !strings.ContainsRune(value, 0)
 }
 func nonnil(v []string) []string {
 	if v == nil {

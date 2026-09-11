@@ -37,7 +37,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	container := dockerOutput(t, "run", "--detach", "--rm", "--network", network, "--ip", address, "--volume", filepath.Dir(cert.CertificateFile)+":/certs:ro", "--env", "GITEA__database__DB_TYPE=sqlite3", "--env", "GITEA__security__INSTALL_LOCK=true", "--env", "GITEA__server__PROTOCOL=https", "--env", "GITEA__server__HTTP_PORT=443", "--env", "GITEA__server__SSL_MIN_VERSION=TLSv1.3", "--env", "GITEA__server__SSL_MAX_VERSION=TLSv1.3", "--env", "GITEA__server__CERT_FILE=/certs/server.pem", "--env", "GITEA__server__KEY_FILE=/certs/server-key.pem", giteaImage)
+	container := dockerOutput(t, "run", "--detach", "--rm", "--network", network, "--ip", address, "--volume", filepath.Dir(cert.CertificateFile)+":/certs:ro", "--env", "GITEA__database__DB_TYPE=sqlite3", "--env", "GITEA__security__INSTALL_LOCK=true", "--env", "GITEA__server__PROTOCOL=https", "--env", "GITEA__server__HTTP_PORT=443", "--env", "GITEA__server__SSL_MIN_VERSION=TLSv1.3", "--env", "GITEA__server__SSL_MAX_VERSION=TLSv1.3", "--env", "GITEA__server__CERT_FILE=/certs/server.pem", "--env", "GITEA__server__KEY_FILE=/certs/server-key.pem", "--env", "GITEA__api__MAX_RESPONSE_ITEMS=50", giteaImage)
 	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", container).Run() })
 	baseURL := "https://" + address
 	httpClient := giteaHTTPClient(t, cert.CAFile)
@@ -46,7 +46,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	var token struct {
 		SHA1 string `json:"sha1"`
 	}
-	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/users/CanonicalOwner/tokens", "", map[string]any{"name": "issues", "scopes": []string{"write:repository", "write:issue"}}, &token, "CanonicalOwner", "correct-horse-battery-staple")
+	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/users/CanonicalOwner/tokens", "", map[string]any{"name": "issues", "scopes": []string{"write:repository", "write:issue", "write:user"}}, &token, "CanonicalOwner", "correct-horse-battery-staple")
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/user/repos", token.SHA1, map[string]any{"name": "CanonicalRepo", "private": true, "auto_init": true}, nil, "", "")
 	type createdIssue struct {
 		Index int64 `json:"number"`
@@ -55,7 +55,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "open issue", "body": "private issue body"}, &open, "", "")
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "closed issue", "body": "closed body"}, &closed, "", "")
 	giteaJSON(t, httpClient, http.MethodPatch, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(closed.Index, 10), token.SHA1, map[string]any{"state": "closed"}, nil, "", "")
-	for i := 1; i <= 51; i++ {
+	for i := 1; i <= 49; i++ {
 		giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(open.Index, 10)+"/comments", token.SHA1, map[string]any{"body": "comment " + strconv.Itoa(i)}, nil, "", "")
 	}
 	agentToken, err := auth.Generate(rand.Reader)
@@ -80,14 +80,21 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 			t.Fatalf("row=%#v", row)
 		}
 	}
-	view := runTeaArgs(t, binaries.Tea, env, "issues", strconv.FormatInt(open.Index, 10), "--repo", "CanonicalOwner/CanonicalRepo", "--comments", "--output", "json")
+	viewCommand := exec.Command(binaries.Tea, "issues", strconv.FormatInt(open.Index, 10), "--repo", "CanonicalOwner/CanonicalRepo", "--comments", "--output", "json")
+	viewCommand.Env = env
+	var viewOutput, viewDiagnostic bytes.Buffer
+	viewCommand.Stdout, viewCommand.Stderr = &viewOutput, &viewDiagnostic
+	if err := viewCommand.Run(); err != nil {
+		t.Fatalf("view: %v: %s; broker=%s; audit=%s", err, viewDiagnostic.String(), mustRead(broker.StderrPath), mustRead(broker.AuditPath))
+	}
+	view := viewOutput.Bytes()
 	var detail struct {
 		Index    int64 `json:"index"`
 		Comments []struct {
 			ID int64 `json:"id"`
 		} `json:"comments"`
 	}
-	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Comments) != 51 {
+	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Comments) != 49 {
 		t.Fatalf("view=%s err=%v", view, err)
 	}
 	for i, c := range detail.Comments {

@@ -177,7 +177,7 @@ func (a *RepositoryAdapter) issueList(ctx context.Context, repository policy.Res
 		return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueList{IssueList: &repowolfv1.GiteaIssueListResult{Issues: []*repowolfv1.GiteaIssueRecord{}}}}, nil
 	}
 	states := map[repowolfv1.GiteaIssueState]sdk.StateType{1: sdk.StateOpen, 2: sdk.StateClosed, 3: sdk.StateAll}
-	opt := sdk.ListIssueOption{ListOptions: sdk.ListOptions{Page: int(r.Page), PageSize: int(r.Limit)}, State: states[r.State], Type: sdk.IssueTypeIssue, KeyWord: r.GetKeyword(), CreatedBy: r.GetAuthor(), AssignedBy: r.GetAssignee(), MentionedBy: r.GetMentions(), Owner: r.GetOwner()}
+	opt := sdk.ListIssueOption{ListOptions: sdk.ListOptions{Page: int(r.Page), PageSize: int(r.Limit)}, State: states[r.State], Type: sdk.IssueTypeIssue, KeyWord: r.GetKeyword(), CreatedBy: r.GetAuthor(), AssignedBy: r.GetAssignee(), MentionedBy: r.GetMentions(), Owner: canonicalOwnerFilter(r, owner)}
 	if r.From != nil {
 		opt.Since = r.From.AsTime()
 	}
@@ -230,6 +230,13 @@ func (a *RepositoryAdapter) issueView(ctx context.Context, repository policy.Res
 	}
 	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueView{IssueView: &repowolfv1.GiteaIssueViewResult{Issue: record}}}, nil
 }
+func canonicalOwnerFilter(request *repowolfv1.GiteaIssueListRequest, owner string) string {
+	if request.Owner != nil {
+		return owner
+	}
+	return ""
+}
+
 func classifyProviderError(ctx context.Context, err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err

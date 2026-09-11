@@ -35,7 +35,7 @@ func (f *fakeIssueAPI) ListIssueComments(_ context.Context, _, _ string, _ int64
 	return f.comments[o.Page], nil
 }
 func sdkIssue() *sdk.Issue {
-	return &sdk.Issue{Index: 7, Poster: &sdk.User{ID: 2, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7", Title: "title", State: sdk.StateOpen, Created: time.Unix(1, 0), Updated: time.Unix(2, 0), Repository: &sdk.RepositoryMeta{Owner: "Owner", Name: "Repo"}}
+	return &sdk.Issue{Index: 7, Poster: &sdk.User{ID: 2, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7", Title: "title", State: sdk.StateOpen, Created: time.Unix(1, 0), Updated: time.Unix(2, 0), Repository: &sdk.RepositoryMeta{Owner: "Owner", Name: "Repo", FullName: "Owner/Repo"}}
 }
 func issueResolved() policy.ResolvedRepository {
 	return policy.ResolvedRepository{Repository: config.Repository{Owner: "Owner", Name: "Repo"}}
