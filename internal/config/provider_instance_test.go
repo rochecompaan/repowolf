@@ -118,6 +118,149 @@ func TestDecodeDistinguishesRootMergedProviderTokenEnvironmentStates(t *testing.
 	}
 }
 
+func TestDecodeDistinguishesProviderCAFileStates(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		caLine     string
+		wantCAFile string
+		wantError  bool
+	}{
+		{name: "omitted"},
+		{name: "non-empty", caLine: "    caFile: /run/gitea-ca.pem\n", wantCAFile: "/run/gitea-ca.pem"},
+		{name: "empty", caLine: "    caFile: \"\"\n", wantError: true},
+		{name: "null", caLine: "    caFile: null\n", wantError: true},
+		{name: "non-string", caLine: "    caFile: 7\n", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			yaml := providerYAML("gitea", "    tokenEnv: REPOWOLF_TOKEN_GITEA\n"+test.caLine)
+			cfg, err := Decode(strings.NewReader(yaml))
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "caFile") {
+					t.Fatalf("Decode() error = %v, want caFile error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cfg.Providers["provider"].CAFile; got != test.wantCAFile {
+				t.Fatalf("CAFile = %q, want %q", got, test.wantCAFile)
+			}
+		})
+	}
+}
+
+func TestDecodeDistinguishesMergedProviderCAFileStates(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		merged    string
+		direct    string
+		want      string
+		wantError bool
+	}{
+		{name: "merge-only", merged: "/merged.pem", want: "/merged.pem"},
+		{name: "direct-over-merge", merged: "/merged.pem", direct: "    caFile: /direct.pem\n", want: "/direct.pem"},
+		{name: "merged-null", merged: "null", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			yaml := mergedProviderYAML("REPOWOLF_TOKEN_GITHUB", test.direct)
+			yaml = strings.Replace(yaml, "      tokenEnv: REPOWOLF_TOKEN_GITHUB\n", "      tokenEnv: REPOWOLF_TOKEN_GITEA\n      caFile: "+test.merged+"\n", 1)
+			yaml = strings.Replace(yaml, "      kind: github", "      kind: gitea", 1)
+			cfg, err := Decode(strings.NewReader(yaml))
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "caFile") {
+					t.Fatalf("Decode() error = %v, want caFile error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cfg.Providers["provider"].CAFile; got != test.want {
+				t.Fatalf("CAFile = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestDecodeRejectsNullProviderFieldsFromProviderMapMerge(t *testing.T) {
+	for _, field := range []string{"caFile", "tokenEnv"} {
+		t.Run(field, func(t *testing.T) {
+			_, err := Decode(strings.NewReader(providerMapMergedYAML(field)))
+			if err == nil || !strings.Contains(err.Error(), field) {
+				t.Fatalf("Decode() error = %v, want %s error", err, field)
+			}
+		})
+	}
+}
+
+func TestDecodeDirectProviderMapEntryOverridesMergedNull(t *testing.T) {
+	yaml := strings.Replace(providerMapMergedYAML("caFile"), "providers:\n  <<: *providerMap\n", `providers:
+  <<: *providerMap
+  provider:
+    kind: gitea
+    apiHost: direct.gitea.example.com
+    gitHost: direct.gitea.example.com
+    sshUser: git
+    tokenEnv: REPOWOLF_TOKEN_DIRECT_GITEA
+    caFile: /run/direct-gitea-ca.pem
+`, 1)
+	cfg, err := Decode(strings.NewReader(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := cfg.Providers["provider"]
+	if provider.APIHost != "direct.gitea.example.com" || provider.CAFile != "/run/direct-gitea-ca.pem" {
+		t.Fatalf("direct provider override = %#v", provider)
+	}
+}
+
+func TestValidProviderHostGrammar(t *testing.T) {
+	for _, test := range []struct {
+		host string
+		want bool
+	}{
+		{host: "gitea.example.com", want: true},
+		{host: "GITEA.EXAMPLE.COM", want: true},
+		{host: "127.0.0.1", want: true},
+		{host: "localhost", want: true},
+		{host: ""},
+		{host: "https://gitea.example.com"},
+		{host: "gitea.example.com:3000"},
+		{host: "user@gitea.example.com"},
+		{host: "gitea.example.com/path"},
+		{host: "gitea example.com"},
+		{host: "bad_label.example.com"},
+		{host: "-gitea.example.com"},
+		{host: "gitea-.example.com"},
+		{host: "gitea..example.com"},
+		{host: "2001:db8::1"},
+	} {
+		t.Run(test.host, func(t *testing.T) {
+			if got := ValidProviderHost(test.host); got != test.want {
+				t.Fatalf("ValidProviderHost(%q) = %v, want %v", test.host, got, test.want)
+			}
+		})
+	}
+}
+
+func TestValidateProviderCAFileRules(t *testing.T) {
+	cfg := validConfig()
+	provider := cfg.Providers["github"]
+	provider.CAFile = "/ca.pem"
+	cfg.Providers["github"] = provider
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "github") || !strings.Contains(err.Error(), "caFile") {
+		t.Fatalf("Validate() error = %v, want provider ID and caFile", err)
+	}
+
+	provider.Kind = ProviderGitea
+	provider.TokenEnv = "REPOWOLF_TOKEN_GITEA"
+	cfg.Providers["github"] = provider
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() rejected Gitea caFile: %v", err)
+	}
+}
+
 func TestValidateProviderTokenEnvironmentRules(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -323,6 +466,53 @@ providers:
       sshUser: git
       tokenEnv: ` + mergedValue + `
 ` + tokenLine + `repositories:
+  sample-project:
+    provider: provider
+    owner: alpha
+    name: sample-project
+    git:
+      denyDeletes: true
+      maxRefUpdates: 16
+principals:
+  agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_AGENT
+    grants:
+      - repository: sample-project
+        capabilities:
+          - repository:read
+          - git:read
+          - git:write
+`
+}
+
+func providerMapMergedYAML(nullField string) string {
+	kind := "gitea"
+	host := "gitea.example.com"
+	tokenEnv := "REPOWOLF_TOKEN_GITEA"
+	caFileLine := "      caFile: null\n"
+	if nullField == "tokenEnv" {
+		kind = "github"
+		host = "github.com"
+		tokenEnv = "null"
+		caFileLine = ""
+	}
+	return `<<:
+  providers: &providerMap
+    provider:
+      kind: ` + kind + `
+      apiHost: ` + host + `
+      gitHost: ` + host + `
+      sshUser: git
+      tokenEnv: ` + tokenEnv + `
+` + caFileLine + `apiVersion: repowolf.dev/v1alpha1
+listen: :8443
+tls:
+  certificate: /run/repowolf/tls.crt
+  privateKey: /run/repowolf/tls.key
+providers:
+  <<: *providerMap
+repositories:
   sample-project:
     provider: provider
     owner: alpha

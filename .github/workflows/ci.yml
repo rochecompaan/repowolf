@@ -18,6 +18,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Confirm Go 1.26
+        run: go env GOVERSION | grep -Eq '^go1\.26([.]|$)'
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
       - name: Lint Protobuf
         run: go tool buf lint
@@ -117,6 +119,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Confirm Go 1.26
+        run: go env GOVERSION | grep -Eq '^go1\.26([.]|$)'
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
       - name: Confirm native architecture
         run: test "$(go env GOARCH)" = "${{ matrix.arch }}"

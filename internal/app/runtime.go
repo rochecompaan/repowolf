@@ -14,6 +14,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/credentials"
 	"github.com/rochecompaan/repowolf/internal/gitservice"
 	"github.com/rochecompaan/repowolf/internal/policy"
+	providergitea "github.com/rochecompaan/repowolf/internal/provider/gitea"
 	"github.com/rochecompaan/repowolf/internal/runner"
 	"github.com/rochecompaan/repowolf/internal/server"
 	"github.com/rochecompaan/repowolf/internal/tlsconfig"
@@ -60,7 +61,7 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 	}
 	tokenFreeEnvironment := runner.TokenFreeEnvironment(os.Environ(), credentialSnapshot.EnvironmentNames())
 	providerRunner := &runner.Runner{}
-	instances, err := buildProviderInstances(cfg, credentialSnapshot, tools, tokenFreeEnvironment, providerRunner)
+	instances, err := buildProviderInstances(cfg, credentialSnapshot, tools, tokenFreeEnvironment, providerRunner, providergitea.New)
 	if err != nil {
 		return nil, fmt.Errorf("create provider instances: %w", err)
 	}

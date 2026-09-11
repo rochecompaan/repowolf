@@ -1,4 +1,5 @@
 .worktrees/
+dist/
 
 # Devenv
 .devenv*

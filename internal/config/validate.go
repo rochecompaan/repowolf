@@ -113,7 +113,10 @@ func validateProvider(id string, provider Provider) error {
 	} else if !tokenEnvName.MatchString(provider.TokenEnv) {
 		return fmt.Errorf("provider %q has invalid token environment name", id)
 	}
-	if !validHost(provider.APIHost) || !validHost(provider.GitHost) {
+	if provider.CAFile != "" && provider.Kind != ProviderGitea {
+		return fmt.Errorf("provider %q caFile is supported only for Gitea", id)
+	}
+	if !ValidProviderHost(provider.APIHost) || !ValidProviderHost(provider.GitHost) {
 		return fmt.Errorf("provider %q has invalid host", id)
 	}
 	if !sshUserName.MatchString(provider.SSHUser) {
@@ -310,7 +313,8 @@ func validateLimits(limits Limits) error {
 	return nil
 }
 
-func validHost(host string) bool {
+// ValidProviderHost reports whether host uses the host-only provider grammar.
+func ValidProviderHost(host string) bool {
 	if host == "" || len(host) > 253 || strings.ContainsAny(host, ":/@ ") {
 		return false
 	}
