@@ -1,0 +1,162 @@
+//go:build linux && gitea_integration
+
+package integration_test
+
+import (
+	"bytes"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/rochecompaan/repowolf/internal/auth"
+	"github.com/rochecompaan/repowolf/internal/testutil"
+)
+
+const giteaImage = "docker.gitea.com/gitea:1.27.2@sha256:d20286ca2b2e170fdf628e7231b8a31a3220ade39ff462b55041d43d1fc757dd"
+
+func TestRestrictedTeaRepositoryViewAgainstGitea(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Fatalf("Docker required for gitea_integration: %v", err)
+	}
+	work := t.TempDir()
+	giteaAddress := "172.29.9.2"
+	network := "repowolf-gitea-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	dockerOutput(t, "network", "create", "--subnet", "172.29.9.0/24", network)
+	t.Cleanup(func() { _ = exec.Command("docker", "network", "rm", network).Run() })
+	giteaCertificate := testutil.GenerateCertificateForIPs(t, filepath.Join(work, "gitea-cert"), []net.IP{net.ParseIP(giteaAddress)})
+	for _, path := range []string{giteaCertificate.CertificateFile, giteaCertificate.KeyFile} {
+		if err := os.Chmod(path, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	container := dockerOutput(t, "run", "--detach", "--rm", "--network", network, "--ip", giteaAddress, "--volume", filepath.Dir(giteaCertificate.CertificateFile)+":/certs:ro", "--env", "GITEA__database__DB_TYPE=sqlite3", "--env", "GITEA__security__INSTALL_LOCK=true", "--env", "GITEA__server__PROTOCOL=https", "--env", "GITEA__server__HTTP_PORT=443", "--env", "GITEA__server__SSL_MIN_VERSION=TLSv1.3", "--env", "GITEA__server__SSL_MAX_VERSION=TLSv1.3", "--env", "GITEA__server__CERT_FILE=/certs/server.pem", "--env", "GITEA__server__KEY_FILE=/certs/server-key.pem", giteaImage)
+	t.Cleanup(func() {
+		command := exec.Command("docker", "rm", "-f", container)
+		if output, err := command.CombinedOutput(); err != nil && !strings.Contains(string(output), "No such container") {
+			t.Errorf("remove Gitea: %v: %s", err, output)
+		}
+	})
+	apiHost := giteaAddress
+	baseURL := "https://" + apiHost
+	client := giteaHTTPClient(t, giteaCertificate.CAFile)
+	waitGitea(t, client, baseURL, container)
+	dockerOutput(t, "exec", "--user", "git", container, "gitea", "admin", "user", "create", "--admin", "--username", "CanonicalOwner", "--password", "correct-horse-battery-staple", "--email", "owner@example.invalid", "--must-change-password=false")
+	var tokenResponse struct {
+		SHA1 string `json:"sha1"`
+	}
+	giteaJSON(t, client, http.MethodPost, baseURL+"/api/v1/users/CanonicalOwner/tokens", "", map[string]any{"name": "repowolf-integration", "scopes": []string{"read:repository", "write:repository", "write:user"}}, &tokenResponse, "CanonicalOwner", "correct-horse-battery-staple")
+	if tokenResponse.SHA1 == "" {
+		t.Fatal("Gitea returned empty token")
+	}
+	giteaJSON(t, client, http.MethodPost, baseURL+"/api/v1/user/repos", tokenResponse.SHA1, map[string]any{"name": "CanonicalRepo", "description": "repository view integration", "auto_init": true, "default_branch": "main"}, nil, "", "")
+	giteaJSON(t, client, http.MethodPut, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/topics", tokenResponse.SHA1, map[string]any{"topics": []string{"repowolf", "integration"}}, nil, "", "")
+	agentToken, err := auth.Generate(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binaries := testutil.BuildBinaries(t, filepath.Join(work, "bin"))
+	brokerCertificate := testutil.GenerateCertificate(t, filepath.Join(work, "broker-cert"))
+	sshPath, err := exec.LookPath("ssh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker := testutil.StartServer(t, testutil.ServerOptions{Binary: binaries.Service, PolicyPath: filepath.Join("testdata", "gitea-policy.yaml"), Certificate: brokerCertificate, SSHPath: sshPath, GiteaAPIHost: apiHost, GiteaCAFile: giteaCertificate.CAFile, Environment: []string{"REPOWOLF_TOKEN_AGENT=" + agentToken, "REPOWOLF_TOKEN_GITEA=" + tokenResponse.SHA1}})
+	command := exec.Command(binaries.Tea, "repos", "CanonicalOwner/CanonicalRepo", "--repo", "canonicalowner/canonicalrepo", "--output", "json")
+	command.Env = testutil.Environment(os.Environ(), "REPOWOLF_ENDPOINT="+broker.Endpoint, "REPOWOLF_TOKEN="+agentToken, "REPOWOLF_CA_FILE="+broker.Certificate.CAFile, "REPOWOLF_SERVER_NAME="+broker.Certificate.ServerName)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("tea: %v: %s; broker=%s", err, output, mustRead(broker.StderrPath))
+	}
+	if !bytes.Contains(output, []byte(`"full_name":"CanonicalOwner/CanonicalRepo"`)) || !bytes.Contains(output, []byte(`"description":"repository view integration"`)) || bytes.Contains(output, []byte(tokenResponse.SHA1)) {
+		t.Fatalf("unexpected tea output: %s", output)
+	}
+	broker.Stop(t)
+	auditBytes := mustRead(broker.AuditPath)
+	if !bytes.Contains(auditBytes, []byte(`"operation":"gitea.repository_view"`)) || bytes.Contains(auditBytes, []byte(tokenResponse.SHA1)) {
+		t.Fatalf("unexpected audit: %s", auditBytes)
+	}
+}
+
+func dockerOutput(t *testing.T, args ...string) string {
+	t.Helper()
+	command := exec.Command("docker", args...)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("docker %s: %v: %s", strings.Join(args, " "), err, output)
+	}
+	return strings.TrimSpace(string(output))
+}
+func giteaHTTPClient(t *testing.T, caFile string) *http.Client {
+	t.Helper()
+	pem, err := os.ReadFile(caFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(pem) {
+		t.Fatal("load Gitea CA")
+	}
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots}}, Timeout: 5 * time.Second}
+}
+func waitGitea(t *testing.T, client *http.Client, baseURL, container string) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		response, err := client.Get(baseURL + "/api/v1/version")
+		if err == nil {
+			io.Copy(io.Discard, response.Body)
+			response.Body.Close()
+			if response.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	logs := dockerOutput(t, "logs", container)
+	t.Fatalf("Gitea readiness timeout: %s", logs)
+}
+func giteaJSON(t *testing.T, client *http.Client, method, url, token string, input any, output any, user, password string) {
+	t.Helper()
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(method, url, bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		request.Header.Set("Authorization", "token "+token)
+	}
+	if user != "" {
+		request.SetBasicAuth(user, password)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode/100 != 2 {
+		t.Fatalf("Gitea %s %s: %s: %s", method, url, response.Status, body)
+	}
+	if output != nil {
+		if err := json.Unmarshal(body, output); err != nil {
+			t.Fatalf("decode Gitea response: %v: %s", err, body)
+		}
+	}
+}

@@ -31,6 +31,8 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -race ./...
+      - name: Test restricted tea against Gitea 1.27.2
+        run: go test -tags=gitea_integration ./integration -run '^TestRestrictedTeaRepositoryViewAgainstGitea$' -count=1 -v
       - name: Permit Bubblewrap user namespaces
         run: |
           if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
