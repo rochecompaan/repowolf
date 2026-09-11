@@ -142,12 +142,12 @@ func assertAuditInvocations(t *testing.T, contents string, expected [][]auditExp
 
 func forgeAuditExpectations(operations ...string) [][]auditExpectation {
 	acceptedFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}
-	terminalFields := []string{"timestamp", "request_id", "principal", "operation", "outcome", "reason"}
+	terminalFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome", "reason", "input_bytes", "output_bytes"}
 	result := make([][]auditExpectation, 0, len(operations))
 	for _, operation := range operations {
 		result = append(result, []auditExpectation{
 			{operation: operation, outcome: "accepted", principal: "agent", provider: "github", repository: "alpha", required: acceptedFields},
-			{operation: "/repowolf.v1.GitHubService/Execute", outcome: "completed", principal: "agent", reason: "OK", required: terminalFields, optional: []string{"duration_ms"}},
+			{operation: operation, outcome: "completed", principal: "agent", provider: "github", repository: "alpha", reason: "OK", inputPositive: true, outputPositive: true, required: terminalFields, optional: []string{"duration_ms"}},
 		})
 	}
 	return result
