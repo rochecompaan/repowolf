@@ -69,7 +69,7 @@ func TestRelayPreservesUploadAndReceiveBytesInBoundedFrames(t *testing.T) {
 			var frameSizes []int
 			opener, stop := startRelayServiceExpected(t, operation, func(stream grpc.BidiStreamingServer[repowolfv1.GitFrame, repowolfv1.GitFrame]) error {
 				open, err := stream.Recv()
-				if err != nil || open.GetOpen().GetRepository().GetSshPort() != 2222 {
+				if err != nil || open.GetOpen().GetRepository().GetSshPort() != 2222 || open.GetOpen().GetRepository().GetSshUser() != "git" {
 					return errors.New("missing typed open")
 				}
 				if err := stream.Send(dataFrame([]byte("advertisement"))); err != nil {
@@ -257,7 +257,7 @@ func TestRunUsesSharedTLSAndBearerTransport(t *testing.T) {
 			return status.Error(codes.Unauthenticated, "missing token")
 		}
 		open, err := stream.Recv()
-		if err != nil || open.GetOpen().GetRepository().GetHost() != "git.example" {
+		if err != nil || open.GetOpen().GetRepository().GetHost() != "git.example" || open.GetOpen().GetRepository().GetSshUser() != "git" {
 			return status.Error(codes.InvalidArgument, "bad open")
 		}
 		if err := stream.Send(dataFrame([]byte("advertisement"))); err != nil {
@@ -471,7 +471,7 @@ func (service *fakeGitService) ReceivePack(stream grpc.BidiStreamingServer[repow
 }
 
 func testRequest(operation Operation) Request {
-	return Request{Repository: &repowolfv1.RepositorySelector{Host: "git.example", SshPort: 2222, Owner: "owner", Name: "repo"}, Operation: operation}
+	return Request{Repository: &repowolfv1.RepositorySelector{SshUser: "git", Host: "git.example", SshPort: 2222, Owner: "owner", Name: "repo"}, Operation: operation}
 }
 
 func openFrame(request Request) *repowolfv1.GitFrame {

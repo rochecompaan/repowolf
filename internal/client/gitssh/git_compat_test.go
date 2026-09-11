@@ -22,6 +22,7 @@ func TestRunHandlesOnlyExactGitSSHVariantProbe(t *testing.T) {
 		{"-G", "-o", "SendEnv=GIT_PROTOCOL", "git@git.example"},
 		{"-G", "-o", "SendEnv=GIT_PROTOCOL", "-p", "1", "git@git.example"},
 		{"-G", "-o", "SendEnv=GIT_PROTOCOL", "-p", "65535", "git@Git.Example"},
+		{"-G", "forge_user$@gitea.example"},
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			setGitEnv(t, "", "", "", "")
@@ -45,7 +46,7 @@ func TestRunHandlesOnlyExactGitSSHVariantProbe(t *testing.T) {
 		"zero port":             {"-G", "-o", "SendEnv=GIT_PROTOCOL", "-p", "0", "git@git.example"},
 		"signed port":           {"-G", "-o", "SendEnv=GIT_PROTOCOL", "-p", "+22", "git@git.example"},
 		"large port":            {"-G", "-o", "SendEnv=GIT_PROTOCOL", "-p", "65536", "git@git.example"},
-		"wrong user":            {"-G", "-o", "SendEnv=GIT_PROTOCOL", "root@git.example"},
+		"invalid user":          {"-G", "-o", "SendEnv=GIT_PROTOCOL", "Root@git.example"},
 		"extra option":          {"-G", "-o", "SendEnv=GIT_PROTOCOL", "-v", "git@git.example"},
 		"remote command":        {"-G", "-o", "SendEnv=GIT_PROTOCOL", "git@git.example", "git-upload-pack 'owner/repo.git'"},
 	}
@@ -81,20 +82,26 @@ func TestInstalledGitGeneratedSSHArgvCompatibility(t *testing.T) {
 			name:      "scp style upload",
 			remote:    "git@git.example:owner/repo.git",
 			operation: UploadPack,
-			selector:  &repowolfv1.RepositorySelector{Host: "git.example", Owner: "owner", Name: "repo"},
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "git.example", Owner: "owner", Name: "repo"},
 		},
 		{
 			name:      "SSH URL explicit port upload",
 			remote:    "ssh://git@git.example:2222/owner/repo.git",
 			operation: UploadPack,
-			selector:  &repowolfv1.RepositorySelector{Host: "git.example", SshPort: 2222, Owner: "owner", Name: "repo"},
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "git.example", SshPort: 2222, Owner: "owner", Name: "repo"},
 		},
 		{
 			name:      "SSH URL explicit port receive",
 			remote:    "ssh://git@git.example:2222/owner/repo.git",
 			operation: ReceivePack,
-			selector:  &repowolfv1.RepositorySelector{Host: "git.example", SshPort: 2222, Owner: "owner", Name: "repo"},
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "git.example", SshPort: 2222, Owner: "owner", Name: "repo"},
 			push:      true,
+		},
+		{
+			name:      "Gitea SSH URL upload",
+			remote:    "ssh://forge_user@gitea.example:2222/Team_Name/repo.with_dot.git",
+			operation: UploadPack,
+			selector:  &repowolfv1.RepositorySelector{SshUser: "forge_user", Host: "gitea.example", SshPort: 2222, Owner: "Team_Name", Name: "repo.with_dot"},
 		},
 	}
 	for _, test := range tests {

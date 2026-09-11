@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -21,8 +20,6 @@ import (
 const stderrLimitBytes = 1 << 20
 
 var (
-	trustedOwner        = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})?$`)
-	trustedName         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 	errTerminalDelivery = errors.New("git terminal delivery failed")
 	errTerminalAudit    = errors.New("git terminal audit failed")
 )
@@ -64,7 +61,7 @@ func New(options Options) (*Service, error) {
 	return &Service{options: options}, nil
 }
 
-func (service *Service) command(ctx context.Context, open *repowolfv1.GitOpen, capability config.Capability, remoteService string) (runner.Command, policy.ResolvedRepository, error) {
+func (service *Service) command(ctx context.Context, open *repowolfv1.GitOpen, capability config.Capability, remoteService string, allowedKinds ...config.ProviderKind) (runner.Command, policy.ResolvedRepository, error) {
 	if service == nil || service.options.Policy == nil || open == nil || open.Repository == nil {
 		return runner.Command{}, policy.ResolvedRepository{}, rpcstatus.ErrInvalidArgument
 	}
@@ -76,13 +73,20 @@ func (service *Service) command(ctx context.Context, open *repowolfv1.GitOpen, c
 	if !ok {
 		return runner.Command{}, policy.ResolvedRepository{}, rpcstatus.ErrUnauthenticated
 	}
-	repository, err := service.options.Policy.Resolve(principal, policy.Selector{
-		Kind: config.ProviderGitHub, Host: selector.Host, SSHPort: uint16(selector.SshPort), Owner: selector.Owner, Name: selector.Name,
+	repository, err := service.options.Policy.ResolveGit(principal, policy.GitSelector{
+		SSHUser: selector.SshUser, Host: selector.Host, SSHPort: uint16(selector.SshPort), Owner: selector.Owner, Name: selector.Name,
 	}, capability)
-	if err != nil || repository.Provider.Kind != config.ProviderGitHub {
+	if err != nil {
 		return runner.Command{}, policy.ResolvedRepository{}, policy.ErrDenied
 	}
-	if !trustedOwner.MatchString(repository.Repository.Owner) || !trustedName.MatchString(repository.Repository.Name) {
+	kindAllowed := false
+	for _, kind := range allowedKinds {
+		kindAllowed = kindAllowed || repository.Provider.Kind == kind
+	}
+	if !kindAllowed {
+		return runner.Command{}, policy.ResolvedRepository{}, policy.ErrDenied
+	}
+	if !config.ValidRepositoryIdentity(repository.Provider.Kind, repository.Repository.Owner, repository.Repository.Name) {
 		return runner.Command{}, policy.ResolvedRepository{}, rpcstatus.ErrInvalidArgument
 	}
 	if remoteService != "git-upload-pack" && remoteService != "git-receive-pack" {
@@ -116,7 +120,7 @@ func (service *Service) uploadPack(stream gitStream) error {
 	if err != nil {
 		return service.finish(stream, sender, policy.ResolvedRepository{}, "git.upload-pack", started, 0, 0, nil, 0, err)
 	}
-	command, repository, err := service.command(stream.Context(), first.GetOpen(), config.GitRead, "git-upload-pack")
+	command, repository, err := service.command(stream.Context(), first.GetOpen(), config.GitRead, "git-upload-pack", config.ProviderGitHub, config.ProviderGitea)
 	if err != nil {
 		return service.finish(stream, sender, repository, "git.upload-pack", started, 0, 0, nil, 0, err)
 	}
@@ -175,8 +179,12 @@ func (service *Service) uploadPack(stream gitStream) error {
 			operationDone = nil
 		}
 	}
-	if inputPending && operationDone != nil {
-		cancel(runner.ErrCommandFailed)
+	if inputPending && !outputPending && operationDone != nil {
+		// A real upload-pack may finish after answering the client's final
+		// request while the bidirectional RPC is still waiting for its terminal.
+		// Closing provider input lets the process exit without misclassifying
+		// that normal ordering as a provider failure.
+		_ = process.Stdin.Close()
 	}
 	if outputPending {
 		output = <-outputDone

@@ -29,6 +29,6 @@ func validateVariantProbe(args []string) error {
 	if len(args)-position != 1 {
 		return fmt.Errorf("unsupported SSH probe argument shape")
 	}
-	_, err := parseAuthority(args[position])
+	_, _, err := parseAuthority(args[position])
 	return err
 }

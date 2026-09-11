@@ -2,6 +2,7 @@ package gitssh
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
@@ -18,31 +19,55 @@ func TestParseAcceptsExactGitGeneratedForms(t *testing.T) {
 			name:      "upload without options",
 			args:      []string{"git@github.example", "git-upload-pack 'owner/repo.git'"},
 			operation: UploadPack,
-			selector:  &repowolfv1.RepositorySelector{Host: "github.example", Owner: "owner", Name: "repo"},
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", Owner: "owner", Name: "repo"},
 		},
 		{
 			name:      "receive with protocol option",
 			args:      []string{"-o", "SendEnv=GIT_PROTOCOL", "git@GitHub.Example", "git-receive-pack 'owner/repo.git'"},
 			operation: ReceivePack,
-			selector:  &repowolfv1.RepositorySelector{Host: "github.example", Owner: "owner", Name: "repo"},
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", Owner: "owner", Name: "repo"},
 		},
 		{
 			name:      "upload with port",
 			args:      []string{"-p", "2222", "git@github.example", "git-upload-pack 'owner/repo.git'"},
 			operation: UploadPack,
-			selector:  &repowolfv1.RepositorySelector{Host: "github.example", SshPort: 2222, Owner: "owner", Name: "repo"},
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", SshPort: 2222, Owner: "owner", Name: "repo"},
 		},
 		{
 			name:      "upload from SSH URL with generated leading slash",
 			args:      []string{"-o", "SendEnv=GIT_PROTOCOL", "-p", "2222", "git@github.example", "git-upload-pack '/owner/repo.git'"},
 			operation: UploadPack,
-			selector:  &repowolfv1.RepositorySelector{Host: "github.example", SshPort: 2222, Owner: "owner", Name: "repo"},
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", SshPort: 2222, Owner: "owner", Name: "repo"},
 		},
 		{
 			name:      "receive from SSH URL with generated leading slash",
 			args:      []string{"-o", "SendEnv=GIT_PROTOCOL", "-p", "65535", "git@github.example", "git-receive-pack '/owner/repo.git'"},
 			operation: ReceivePack,
-			selector:  &repowolfv1.RepositorySelector{Host: "github.example", SshPort: 65535, Owner: "owner", Name: "repo"},
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", SshPort: 65535, Owner: "owner", Name: "repo"},
+		},
+		{
+			name:      "Gitea configured user and names",
+			args:      []string{"-p", "2222", "forge_user$@Gitea.Example", "git-upload-pack 'Team_Name/repo.with_dot.git'"},
+			operation: UploadPack,
+			selector:  &repowolfv1.RepositorySelector{SshUser: "forge_user$", Host: "gitea.example", SshPort: 2222, Owner: "Team_Name", Name: "repo.with_dot"},
+		},
+		{
+			name:      "GitHub repository starting with dot",
+			args:      []string{"git@github.example", "git-upload-pack 'owner/.repo.git'"},
+			operation: UploadPack,
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", Owner: "owner", Name: ".repo"},
+		},
+		{
+			name:      "GitHub repository starting with underscore",
+			args:      []string{"git@github.example", "git-upload-pack 'owner/_repo.git'"},
+			operation: UploadPack,
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", Owner: "owner", Name: "_repo"},
+		},
+		{
+			name:      "GitHub repository starting with hyphen",
+			args:      []string{"git@github.example", "git-upload-pack 'owner/-repo.git'"},
+			operation: UploadPack,
+			selector:  &repowolfv1.RepositorySelector{SshUser: "git", Host: "github.example", Owner: "owner", Name: "-repo"},
 		},
 	}
 	for _, test := range tests {
@@ -64,7 +89,10 @@ func TestParseRejectsEverythingOutsideExactGitShape(t *testing.T) {
 		"no arguments":               nil,
 		"host only":                  {"git@github.example"},
 		"missing user":               {"github.example", validCommand},
-		"wrong user":                 {"root@github.example", validCommand},
+		"uppercase user":             {"Git@github.example", validCommand},
+		"digit-leading user":         {"9git@github.example", validCommand},
+		"dotted user":                {"git.name@github.example", validCommand},
+		"double-dollar user":         {"git$$@github.example", validCommand},
 		"empty host":                 {"git@", validCommand},
 		"host with user suffix":      {"git@github.example@evil.example", validCommand},
 		"host with port":             {"git@github.example:22", validCommand},
@@ -95,7 +123,10 @@ func TestParseRejectsEverythingOutsideExactGitShape(t *testing.T) {
 		"empty owner":                {"git@github.example", "git-upload-pack '/repo.git'"},
 		"empty repository":           {"git@github.example", "git-upload-pack 'owner/.git'"},
 		"dot repository":             {"git@github.example", "git-upload-pack 'owner/...git'"},
-		"owner punctuation":          {"git@github.example", "git-upload-pack 'owner_name/repo.git'"},
+		"dot owner":                  {"git@github.example", "git-upload-pack './repo.git'"},
+		"dotdot owner":               {"git@github.example", "git-upload-pack '../repo.git'"},
+		"long owner":                 {"git@github.example", "git-upload-pack '" + strings.Repeat("a", 101) + "/repo.git'"},
+		"long repository":            {"git@github.example", "git-upload-pack 'owner/" + strings.Repeat("a", 101) + ".git'"},
 		"repository whitespace":      {"git@github.example", "git-upload-pack 'owner/bad repo.git'"},
 		"shell command":              {"git@github.example", "sh"},
 		"archive command":            {"git@github.example", "git archive 'owner/repo.git'"},

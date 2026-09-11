@@ -62,7 +62,7 @@ func githubSelector(request *repowolfv1.GitHubRequest) (policy.Selector, error) 
 		return policy.Selector{}, rpcstatus.ErrInvalidArgument
 	}
 	repository := request.Context.Repository
-	if repository.Host == "" || repository.Owner == "" || repository.Name == "" || repository.SshPort != 0 {
+	if repository.Host == "" || repository.Owner == "" || repository.Name == "" || repository.SshPort != 0 || repository.SshUser != "" {
 		return policy.Selector{}, rpcstatus.ErrInvalidArgument
 	}
 	return policy.Selector{Kind: config.ProviderGitHub, Host: repository.Host, Owner: repository.Owner, Name: repository.Name}, nil

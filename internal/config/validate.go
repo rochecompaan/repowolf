@@ -133,14 +133,23 @@ func validateRepository(id string, repository Repository, providers map[string]P
 	if !ok {
 		return fmt.Errorf("repository %q references undefined provider %q", id, repository.Provider)
 	}
-	if provider.Kind == ProviderGitea {
-		if !validGiteaName(repository.Owner) || !validGiteaName(repository.Name) || strings.HasSuffix(strings.ToLower(repository.Name), ".git") {
-			return fmt.Errorf("repository %q has invalid owner or name", id)
-		}
-	} else if !ownerName.MatchString(repository.Owner) || !repositoryName.MatchString(repository.Name) {
+	if !ValidRepositoryIdentity(provider.Kind, repository.Owner, repository.Name) {
 		return fmt.Errorf("repository %q has invalid owner or name", id)
 	}
 	return validatePushPolicy(id, repository.Git)
+}
+
+// ValidRepositoryIdentity reports whether owner and name satisfy kind's
+// configured repository grammar.
+func ValidRepositoryIdentity(kind ProviderKind, owner, name string) bool {
+	switch kind {
+	case ProviderGitHub:
+		return ownerName.MatchString(owner) && repositoryName.MatchString(name)
+	case ProviderGitea:
+		return validGiteaName(owner) && validGiteaName(name) && !strings.HasSuffix(strings.ToLower(name), ".git")
+	default:
+		return false
+	}
 }
 
 func validGiteaName(value string) bool {

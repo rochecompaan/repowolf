@@ -158,6 +158,30 @@ func TestDecodeAllowsNonCyclicAlias(t *testing.T) {
 	}
 }
 
+func TestValidRepositoryIdentityUsesProviderGrammar(t *testing.T) {
+	tests := []struct {
+		name  string
+		kind  ProviderKind
+		owner string
+		repo  string
+		want  bool
+	}{
+		{name: "GitHub", kind: ProviderGitHub, owner: "alpha", repo: "repo", want: true},
+		{name: "Gitea", kind: ProviderGitea, owner: "Team_Name", repo: "Repo.One", want: true},
+		{name: "Gitea dot owner", kind: ProviderGitea, owner: ".", repo: "repo"},
+		{name: "Gitea dotdot repository", kind: ProviderGitea, owner: "team", repo: ".."},
+		{name: "Gitea git suffix", kind: ProviderGitea, owner: "team", repo: "repo.git"},
+		{name: "unknown provider", kind: "gitlab", owner: "team", repo: "repo"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ValidRepositoryIdentity(test.kind, test.owner, test.repo); got != test.want {
+				t.Fatalf("ValidRepositoryIdentity(%q, %q, %q) = %t, want %t", test.kind, test.owner, test.repo, got, test.want)
+			}
+		})
+	}
+}
+
 func TestValidateRejectsInvalidConfiguration(t *testing.T) {
 	tests := []struct {
 		name   string
