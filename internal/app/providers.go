@@ -7,6 +7,7 @@ import (
 	giteasdk "code.gitea.io/sdk/gitea"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/credentials"
+	providergitea "github.com/rochecompaan/repowolf/internal/provider/gitea"
 	providergithub "github.com/rochecompaan/repowolf/internal/provider/github"
 	"github.com/rochecompaan/repowolf/internal/runner"
 	"github.com/rochecompaan/repowolf/internal/server"
@@ -82,6 +83,24 @@ func buildGitHubExecutor(instances map[string]providerInstance) *githubExecutor 
 		return nil
 	}
 	return &githubExecutor{adapters: adapters}
+}
+
+func buildGiteaExecutor(instances map[string]providerInstance) (*giteaExecutor, error) {
+	adapters := make(map[string]server.GiteaExecutor)
+	for id, instance := range instances {
+		if instance.gitea == nil {
+			continue
+		}
+		adapter, err := providergitea.NewRepositoryAdapter(instance.gitea)
+		if err != nil {
+			return nil, fmt.Errorf("create Gitea repository adapter %q: %w", id, err)
+		}
+		adapters[id] = adapter
+	}
+	if len(adapters) == 0 {
+		return nil, nil
+	}
+	return &giteaExecutor{adapters: adapters}, nil
 }
 
 func sortedProviderIDs(providers map[string]config.Provider) []string {

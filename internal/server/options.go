@@ -29,6 +29,7 @@ type Options struct {
 	GracePeriod                       time.Duration
 	Policy                            *policy.Snapshot
 	GitHub                            GitHubExecutor
+	Gitea                             GiteaExecutor
 	Git                               repowolfv1.GitServiceServer
 	Register                          func(grpc.ServiceRegistrar)
 	Cleanup                           func() error
