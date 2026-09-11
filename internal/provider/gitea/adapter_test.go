@@ -72,4 +72,8 @@ func TestRepositoryAdapterFailsClosed(t *testing.T) {
 	if _, err := adapter.Execute(context.Background(), resolved(), request()); !errors.Is(err, rpcstatus.ErrProviderFailure) {
 		t.Fatalf("err=%v", err)
 	}
+	adapter, _ = newRepositoryAdapter(&fakeRepositoryGetter{err: context.Canceled})
+	if _, err := adapter.Execute(context.Background(), resolved(), request()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation err=%v", err)
+	}
 }

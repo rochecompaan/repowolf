@@ -2,6 +2,7 @@ package gitea
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -55,6 +56,9 @@ func (adapter *RepositoryAdapter) Execute(ctx context.Context, repository policy
 	}
 	result, err := adapter.getter.GetRepo(ctx, repository.Repository.Owner, repository.Repository.Name)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, ctxErr
 		}
