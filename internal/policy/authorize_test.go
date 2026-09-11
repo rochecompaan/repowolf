@@ -27,6 +27,16 @@ func TestResolveExactGrantedRepository(t *testing.T) {
 	}
 }
 
+func TestResolveKeepsGitHubRepositoryIdentityCaseSensitive(t *testing.T) {
+	snapshot := testSnapshot(t)
+	_, err := snapshot.Resolve("infra-agent", Selector{
+		Kind: config.ProviderGitHub, Host: "github.com", SSHPort: 22, Owner: "ALPHA", Name: "SAMPLE-PROJECT",
+	}, config.RepositoryRead)
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("Resolve() error = %v, want ErrDenied", err)
+	}
+}
+
 func TestResolveMultiRepositoryPrincipal(t *testing.T) {
 	snapshot := testSnapshot(t)
 

@@ -15,22 +15,60 @@ func fixtureResponse() *repowolfv1.GiteaResponse {
 }
 
 func TestRenderFormats(t *testing.T) {
+	tests := []struct {
+		name   string
+		format outputFormat
+		want   string
+	}{
+		{
+			name:   "simple",
+			format: outputSimple,
+			want: "full_name: Owner/Repo\n" +
+				"description: hello\n" +
+				"default_branch: main\n" +
+				"url: https://gitea.test/Owner/Repo\n" +
+				"ssh_url: git@gitea.test:Owner/Repo.git\n" +
+				"clone_url: https://gitea.test/Owner/Repo.git\n" +
+				"private: true\n" +
+				"archived: false\n" +
+				"fork: true\n" +
+				"mirror: false\n" +
+				"empty: false\n" +
+				"stars: 2\n" +
+				"forks: 3\n" +
+				"open_issues: 4\n" +
+				"size: 5\n" +
+				"topics: one, two\n" +
+				"created: 2026-01-02T02:04:05Z\n" +
+				"updated: 2026-02-03T04:05:06Z\n",
+		},
+		{
+			name:   "table",
+			format: outputTable,
+			want: "full_name\tdescription\tdefault_branch\turl\tssh_url\tclone_url\tprivate\tarchived\tfork\tmirror\tempty\tstars\tforks\topen_issues\tsize\ttopics\tcreated\tupdated\n" +
+				"Owner/Repo\thello\tmain\thttps://gitea.test/Owner/Repo\tgit@gitea.test:Owner/Repo.git\thttps://gitea.test/Owner/Repo.git\ttrue\tfalse\ttrue\tfalse\tfalse\t2\t3\t4\t5\tone, two\t2026-01-02T02:04:05Z\t2026-02-03T04:05:06Z\n",
+		},
+		{
+			name:   "json",
+			format: outputJSON,
+			want:   "{\"full_name\":\"Owner/Repo\",\"description\":\"hello\",\"default_branch\":\"main\",\"url\":\"https://gitea.test/Owner/Repo\",\"ssh_url\":\"git@gitea.test:Owner/Repo.git\",\"clone_url\":\"https://gitea.test/Owner/Repo.git\",\"private\":true,\"archived\":false,\"fork\":true,\"mirror\":false,\"empty\":false,\"stars\":2,\"forks\":3,\"open_issues\":4,\"size\":5,\"topics\":[\"one\",\"two\"],\"created\":\"2026-01-02T02:04:05Z\",\"updated\":\"2026-02-03T04:05:06Z\"}\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			output, err := render(command{format: test.format}, fixtureResponse())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(output) != test.want {
+				t.Fatalf("render() = %q, want %q", output, test.want)
+			}
+		})
+	}
+
 	response := fixtureResponse()
-	for _, format := range []outputFormat{outputSimple, outputTable, outputJSON} {
-		output, err := render(command{format: format}, response)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !strings.HasSuffix(string(output), "\n") || !strings.Contains(string(output), "Owner/Repo") {
-			t.Fatalf("output = %q", output)
-		}
-	}
-	jsonOutput, _ := render(command{format: outputJSON}, response)
-	if strings.Contains(string(jsonOutput), "FullName") || !strings.Contains(string(jsonOutput), `"topics":["one","two"]`) || !strings.Contains(string(jsonOutput), `"created":"2026-01-02T02:04:05Z"`) {
-		t.Fatalf("json = %s", jsonOutput)
-	}
 	response.GetRepositoryView().Repository.Topics = nil
-	jsonOutput, _ = render(command{format: outputJSON}, response)
+	jsonOutput, _ := render(command{format: outputJSON}, response)
 	if !strings.Contains(string(jsonOutput), `"topics":[]`) {
 		t.Fatalf("empty topics are not an array: %s", jsonOutput)
 	}

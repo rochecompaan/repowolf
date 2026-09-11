@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"unicode/utf8"
 
 	sdk "code.gitea.io/sdk/gitea"
@@ -19,13 +18,26 @@ type repositoryGetter interface {
 	GetRepo(context.Context, string, string) (*sdk.Repository, error)
 }
 type sdkRepositoryGetter struct {
-	mu     sync.Mutex
 	client *sdk.Client
+	slot   chan struct{}
+}
+
+func newSDKRepositoryGetter(client *sdk.Client) *sdkRepositoryGetter {
+	slot := make(chan struct{}, 1)
+	slot <- struct{}{}
+	return &sdkRepositoryGetter{client: client, slot: slot}
 }
 
 func (getter *sdkRepositoryGetter) GetRepo(ctx context.Context, owner, name string) (*sdk.Repository, error) {
-	getter.mu.Lock()
-	defer getter.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-getter.slot:
+	}
+	defer func() { getter.slot <- struct{}{} }()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	getter.client.SetContext(ctx)
 	repository, _, err := getter.client.GetRepo(owner, name)
 	return repository, err
@@ -38,7 +50,7 @@ func NewRepositoryAdapter(client *sdk.Client) (*RepositoryAdapter, error) {
 	if client == nil {
 		return nil, fmt.Errorf("construct Gitea repository adapter: nil client")
 	}
-	return &RepositoryAdapter{getter: &sdkRepositoryGetter{client: client}}, nil
+	return &RepositoryAdapter{getter: newSDKRepositoryGetter(client)}, nil
 }
 func newRepositoryAdapter(getter repositoryGetter) (*RepositoryAdapter, error) {
 	if getter == nil {

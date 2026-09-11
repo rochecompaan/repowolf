@@ -3,6 +3,8 @@ package gitea
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -59,6 +61,62 @@ func TestRepositoryAdapterMapsOneCanonicalCall(t *testing.T) {
 		t.Fatalf("fake=%#v record=%#v", fake, record)
 	}
 }
+func TestSDKRepositoryGetterObservesCancellationWhileQueued(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := sdk.NewClient(server.URL+"/", sdk.SetGiteaVersion(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	getter := newSDKRepositoryGetter(client)
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := getter.GetRepo(context.Background(), "Owner", "Repo")
+		firstDone <- err
+	}()
+	<-started
+
+	ctx, cancel := context.WithCancel(context.Background())
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := getter.GetRepo(ctx, "Owner", "Repo")
+		secondDone <- err
+	}()
+	cancel()
+	select {
+	case err := <-secondDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("queued GetRepo() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("queued GetRepo did not observe cancellation")
+	}
+	select {
+	case err := <-firstDone:
+		t.Fatalf("first GetRepo returned before release: %v", err)
+	default:
+	}
+	close(release)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first GetRepo() error = %v", err)
+	}
+}
+
 func TestRepositoryAdapterFailsClosed(t *testing.T) {
 	for _, mutate := range []func(*sdk.Repository){func(r *sdk.Repository) { r.FullName = "wrong" }, func(r *sdk.Repository) { r.Size = -1 }, func(r *sdk.Repository) { r.HTMLURL = "" }, func(r *sdk.Repository) { r.Topics = []string{"bad\x00"} }, func(r *sdk.Repository) { r.Updated = r.Created.Add(-time.Second) }} {
 		repository := sdkRepository()

@@ -134,7 +134,7 @@ func validateRepository(id string, repository Repository, providers map[string]P
 		return fmt.Errorf("repository %q references undefined provider %q", id, repository.Provider)
 	}
 	if provider.Kind == ProviderGitea {
-		if !validGiteaName(repository.Owner) || !validGiteaName(repository.Name) || strings.HasSuffix(repository.Name, ".git") {
+		if !validGiteaName(repository.Owner) || !validGiteaName(repository.Name) || strings.HasSuffix(strings.ToLower(repository.Name), ".git") {
 			return fmt.Errorf("repository %q has invalid owner or name", id)
 		}
 	} else if !ownerName.MatchString(repository.Owner) || !repositoryName.MatchString(repository.Name) {

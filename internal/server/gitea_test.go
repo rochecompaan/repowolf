@@ -35,15 +35,29 @@ func giteaPolicy(t *testing.T, capability config.Capability, kind config.Provide
 	return snapshot
 }
 func TestGiteaServiceAuthorizesAndCompletes(t *testing.T) {
-	executor := &fakeGiteaExecutor{response: &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_RepositoryView{RepositoryView: &repowolfv1.GiteaRepositoryViewResult{Repository: &repowolfv1.GiteaRepositoryRecord{}}}}}
-	service := newGiteaService(giteaPolicy(t, config.RepositoryRead, config.ProviderGitea), executor, &eventSink{})
-	ctx := auth.WithRequestID(auth.WithPrincipal(context.Background(), "agent"), "request")
-	response, err := service.Execute(ctx, giteaRequest())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if executor.calls != 1 || executor.repository.ID != "project" || response.GetMeta().GetRequestId() != "request" {
-		t.Fatalf("calls=%d repository=%#v response=%#v", executor.calls, executor.repository, response)
+	for _, identity := range []struct {
+		name  string
+		owner string
+		repo  string
+	}{
+		{name: "configured casing", owner: "Owner", repo: "Repo"},
+		{name: "case folded", owner: "owner", repo: "REPO"},
+	} {
+		t.Run(identity.name, func(t *testing.T) {
+			executor := &fakeGiteaExecutor{response: &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_RepositoryView{RepositoryView: &repowolfv1.GiteaRepositoryViewResult{Repository: &repowolfv1.GiteaRepositoryRecord{}}}}}
+			service := newGiteaService(giteaPolicy(t, config.RepositoryRead, config.ProviderGitea), executor, &eventSink{})
+			ctx := auth.WithRequestID(auth.WithPrincipal(context.Background(), "agent"), "request")
+			request := giteaRequest()
+			request.Context.Repository.Owner = identity.owner
+			request.Context.Repository.Name = identity.repo
+			response, err := service.Execute(ctx, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if executor.calls != 1 || executor.repository.ID != "project" || executor.repository.Repository.Owner != "Owner" || executor.repository.Repository.Name != "Repo" || response.GetMeta().GetRequestId() != "request" {
+				t.Fatalf("calls=%d repository=%#v response=%#v", executor.calls, executor.repository, response)
+			}
+		})
 	}
 }
 func TestGiteaServiceFailsClosed(t *testing.T) {
