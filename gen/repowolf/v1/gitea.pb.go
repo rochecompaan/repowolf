@@ -22,6 +22,198 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type GiteaIssueState int32
+
+const (
+	GiteaIssueState_GITEA_ISSUE_STATE_UNSPECIFIED GiteaIssueState = 0
+	GiteaIssueState_GITEA_ISSUE_STATE_OPEN        GiteaIssueState = 1
+	GiteaIssueState_GITEA_ISSUE_STATE_CLOSED      GiteaIssueState = 2
+	GiteaIssueState_GITEA_ISSUE_STATE_ALL         GiteaIssueState = 3
+)
+
+// Enum value maps for GiteaIssueState.
+var (
+	GiteaIssueState_name = map[int32]string{
+		0: "GITEA_ISSUE_STATE_UNSPECIFIED",
+		1: "GITEA_ISSUE_STATE_OPEN",
+		2: "GITEA_ISSUE_STATE_CLOSED",
+		3: "GITEA_ISSUE_STATE_ALL",
+	}
+	GiteaIssueState_value = map[string]int32{
+		"GITEA_ISSUE_STATE_UNSPECIFIED": 0,
+		"GITEA_ISSUE_STATE_OPEN":        1,
+		"GITEA_ISSUE_STATE_CLOSED":      2,
+		"GITEA_ISSUE_STATE_ALL":         3,
+	}
+)
+
+func (x GiteaIssueState) Enum() *GiteaIssueState {
+	p := new(GiteaIssueState)
+	*p = x
+	return p
+}
+
+func (x GiteaIssueState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GiteaIssueState) Descriptor() protoreflect.EnumDescriptor {
+	return file_repowolf_v1_gitea_proto_enumTypes[0].Descriptor()
+}
+
+func (GiteaIssueState) Type() protoreflect.EnumType {
+	return &file_repowolf_v1_gitea_proto_enumTypes[0]
+}
+
+func (x GiteaIssueState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GiteaIssueState.Descriptor instead.
+func (GiteaIssueState) EnumDescriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{0}
+}
+
+type GiteaIssueKind int32
+
+const (
+	GiteaIssueKind_GITEA_ISSUE_KIND_UNSPECIFIED GiteaIssueKind = 0
+	GiteaIssueKind_GITEA_ISSUE_KIND_ISSUE       GiteaIssueKind = 1
+)
+
+// Enum value maps for GiteaIssueKind.
+var (
+	GiteaIssueKind_name = map[int32]string{
+		0: "GITEA_ISSUE_KIND_UNSPECIFIED",
+		1: "GITEA_ISSUE_KIND_ISSUE",
+	}
+	GiteaIssueKind_value = map[string]int32{
+		"GITEA_ISSUE_KIND_UNSPECIFIED": 0,
+		"GITEA_ISSUE_KIND_ISSUE":       1,
+	}
+)
+
+func (x GiteaIssueKind) Enum() *GiteaIssueKind {
+	p := new(GiteaIssueKind)
+	*p = x
+	return p
+}
+
+func (x GiteaIssueKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GiteaIssueKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_repowolf_v1_gitea_proto_enumTypes[1].Descriptor()
+}
+
+func (GiteaIssueKind) Type() protoreflect.EnumType {
+	return &file_repowolf_v1_gitea_proto_enumTypes[1]
+}
+
+func (x GiteaIssueKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GiteaIssueKind.Descriptor instead.
+func (GiteaIssueKind) EnumDescriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{1}
+}
+
+type GiteaIssueField int32
+
+const (
+	GiteaIssueField_GITEA_ISSUE_FIELD_UNSPECIFIED GiteaIssueField = 0
+	GiteaIssueField_GITEA_ISSUE_FIELD_INDEX       GiteaIssueField = 1
+	GiteaIssueField_GITEA_ISSUE_FIELD_STATE       GiteaIssueField = 2
+	GiteaIssueField_GITEA_ISSUE_FIELD_AUTHOR      GiteaIssueField = 3
+	GiteaIssueField_GITEA_ISSUE_FIELD_AUTHOR_ID   GiteaIssueField = 4
+	GiteaIssueField_GITEA_ISSUE_FIELD_URL         GiteaIssueField = 5
+	GiteaIssueField_GITEA_ISSUE_FIELD_TITLE       GiteaIssueField = 6
+	GiteaIssueField_GITEA_ISSUE_FIELD_BODY        GiteaIssueField = 7
+	GiteaIssueField_GITEA_ISSUE_FIELD_CREATED     GiteaIssueField = 8
+	GiteaIssueField_GITEA_ISSUE_FIELD_UPDATED     GiteaIssueField = 9
+	GiteaIssueField_GITEA_ISSUE_FIELD_DEADLINE    GiteaIssueField = 10
+	GiteaIssueField_GITEA_ISSUE_FIELD_ASSIGNEES   GiteaIssueField = 11
+	GiteaIssueField_GITEA_ISSUE_FIELD_MILESTONE   GiteaIssueField = 12
+	GiteaIssueField_GITEA_ISSUE_FIELD_LABELS      GiteaIssueField = 13
+	GiteaIssueField_GITEA_ISSUE_FIELD_COMMENTS    GiteaIssueField = 14
+	GiteaIssueField_GITEA_ISSUE_FIELD_REPO        GiteaIssueField = 15
+	GiteaIssueField_GITEA_ISSUE_FIELD_OWNER       GiteaIssueField = 16
+	GiteaIssueField_GITEA_ISSUE_FIELD_KIND        GiteaIssueField = 17
+)
+
+// Enum value maps for GiteaIssueField.
+var (
+	GiteaIssueField_name = map[int32]string{
+		0:  "GITEA_ISSUE_FIELD_UNSPECIFIED",
+		1:  "GITEA_ISSUE_FIELD_INDEX",
+		2:  "GITEA_ISSUE_FIELD_STATE",
+		3:  "GITEA_ISSUE_FIELD_AUTHOR",
+		4:  "GITEA_ISSUE_FIELD_AUTHOR_ID",
+		5:  "GITEA_ISSUE_FIELD_URL",
+		6:  "GITEA_ISSUE_FIELD_TITLE",
+		7:  "GITEA_ISSUE_FIELD_BODY",
+		8:  "GITEA_ISSUE_FIELD_CREATED",
+		9:  "GITEA_ISSUE_FIELD_UPDATED",
+		10: "GITEA_ISSUE_FIELD_DEADLINE",
+		11: "GITEA_ISSUE_FIELD_ASSIGNEES",
+		12: "GITEA_ISSUE_FIELD_MILESTONE",
+		13: "GITEA_ISSUE_FIELD_LABELS",
+		14: "GITEA_ISSUE_FIELD_COMMENTS",
+		15: "GITEA_ISSUE_FIELD_REPO",
+		16: "GITEA_ISSUE_FIELD_OWNER",
+		17: "GITEA_ISSUE_FIELD_KIND",
+	}
+	GiteaIssueField_value = map[string]int32{
+		"GITEA_ISSUE_FIELD_UNSPECIFIED": 0,
+		"GITEA_ISSUE_FIELD_INDEX":       1,
+		"GITEA_ISSUE_FIELD_STATE":       2,
+		"GITEA_ISSUE_FIELD_AUTHOR":      3,
+		"GITEA_ISSUE_FIELD_AUTHOR_ID":   4,
+		"GITEA_ISSUE_FIELD_URL":         5,
+		"GITEA_ISSUE_FIELD_TITLE":       6,
+		"GITEA_ISSUE_FIELD_BODY":        7,
+		"GITEA_ISSUE_FIELD_CREATED":     8,
+		"GITEA_ISSUE_FIELD_UPDATED":     9,
+		"GITEA_ISSUE_FIELD_DEADLINE":    10,
+		"GITEA_ISSUE_FIELD_ASSIGNEES":   11,
+		"GITEA_ISSUE_FIELD_MILESTONE":   12,
+		"GITEA_ISSUE_FIELD_LABELS":      13,
+		"GITEA_ISSUE_FIELD_COMMENTS":    14,
+		"GITEA_ISSUE_FIELD_REPO":        15,
+		"GITEA_ISSUE_FIELD_OWNER":       16,
+		"GITEA_ISSUE_FIELD_KIND":        17,
+	}
+)
+
+func (x GiteaIssueField) Enum() *GiteaIssueField {
+	p := new(GiteaIssueField)
+	*p = x
+	return p
+}
+
+func (x GiteaIssueField) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GiteaIssueField) Descriptor() protoreflect.EnumDescriptor {
+	return file_repowolf_v1_gitea_proto_enumTypes[2].Descriptor()
+}
+
+func (GiteaIssueField) Type() protoreflect.EnumType {
+	return &file_repowolf_v1_gitea_proto_enumTypes[2]
+}
+
+func (x GiteaIssueField) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GiteaIssueField.Descriptor instead.
+func (GiteaIssueField) EnumDescriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{2}
+}
+
 type GiteaRepositoryViewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -58,12 +250,190 @@ func (*GiteaRepositoryViewRequest) Descriptor() ([]byte, []int) {
 	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{0}
 }
 
+type GiteaIssueListRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         GiteaIssueState        `protobuf:"varint,1,opt,name=state,proto3,enum=repowolf.v1.GiteaIssueState" json:"state,omitempty"`
+	Keyword       *string                `protobuf:"bytes,2,opt,name=keyword,proto3,oneof" json:"keyword,omitempty"`
+	Author        *string                `protobuf:"bytes,3,opt,name=author,proto3,oneof" json:"author,omitempty"`
+	Assignee      *string                `protobuf:"bytes,4,opt,name=assignee,proto3,oneof" json:"assignee,omitempty"`
+	Mentions      *string                `protobuf:"bytes,5,opt,name=mentions,proto3,oneof" json:"mentions,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=from,proto3" json:"from,omitempty"`
+	Until         *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=until,proto3" json:"until,omitempty"`
+	Owner         *string                `protobuf:"bytes,8,opt,name=owner,proto3,oneof" json:"owner,omitempty"`
+	Page          int32                  `protobuf:"varint,9,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,10,opt,name=limit,proto3" json:"limit,omitempty"`
+	Fields        []GiteaIssueField      `protobuf:"varint,11,rep,packed,name=fields,proto3,enum=repowolf.v1.GiteaIssueField" json:"fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GiteaIssueListRequest) Reset() {
+	*x = GiteaIssueListRequest{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaIssueListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaIssueListRequest) ProtoMessage() {}
+
+func (x *GiteaIssueListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaIssueListRequest.ProtoReflect.Descriptor instead.
+func (*GiteaIssueListRequest) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GiteaIssueListRequest) GetState() GiteaIssueState {
+	if x != nil {
+		return x.State
+	}
+	return GiteaIssueState_GITEA_ISSUE_STATE_UNSPECIFIED
+}
+
+func (x *GiteaIssueListRequest) GetKeyword() string {
+	if x != nil && x.Keyword != nil {
+		return *x.Keyword
+	}
+	return ""
+}
+
+func (x *GiteaIssueListRequest) GetAuthor() string {
+	if x != nil && x.Author != nil {
+		return *x.Author
+	}
+	return ""
+}
+
+func (x *GiteaIssueListRequest) GetAssignee() string {
+	if x != nil && x.Assignee != nil {
+		return *x.Assignee
+	}
+	return ""
+}
+
+func (x *GiteaIssueListRequest) GetMentions() string {
+	if x != nil && x.Mentions != nil {
+		return *x.Mentions
+	}
+	return ""
+}
+
+func (x *GiteaIssueListRequest) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *GiteaIssueListRequest) GetUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Until
+	}
+	return nil
+}
+
+func (x *GiteaIssueListRequest) GetOwner() string {
+	if x != nil && x.Owner != nil {
+		return *x.Owner
+	}
+	return ""
+}
+
+func (x *GiteaIssueListRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *GiteaIssueListRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *GiteaIssueListRequest) GetFields() []GiteaIssueField {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+type GiteaIssueViewRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Index           int64                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	IncludeComments bool                   `protobuf:"varint,2,opt,name=include_comments,json=includeComments,proto3" json:"include_comments,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GiteaIssueViewRequest) Reset() {
+	*x = GiteaIssueViewRequest{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaIssueViewRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaIssueViewRequest) ProtoMessage() {}
+
+func (x *GiteaIssueViewRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaIssueViewRequest.ProtoReflect.Descriptor instead.
+func (*GiteaIssueViewRequest) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GiteaIssueViewRequest) GetIndex() int64 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *GiteaIssueViewRequest) GetIncludeComments() bool {
+	if x != nil {
+		return x.IncludeComments
+	}
+	return false
+}
+
 type GiteaRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Context *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
 	// Types that are valid to be assigned to Operation:
 	//
 	//	*GiteaRequest_RepositoryView
+	//	*GiteaRequest_IssueList
+	//	*GiteaRequest_IssueView
 	Operation     isGiteaRequest_Operation `protobuf_oneof:"operation"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -71,7 +441,7 @@ type GiteaRequest struct {
 
 func (x *GiteaRequest) Reset() {
 	*x = GiteaRequest{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[1]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -83,7 +453,7 @@ func (x *GiteaRequest) String() string {
 func (*GiteaRequest) ProtoMessage() {}
 
 func (x *GiteaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[1]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -96,7 +466,7 @@ func (x *GiteaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaRequest.ProtoReflect.Descriptor instead.
 func (*GiteaRequest) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{1}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GiteaRequest) GetContext() *RequestContext {
@@ -122,6 +492,24 @@ func (x *GiteaRequest) GetRepositoryView() *GiteaRepositoryViewRequest {
 	return nil
 }
 
+func (x *GiteaRequest) GetIssueList() *GiteaIssueListRequest {
+	if x != nil {
+		if x, ok := x.Operation.(*GiteaRequest_IssueList); ok {
+			return x.IssueList
+		}
+	}
+	return nil
+}
+
+func (x *GiteaRequest) GetIssueView() *GiteaIssueViewRequest {
+	if x != nil {
+		if x, ok := x.Operation.(*GiteaRequest_IssueView); ok {
+			return x.IssueView
+		}
+	}
+	return nil
+}
+
 type isGiteaRequest_Operation interface {
 	isGiteaRequest_Operation()
 }
@@ -130,7 +518,19 @@ type GiteaRequest_RepositoryView struct {
 	RepositoryView *GiteaRepositoryViewRequest `protobuf:"bytes,10,opt,name=repository_view,json=repositoryView,proto3,oneof"`
 }
 
+type GiteaRequest_IssueList struct {
+	IssueList *GiteaIssueListRequest `protobuf:"bytes,11,opt,name=issue_list,json=issueList,proto3,oneof"`
+}
+
+type GiteaRequest_IssueView struct {
+	IssueView *GiteaIssueViewRequest `protobuf:"bytes,12,opt,name=issue_view,json=issueView,proto3,oneof"`
+}
+
 func (*GiteaRequest_RepositoryView) isGiteaRequest_Operation() {}
+
+func (*GiteaRequest_IssueList) isGiteaRequest_Operation() {}
+
+func (*GiteaRequest_IssueView) isGiteaRequest_Operation() {}
 
 type GiteaRepositoryRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -158,7 +558,7 @@ type GiteaRepositoryRecord struct {
 
 func (x *GiteaRepositoryRecord) Reset() {
 	*x = GiteaRepositoryRecord{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[2]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -170,7 +570,7 @@ func (x *GiteaRepositoryRecord) String() string {
 func (*GiteaRepositoryRecord) ProtoMessage() {}
 
 func (x *GiteaRepositoryRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[2]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -183,7 +583,7 @@ func (x *GiteaRepositoryRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaRepositoryRecord.ProtoReflect.Descriptor instead.
 func (*GiteaRepositoryRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{2}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GiteaRepositoryRecord) GetFullName() string {
@@ -321,7 +721,7 @@ type GiteaRepositoryViewResult struct {
 
 func (x *GiteaRepositoryViewResult) Reset() {
 	*x = GiteaRepositoryViewResult{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[3]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -333,7 +733,7 @@ func (x *GiteaRepositoryViewResult) String() string {
 func (*GiteaRepositoryViewResult) ProtoMessage() {}
 
 func (x *GiteaRepositoryViewResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[3]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -346,12 +746,372 @@ func (x *GiteaRepositoryViewResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaRepositoryViewResult.ProtoReflect.Descriptor instead.
 func (*GiteaRepositoryViewResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{3}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GiteaRepositoryViewResult) GetRepository() *GiteaRepositoryRecord {
 	if x != nil {
 		return x.Repository
+	}
+	return nil
+}
+
+type GiteaCommentRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	AuthorId      int64                  `protobuf:"varint,2,opt,name=author_id,json=authorId,proto3" json:"author_id,omitempty"`
+	Author        string                 `protobuf:"bytes,3,opt,name=author,proto3" json:"author,omitempty"`
+	Url           string                 `protobuf:"bytes,4,opt,name=url,proto3" json:"url,omitempty"`
+	Body          string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
+	Created       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created,proto3" json:"created,omitempty"`
+	Updated       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated,proto3" json:"updated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GiteaCommentRecord) Reset() {
+	*x = GiteaCommentRecord{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaCommentRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaCommentRecord) ProtoMessage() {}
+
+func (x *GiteaCommentRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaCommentRecord.ProtoReflect.Descriptor instead.
+func (*GiteaCommentRecord) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GiteaCommentRecord) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *GiteaCommentRecord) GetAuthorId() int64 {
+	if x != nil {
+		return x.AuthorId
+	}
+	return 0
+}
+
+func (x *GiteaCommentRecord) GetAuthor() string {
+	if x != nil {
+		return x.Author
+	}
+	return ""
+}
+
+func (x *GiteaCommentRecord) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *GiteaCommentRecord) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *GiteaCommentRecord) GetCreated() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Created
+	}
+	return nil
+}
+
+func (x *GiteaCommentRecord) GetUpdated() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Updated
+	}
+	return nil
+}
+
+type GiteaIssueRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Index         int64                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	State         GiteaIssueState        `protobuf:"varint,2,opt,name=state,proto3,enum=repowolf.v1.GiteaIssueState" json:"state,omitempty"`
+	Kind          GiteaIssueKind         `protobuf:"varint,3,opt,name=kind,proto3,enum=repowolf.v1.GiteaIssueKind" json:"kind,omitempty"`
+	AuthorId      int64                  `protobuf:"varint,4,opt,name=author_id,json=authorId,proto3" json:"author_id,omitempty"`
+	Author        string                 `protobuf:"bytes,5,opt,name=author,proto3" json:"author,omitempty"`
+	Url           string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
+	Title         string                 `protobuf:"bytes,7,opt,name=title,proto3" json:"title,omitempty"`
+	Body          string                 `protobuf:"bytes,8,opt,name=body,proto3" json:"body,omitempty"`
+	Repo          string                 `protobuf:"bytes,9,opt,name=repo,proto3" json:"repo,omitempty"`
+	Owner         string                 `protobuf:"bytes,10,opt,name=owner,proto3" json:"owner,omitempty"`
+	Created       *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created,proto3" json:"created,omitempty"`
+	Updated       *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=updated,proto3" json:"updated,omitempty"`
+	Deadline      *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=deadline,proto3" json:"deadline,omitempty"`
+	Assignees     []string               `protobuf:"bytes,14,rep,name=assignees,proto3" json:"assignees,omitempty"`
+	Milestone     *string                `protobuf:"bytes,15,opt,name=milestone,proto3,oneof" json:"milestone,omitempty"`
+	Labels        []string               `protobuf:"bytes,16,rep,name=labels,proto3" json:"labels,omitempty"`
+	CommentCount  int64                  `protobuf:"varint,17,opt,name=comment_count,json=commentCount,proto3" json:"comment_count,omitempty"`
+	Comments      []*GiteaCommentRecord  `protobuf:"bytes,18,rep,name=comments,proto3" json:"comments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GiteaIssueRecord) Reset() {
+	*x = GiteaIssueRecord{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaIssueRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaIssueRecord) ProtoMessage() {}
+
+func (x *GiteaIssueRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaIssueRecord.ProtoReflect.Descriptor instead.
+func (*GiteaIssueRecord) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GiteaIssueRecord) GetIndex() int64 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *GiteaIssueRecord) GetState() GiteaIssueState {
+	if x != nil {
+		return x.State
+	}
+	return GiteaIssueState_GITEA_ISSUE_STATE_UNSPECIFIED
+}
+
+func (x *GiteaIssueRecord) GetKind() GiteaIssueKind {
+	if x != nil {
+		return x.Kind
+	}
+	return GiteaIssueKind_GITEA_ISSUE_KIND_UNSPECIFIED
+}
+
+func (x *GiteaIssueRecord) GetAuthorId() int64 {
+	if x != nil {
+		return x.AuthorId
+	}
+	return 0
+}
+
+func (x *GiteaIssueRecord) GetAuthor() string {
+	if x != nil {
+		return x.Author
+	}
+	return ""
+}
+
+func (x *GiteaIssueRecord) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *GiteaIssueRecord) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *GiteaIssueRecord) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *GiteaIssueRecord) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *GiteaIssueRecord) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *GiteaIssueRecord) GetCreated() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Created
+	}
+	return nil
+}
+
+func (x *GiteaIssueRecord) GetUpdated() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Updated
+	}
+	return nil
+}
+
+func (x *GiteaIssueRecord) GetDeadline() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Deadline
+	}
+	return nil
+}
+
+func (x *GiteaIssueRecord) GetAssignees() []string {
+	if x != nil {
+		return x.Assignees
+	}
+	return nil
+}
+
+func (x *GiteaIssueRecord) GetMilestone() string {
+	if x != nil && x.Milestone != nil {
+		return *x.Milestone
+	}
+	return ""
+}
+
+func (x *GiteaIssueRecord) GetLabels() []string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *GiteaIssueRecord) GetCommentCount() int64 {
+	if x != nil {
+		return x.CommentCount
+	}
+	return 0
+}
+
+func (x *GiteaIssueRecord) GetComments() []*GiteaCommentRecord {
+	if x != nil {
+		return x.Comments
+	}
+	return nil
+}
+
+type GiteaIssueListResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issues        []*GiteaIssueRecord    `protobuf:"bytes,1,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GiteaIssueListResult) Reset() {
+	*x = GiteaIssueListResult{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaIssueListResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaIssueListResult) ProtoMessage() {}
+
+func (x *GiteaIssueListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaIssueListResult.ProtoReflect.Descriptor instead.
+func (*GiteaIssueListResult) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *GiteaIssueListResult) GetIssues() []*GiteaIssueRecord {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+type GiteaIssueViewResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issue         *GiteaIssueRecord      `protobuf:"bytes,1,opt,name=issue,proto3" json:"issue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GiteaIssueViewResult) Reset() {
+	*x = GiteaIssueViewResult{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaIssueViewResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaIssueViewResult) ProtoMessage() {}
+
+func (x *GiteaIssueViewResult) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaIssueViewResult.ProtoReflect.Descriptor instead.
+func (*GiteaIssueViewResult) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GiteaIssueViewResult) GetIssue() *GiteaIssueRecord {
+	if x != nil {
+		return x.Issue
 	}
 	return nil
 }
@@ -362,6 +1122,8 @@ type GiteaResponse struct {
 	// Types that are valid to be assigned to Result:
 	//
 	//	*GiteaResponse_RepositoryView
+	//	*GiteaResponse_IssueList
+	//	*GiteaResponse_IssueView
 	Result        isGiteaResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -369,7 +1131,7 @@ type GiteaResponse struct {
 
 func (x *GiteaResponse) Reset() {
 	*x = GiteaResponse{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[4]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -381,7 +1143,7 @@ func (x *GiteaResponse) String() string {
 func (*GiteaResponse) ProtoMessage() {}
 
 func (x *GiteaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[4]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -394,7 +1156,7 @@ func (x *GiteaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaResponse.ProtoReflect.Descriptor instead.
 func (*GiteaResponse) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{4}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GiteaResponse) GetMeta() *ResponseMeta {
@@ -420,6 +1182,24 @@ func (x *GiteaResponse) GetRepositoryView() *GiteaRepositoryViewResult {
 	return nil
 }
 
+func (x *GiteaResponse) GetIssueList() *GiteaIssueListResult {
+	if x != nil {
+		if x, ok := x.Result.(*GiteaResponse_IssueList); ok {
+			return x.IssueList
+		}
+	}
+	return nil
+}
+
+func (x *GiteaResponse) GetIssueView() *GiteaIssueViewResult {
+	if x != nil {
+		if x, ok := x.Result.(*GiteaResponse_IssueView); ok {
+			return x.IssueView
+		}
+	}
+	return nil
+}
+
 type isGiteaResponse_Result interface {
 	isGiteaResponse_Result()
 }
@@ -428,18 +1208,56 @@ type GiteaResponse_RepositoryView struct {
 	RepositoryView *GiteaRepositoryViewResult `protobuf:"bytes,10,opt,name=repository_view,json=repositoryView,proto3,oneof"`
 }
 
+type GiteaResponse_IssueList struct {
+	IssueList *GiteaIssueListResult `protobuf:"bytes,11,opt,name=issue_list,json=issueList,proto3,oneof"`
+}
+
+type GiteaResponse_IssueView struct {
+	IssueView *GiteaIssueViewResult `protobuf:"bytes,12,opt,name=issue_view,json=issueView,proto3,oneof"`
+}
+
 func (*GiteaResponse_RepositoryView) isGiteaResponse_Result() {}
+
+func (*GiteaResponse_IssueList) isGiteaResponse_Result() {}
+
+func (*GiteaResponse_IssueView) isGiteaResponse_Result() {}
 
 var File_repowolf_v1_gitea_proto protoreflect.FileDescriptor
 
 const file_repowolf_v1_gitea_proto_rawDesc = "" +
 	"\n" +
 	"\x17repowolf/v1/gitea.proto\x12\vrepowolf.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x18repowolf/v1/common.proto\x1a\x16repowolf/v1/meta.proto\"\x1c\n" +
-	"\x1aGiteaRepositoryViewRequest\"\xa6\x01\n" +
+	"\x1aGiteaRepositoryViewRequest\"\xe1\x03\n" +
+	"\x15GiteaIssueListRequest\x122\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1c.repowolf.v1.GiteaIssueStateR\x05state\x12\x1d\n" +
+	"\akeyword\x18\x02 \x01(\tH\x00R\akeyword\x88\x01\x01\x12\x1b\n" +
+	"\x06author\x18\x03 \x01(\tH\x01R\x06author\x88\x01\x01\x12\x1f\n" +
+	"\bassignee\x18\x04 \x01(\tH\x02R\bassignee\x88\x01\x01\x12\x1f\n" +
+	"\bmentions\x18\x05 \x01(\tH\x03R\bmentions\x88\x01\x01\x12.\n" +
+	"\x04from\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x120\n" +
+	"\x05until\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x05until\x12\x19\n" +
+	"\x05owner\x18\b \x01(\tH\x04R\x05owner\x88\x01\x01\x12\x12\n" +
+	"\x04page\x18\t \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\n" +
+	" \x01(\x05R\x05limit\x124\n" +
+	"\x06fields\x18\v \x03(\x0e2\x1c.repowolf.v1.GiteaIssueFieldR\x06fieldsB\n" +
+	"\n" +
+	"\b_keywordB\t\n" +
+	"\a_authorB\v\n" +
+	"\t_assigneeB\v\n" +
+	"\t_mentionsB\b\n" +
+	"\x06_owner\"X\n" +
+	"\x15GiteaIssueViewRequest\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x03R\x05index\x12)\n" +
+	"\x10include_comments\x18\x02 \x01(\bR\x0fincludeComments\"\xb0\x02\n" +
 	"\fGiteaRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.repowolf.v1.RequestContextR\acontext\x12R\n" +
 	"\x0frepository_view\x18\n" +
-	" \x01(\v2'.repowolf.v1.GiteaRepositoryViewRequestH\x00R\x0erepositoryViewB\v\n" +
+	" \x01(\v2'.repowolf.v1.GiteaRepositoryViewRequestH\x00R\x0erepositoryView\x12C\n" +
+	"\n" +
+	"issue_list\x18\v \x01(\v2\".repowolf.v1.GiteaIssueListRequestH\x00R\tissueList\x12C\n" +
+	"\n" +
+	"issue_view\x18\f \x01(\v2\".repowolf.v1.GiteaIssueViewRequestH\x00R\tissueViewB\v\n" +
 	"\toperation\"\xa2\x04\n" +
 	"\x15GiteaRepositoryRecord\x12\x1b\n" +
 	"\tfull_name\x18\x01 \x01(\tR\bfullName\x12 \n" +
@@ -465,12 +1283,78 @@ const file_repowolf_v1_gitea_proto_rawDesc = "" +
 	"\x19GiteaRepositoryViewResult\x12B\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\".repowolf.v1.GiteaRepositoryRecordR\n" +
-	"repository\"\x9b\x01\n" +
+	"repository\"\xeb\x01\n" +
+	"\x12GiteaCommentRecord\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
+	"\tauthor_id\x18\x02 \x01(\x03R\bauthorId\x12\x16\n" +
+	"\x06author\x18\x03 \x01(\tR\x06author\x12\x10\n" +
+	"\x03url\x18\x04 \x01(\tR\x03url\x12\x12\n" +
+	"\x04body\x18\x05 \x01(\tR\x04body\x124\n" +
+	"\acreated\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\acreated\x124\n" +
+	"\aupdated\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\aupdated\"\x95\x05\n" +
+	"\x10GiteaIssueRecord\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x03R\x05index\x122\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x1c.repowolf.v1.GiteaIssueStateR\x05state\x12/\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x1b.repowolf.v1.GiteaIssueKindR\x04kind\x12\x1b\n" +
+	"\tauthor_id\x18\x04 \x01(\x03R\bauthorId\x12\x16\n" +
+	"\x06author\x18\x05 \x01(\tR\x06author\x12\x10\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url\x12\x14\n" +
+	"\x05title\x18\a \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\b \x01(\tR\x04body\x12\x12\n" +
+	"\x04repo\x18\t \x01(\tR\x04repo\x12\x14\n" +
+	"\x05owner\x18\n" +
+	" \x01(\tR\x05owner\x124\n" +
+	"\acreated\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\acreated\x124\n" +
+	"\aupdated\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\aupdated\x126\n" +
+	"\bdeadline\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\x12\x1c\n" +
+	"\tassignees\x18\x0e \x03(\tR\tassignees\x12!\n" +
+	"\tmilestone\x18\x0f \x01(\tH\x00R\tmilestone\x88\x01\x01\x12\x16\n" +
+	"\x06labels\x18\x10 \x03(\tR\x06labels\x12#\n" +
+	"\rcomment_count\x18\x11 \x01(\x03R\fcommentCount\x12;\n" +
+	"\bcomments\x18\x12 \x03(\v2\x1f.repowolf.v1.GiteaCommentRecordR\bcommentsB\f\n" +
+	"\n" +
+	"_milestone\"M\n" +
+	"\x14GiteaIssueListResult\x125\n" +
+	"\x06issues\x18\x01 \x03(\v2\x1d.repowolf.v1.GiteaIssueRecordR\x06issues\"K\n" +
+	"\x14GiteaIssueViewResult\x123\n" +
+	"\x05issue\x18\x01 \x01(\v2\x1d.repowolf.v1.GiteaIssueRecordR\x05issue\"\xa3\x02\n" +
 	"\rGiteaResponse\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.repowolf.v1.ResponseMetaR\x04meta\x12Q\n" +
 	"\x0frepository_view\x18\n" +
-	" \x01(\v2&.repowolf.v1.GiteaRepositoryViewResultH\x00R\x0erepositoryViewB\b\n" +
-	"\x06result2P\n" +
+	" \x01(\v2&.repowolf.v1.GiteaRepositoryViewResultH\x00R\x0erepositoryView\x12B\n" +
+	"\n" +
+	"issue_list\x18\v \x01(\v2!.repowolf.v1.GiteaIssueListResultH\x00R\tissueList\x12B\n" +
+	"\n" +
+	"issue_view\x18\f \x01(\v2!.repowolf.v1.GiteaIssueViewResultH\x00R\tissueViewB\b\n" +
+	"\x06result*\x89\x01\n" +
+	"\x0fGiteaIssueState\x12!\n" +
+	"\x1dGITEA_ISSUE_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16GITEA_ISSUE_STATE_OPEN\x10\x01\x12\x1c\n" +
+	"\x18GITEA_ISSUE_STATE_CLOSED\x10\x02\x12\x19\n" +
+	"\x15GITEA_ISSUE_STATE_ALL\x10\x03*N\n" +
+	"\x0eGiteaIssueKind\x12 \n" +
+	"\x1cGITEA_ISSUE_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16GITEA_ISSUE_KIND_ISSUE\x10\x01*\xb4\x04\n" +
+	"\x0fGiteaIssueField\x12!\n" +
+	"\x1dGITEA_ISSUE_FIELD_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17GITEA_ISSUE_FIELD_INDEX\x10\x01\x12\x1b\n" +
+	"\x17GITEA_ISSUE_FIELD_STATE\x10\x02\x12\x1c\n" +
+	"\x18GITEA_ISSUE_FIELD_AUTHOR\x10\x03\x12\x1f\n" +
+	"\x1bGITEA_ISSUE_FIELD_AUTHOR_ID\x10\x04\x12\x19\n" +
+	"\x15GITEA_ISSUE_FIELD_URL\x10\x05\x12\x1b\n" +
+	"\x17GITEA_ISSUE_FIELD_TITLE\x10\x06\x12\x1a\n" +
+	"\x16GITEA_ISSUE_FIELD_BODY\x10\a\x12\x1d\n" +
+	"\x19GITEA_ISSUE_FIELD_CREATED\x10\b\x12\x1d\n" +
+	"\x19GITEA_ISSUE_FIELD_UPDATED\x10\t\x12\x1e\n" +
+	"\x1aGITEA_ISSUE_FIELD_DEADLINE\x10\n" +
+	"\x12\x1f\n" +
+	"\x1bGITEA_ISSUE_FIELD_ASSIGNEES\x10\v\x12\x1f\n" +
+	"\x1bGITEA_ISSUE_FIELD_MILESTONE\x10\f\x12\x1c\n" +
+	"\x18GITEA_ISSUE_FIELD_LABELS\x10\r\x12\x1e\n" +
+	"\x1aGITEA_ISSUE_FIELD_COMMENTS\x10\x0e\x12\x1a\n" +
+	"\x16GITEA_ISSUE_FIELD_REPO\x10\x0f\x12\x1b\n" +
+	"\x17GITEA_ISSUE_FIELD_OWNER\x10\x10\x12\x1a\n" +
+	"\x16GITEA_ISSUE_FIELD_KIND\x10\x112P\n" +
 	"\fGiteaService\x12@\n" +
 	"\aExecute\x12\x19.repowolf.v1.GiteaRequest\x1a\x1a.repowolf.v1.GiteaResponseB=Z;github.com/rochecompaan/repowolf/gen/repowolf/v1;repowolfv1b\x06proto3"
 
@@ -486,32 +1370,60 @@ func file_repowolf_v1_gitea_proto_rawDescGZIP() []byte {
 	return file_repowolf_v1_gitea_proto_rawDescData
 }
 
-var file_repowolf_v1_gitea_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_repowolf_v1_gitea_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_repowolf_v1_gitea_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_repowolf_v1_gitea_proto_goTypes = []any{
-	(*GiteaRepositoryViewRequest)(nil), // 0: repowolf.v1.GiteaRepositoryViewRequest
-	(*GiteaRequest)(nil),               // 1: repowolf.v1.GiteaRequest
-	(*GiteaRepositoryRecord)(nil),      // 2: repowolf.v1.GiteaRepositoryRecord
-	(*GiteaRepositoryViewResult)(nil),  // 3: repowolf.v1.GiteaRepositoryViewResult
-	(*GiteaResponse)(nil),              // 4: repowolf.v1.GiteaResponse
-	(*RequestContext)(nil),             // 5: repowolf.v1.RequestContext
-	(*timestamppb.Timestamp)(nil),      // 6: google.protobuf.Timestamp
-	(*ResponseMeta)(nil),               // 7: repowolf.v1.ResponseMeta
+	(GiteaIssueState)(0),               // 0: repowolf.v1.GiteaIssueState
+	(GiteaIssueKind)(0),                // 1: repowolf.v1.GiteaIssueKind
+	(GiteaIssueField)(0),               // 2: repowolf.v1.GiteaIssueField
+	(*GiteaRepositoryViewRequest)(nil), // 3: repowolf.v1.GiteaRepositoryViewRequest
+	(*GiteaIssueListRequest)(nil),      // 4: repowolf.v1.GiteaIssueListRequest
+	(*GiteaIssueViewRequest)(nil),      // 5: repowolf.v1.GiteaIssueViewRequest
+	(*GiteaRequest)(nil),               // 6: repowolf.v1.GiteaRequest
+	(*GiteaRepositoryRecord)(nil),      // 7: repowolf.v1.GiteaRepositoryRecord
+	(*GiteaRepositoryViewResult)(nil),  // 8: repowolf.v1.GiteaRepositoryViewResult
+	(*GiteaCommentRecord)(nil),         // 9: repowolf.v1.GiteaCommentRecord
+	(*GiteaIssueRecord)(nil),           // 10: repowolf.v1.GiteaIssueRecord
+	(*GiteaIssueListResult)(nil),       // 11: repowolf.v1.GiteaIssueListResult
+	(*GiteaIssueViewResult)(nil),       // 12: repowolf.v1.GiteaIssueViewResult
+	(*GiteaResponse)(nil),              // 13: repowolf.v1.GiteaResponse
+	(*timestamppb.Timestamp)(nil),      // 14: google.protobuf.Timestamp
+	(*RequestContext)(nil),             // 15: repowolf.v1.RequestContext
+	(*ResponseMeta)(nil),               // 16: repowolf.v1.ResponseMeta
 }
 var file_repowolf_v1_gitea_proto_depIdxs = []int32{
-	5, // 0: repowolf.v1.GiteaRequest.context:type_name -> repowolf.v1.RequestContext
-	0, // 1: repowolf.v1.GiteaRequest.repository_view:type_name -> repowolf.v1.GiteaRepositoryViewRequest
-	6, // 2: repowolf.v1.GiteaRepositoryRecord.created:type_name -> google.protobuf.Timestamp
-	6, // 3: repowolf.v1.GiteaRepositoryRecord.updated:type_name -> google.protobuf.Timestamp
-	2, // 4: repowolf.v1.GiteaRepositoryViewResult.repository:type_name -> repowolf.v1.GiteaRepositoryRecord
-	7, // 5: repowolf.v1.GiteaResponse.meta:type_name -> repowolf.v1.ResponseMeta
-	3, // 6: repowolf.v1.GiteaResponse.repository_view:type_name -> repowolf.v1.GiteaRepositoryViewResult
-	1, // 7: repowolf.v1.GiteaService.Execute:input_type -> repowolf.v1.GiteaRequest
-	4, // 8: repowolf.v1.GiteaService.Execute:output_type -> repowolf.v1.GiteaResponse
-	8, // [8:9] is the sub-list for method output_type
-	7, // [7:8] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	0,  // 0: repowolf.v1.GiteaIssueListRequest.state:type_name -> repowolf.v1.GiteaIssueState
+	14, // 1: repowolf.v1.GiteaIssueListRequest.from:type_name -> google.protobuf.Timestamp
+	14, // 2: repowolf.v1.GiteaIssueListRequest.until:type_name -> google.protobuf.Timestamp
+	2,  // 3: repowolf.v1.GiteaIssueListRequest.fields:type_name -> repowolf.v1.GiteaIssueField
+	15, // 4: repowolf.v1.GiteaRequest.context:type_name -> repowolf.v1.RequestContext
+	3,  // 5: repowolf.v1.GiteaRequest.repository_view:type_name -> repowolf.v1.GiteaRepositoryViewRequest
+	4,  // 6: repowolf.v1.GiteaRequest.issue_list:type_name -> repowolf.v1.GiteaIssueListRequest
+	5,  // 7: repowolf.v1.GiteaRequest.issue_view:type_name -> repowolf.v1.GiteaIssueViewRequest
+	14, // 8: repowolf.v1.GiteaRepositoryRecord.created:type_name -> google.protobuf.Timestamp
+	14, // 9: repowolf.v1.GiteaRepositoryRecord.updated:type_name -> google.protobuf.Timestamp
+	7,  // 10: repowolf.v1.GiteaRepositoryViewResult.repository:type_name -> repowolf.v1.GiteaRepositoryRecord
+	14, // 11: repowolf.v1.GiteaCommentRecord.created:type_name -> google.protobuf.Timestamp
+	14, // 12: repowolf.v1.GiteaCommentRecord.updated:type_name -> google.protobuf.Timestamp
+	0,  // 13: repowolf.v1.GiteaIssueRecord.state:type_name -> repowolf.v1.GiteaIssueState
+	1,  // 14: repowolf.v1.GiteaIssueRecord.kind:type_name -> repowolf.v1.GiteaIssueKind
+	14, // 15: repowolf.v1.GiteaIssueRecord.created:type_name -> google.protobuf.Timestamp
+	14, // 16: repowolf.v1.GiteaIssueRecord.updated:type_name -> google.protobuf.Timestamp
+	14, // 17: repowolf.v1.GiteaIssueRecord.deadline:type_name -> google.protobuf.Timestamp
+	9,  // 18: repowolf.v1.GiteaIssueRecord.comments:type_name -> repowolf.v1.GiteaCommentRecord
+	10, // 19: repowolf.v1.GiteaIssueListResult.issues:type_name -> repowolf.v1.GiteaIssueRecord
+	10, // 20: repowolf.v1.GiteaIssueViewResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
+	16, // 21: repowolf.v1.GiteaResponse.meta:type_name -> repowolf.v1.ResponseMeta
+	8,  // 22: repowolf.v1.GiteaResponse.repository_view:type_name -> repowolf.v1.GiteaRepositoryViewResult
+	11, // 23: repowolf.v1.GiteaResponse.issue_list:type_name -> repowolf.v1.GiteaIssueListResult
+	12, // 24: repowolf.v1.GiteaResponse.issue_view:type_name -> repowolf.v1.GiteaIssueViewResult
+	6,  // 25: repowolf.v1.GiteaService.Execute:input_type -> repowolf.v1.GiteaRequest
+	13, // 26: repowolf.v1.GiteaService.Execute:output_type -> repowolf.v1.GiteaResponse
+	26, // [26:27] is the sub-list for method output_type
+	25, // [25:26] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_repowolf_v1_gitea_proto_init() }
@@ -521,24 +1433,31 @@ func file_repowolf_v1_gitea_proto_init() {
 	}
 	file_repowolf_v1_common_proto_init()
 	file_repowolf_v1_meta_proto_init()
-	file_repowolf_v1_gitea_proto_msgTypes[1].OneofWrappers = []any{
+	file_repowolf_v1_gitea_proto_msgTypes[1].OneofWrappers = []any{}
+	file_repowolf_v1_gitea_proto_msgTypes[3].OneofWrappers = []any{
 		(*GiteaRequest_RepositoryView)(nil),
+		(*GiteaRequest_IssueList)(nil),
+		(*GiteaRequest_IssueView)(nil),
 	}
-	file_repowolf_v1_gitea_proto_msgTypes[4].OneofWrappers = []any{
+	file_repowolf_v1_gitea_proto_msgTypes[7].OneofWrappers = []any{}
+	file_repowolf_v1_gitea_proto_msgTypes[10].OneofWrappers = []any{
 		(*GiteaResponse_RepositoryView)(nil),
+		(*GiteaResponse_IssueList)(nil),
+		(*GiteaResponse_IssueView)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_repowolf_v1_gitea_proto_rawDesc), len(file_repowolf_v1_gitea_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   5,
+			NumEnums:      3,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_repowolf_v1_gitea_proto_goTypes,
 		DependencyIndexes: file_repowolf_v1_gitea_proto_depIdxs,
+		EnumInfos:         file_repowolf_v1_gitea_proto_enumTypes,
 		MessageInfos:      file_repowolf_v1_gitea_proto_msgTypes,
 	}.Build()
 	File_repowolf_v1_gitea_proto = out.File

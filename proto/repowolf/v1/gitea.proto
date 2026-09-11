@@ -16,10 +16,64 @@ service GiteaService {
 
 message GiteaRepositoryViewRequest {}
 
+enum GiteaIssueState {
+  GITEA_ISSUE_STATE_UNSPECIFIED = 0;
+  GITEA_ISSUE_STATE_OPEN = 1;
+  GITEA_ISSUE_STATE_CLOSED = 2;
+  GITEA_ISSUE_STATE_ALL = 3;
+}
+
+enum GiteaIssueKind {
+  GITEA_ISSUE_KIND_UNSPECIFIED = 0;
+  GITEA_ISSUE_KIND_ISSUE = 1;
+}
+
+enum GiteaIssueField {
+  GITEA_ISSUE_FIELD_UNSPECIFIED = 0;
+  GITEA_ISSUE_FIELD_INDEX = 1;
+  GITEA_ISSUE_FIELD_STATE = 2;
+  GITEA_ISSUE_FIELD_AUTHOR = 3;
+  GITEA_ISSUE_FIELD_AUTHOR_ID = 4;
+  GITEA_ISSUE_FIELD_URL = 5;
+  GITEA_ISSUE_FIELD_TITLE = 6;
+  GITEA_ISSUE_FIELD_BODY = 7;
+  GITEA_ISSUE_FIELD_CREATED = 8;
+  GITEA_ISSUE_FIELD_UPDATED = 9;
+  GITEA_ISSUE_FIELD_DEADLINE = 10;
+  GITEA_ISSUE_FIELD_ASSIGNEES = 11;
+  GITEA_ISSUE_FIELD_MILESTONE = 12;
+  GITEA_ISSUE_FIELD_LABELS = 13;
+  GITEA_ISSUE_FIELD_COMMENTS = 14;
+  GITEA_ISSUE_FIELD_REPO = 15;
+  GITEA_ISSUE_FIELD_OWNER = 16;
+  GITEA_ISSUE_FIELD_KIND = 17;
+}
+
+message GiteaIssueListRequest {
+  GiteaIssueState state = 1;
+  optional string keyword = 2;
+  optional string author = 3;
+  optional string assignee = 4;
+  optional string mentions = 5;
+  google.protobuf.Timestamp from = 6;
+  google.protobuf.Timestamp until = 7;
+  optional string owner = 8;
+  int32 page = 9;
+  int32 limit = 10;
+  repeated GiteaIssueField fields = 11;
+}
+
+message GiteaIssueViewRequest {
+  int64 index = 1;
+  bool include_comments = 2;
+}
+
 message GiteaRequest {
   RequestContext context = 1;
   oneof operation {
     GiteaRepositoryViewRequest repository_view = 10;
+    GiteaIssueListRequest issue_list = 11;
+    GiteaIssueViewRequest issue_view = 12;
   }
 }
 
@@ -46,9 +100,45 @@ message GiteaRepositoryRecord {
 
 message GiteaRepositoryViewResult { GiteaRepositoryRecord repository = 1; }
 
+message GiteaCommentRecord {
+  int64 id = 1;
+  int64 author_id = 2;
+  string author = 3;
+  string url = 4;
+  string body = 5;
+  google.protobuf.Timestamp created = 6;
+  google.protobuf.Timestamp updated = 7;
+}
+
+message GiteaIssueRecord {
+  int64 index = 1;
+  GiteaIssueState state = 2;
+  GiteaIssueKind kind = 3;
+  int64 author_id = 4;
+  string author = 5;
+  string url = 6;
+  string title = 7;
+  string body = 8;
+  string repo = 9;
+  string owner = 10;
+  google.protobuf.Timestamp created = 11;
+  google.protobuf.Timestamp updated = 12;
+  google.protobuf.Timestamp deadline = 13;
+  repeated string assignees = 14;
+  optional string milestone = 15;
+  repeated string labels = 16;
+  int64 comment_count = 17;
+  repeated GiteaCommentRecord comments = 18;
+}
+
+message GiteaIssueListResult { repeated GiteaIssueRecord issues = 1; }
+message GiteaIssueViewResult { GiteaIssueRecord issue = 1; }
+
 message GiteaResponse {
   ResponseMeta meta = 1;
   oneof result {
     GiteaRepositoryViewResult repository_view = 10;
+    GiteaIssueListResult issue_list = 11;
+    GiteaIssueViewResult issue_view = 12;
   }
 }
