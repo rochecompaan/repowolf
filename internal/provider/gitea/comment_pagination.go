@@ -30,6 +30,12 @@ func loadIssueComments(ctx context.Context, api issueAPI, owner, repo string, in
 		if err != nil {
 			return nil, classifyProviderError(ctx, err)
 		}
+		if page == maximumCommentPages+1 {
+			if len(values) != 0 {
+				return nil, runner.ErrOutputLimit
+			}
+			return completeIssueComments(issue, comments)
+		}
 		// Gitea 1.27 ignores page and limit on this endpoint. A first response
 		// larger than the requested page proves that behavior and is the complete
 		// collection; retain the same record and response-size bounds.
@@ -39,12 +45,6 @@ func loadIssueComments(ctx context.Context, api issueAPI, owner, repo string, in
 		}
 		if unpaginated && len(values) > maximumComments {
 			return nil, runner.ErrOutputLimit
-		}
-		if page == maximumCommentPages+1 {
-			if len(values) != 0 {
-				return nil, runner.ErrOutputLimit
-			}
-			return completeIssueComments(issue, comments)
 		}
 		if page == 2 && issue.CommentCount == commentPageSize && len(comments) == commentPageSize && len(values) == commentPageSize {
 			probe, _, err := normalizeCommentPage(values, 0)

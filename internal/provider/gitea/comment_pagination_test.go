@@ -133,6 +133,38 @@ func TestCommentPaginationAcceptsMaximumAfterEmptyOverflowProbe(t *testing.T) {
 	}
 }
 
+func TestCommentPaginationClassifiesEveryNonEmptyOverflowProbeAsOutputLimit(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		probeSize int
+	}{
+		{name: "single record", probeSize: 1},
+		{name: "oversized page", probeSize: commentPageSize + 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			probeSize := test.probeSize
+			pages := make(map[int][]*sdk.Comment, maximumCommentPages+1)
+			for page := 1; page <= maximumCommentPages; page++ {
+				values := make([]*sdk.Comment, commentPageSize)
+				for i := range values {
+					values[i] = sdkComment(int64((page-1)*commentPageSize + i + 1))
+				}
+				pages[page] = values
+			}
+			probe := make([]*sdk.Comment, probeSize)
+			for i := range probe {
+				probe[i] = sdkComment(int64(maximumComments + i + 1))
+			}
+			pages[maximumCommentPages+1] = probe
+			f := &fakeIssueAPI{comments: pages}
+			got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(maximumComments))
+			if got != nil || !errors.Is(err, runner.ErrOutputLimit) || f.commentCalls != maximumCommentPages+1 {
+				t.Fatalf("probe size=%d comments=%#v calls=%d err=%v", probeSize, got, f.commentCalls, err)
+			}
+		})
+	}
+}
+
 func TestCommentPaginationRejectsOrder(t *testing.T) {
 	f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: {sdkComment(2), sdkComment(1)}}}
 	if got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(2)); err == nil || got != nil {
