@@ -31,7 +31,7 @@ if "${compose[@]}" run --rm sandbox gh run list --repo rochecompaan/repowolf; th
   exit 1
 fi
 "${compose[@]}" logs repowolf >"$broker_log"
-grep -E '"operation":[[:space:]]*"/repowolf\.v1\.GitHubService/Execute"' "$broker_log" \
+grep -E '"operation":[[:space:]]*"github\.run_list"' "$broker_log" \
   | grep -E '"outcome":[[:space:]]*"denied"' \
   | grep -E '"reason":[[:space:]]*"PermissionDenied"'
 if grep 'github.run_list' "$broker_log" \
