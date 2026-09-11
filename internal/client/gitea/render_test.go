@@ -49,6 +49,31 @@ func TestRenderRejectsMalformedResponse(t *testing.T) {
 	}
 }
 
+func TestRenderEnforcesExactOutputLimitWithoutPartialBytes(t *testing.T) {
+	response := fixtureResponse()
+	response.GetRepositoryView().Repository.Description = strings.Repeat("x", maxRenderedBytes-1024)
+	for range 8 {
+		output, err := render(command{format: outputJSON}, response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		delta := maxRenderedBytes - len(output)
+		if delta == 0 {
+			break
+		}
+		response.GetRepositoryView().Repository.Description += strings.Repeat("x", delta)
+	}
+	output, err := render(command{format: outputJSON}, response)
+	if err != nil || len(output) != maxRenderedBytes {
+		t.Fatalf("exact limit render = %d bytes, %v", len(output), err)
+	}
+	response.GetRepositoryView().Repository.Description += "x"
+	output, err = render(command{format: outputJSON}, response)
+	if err == nil || output != nil {
+		t.Fatalf("over-limit render returned %d partial bytes, %v", len(output), err)
+	}
+}
+
 func TestRenderReplacesControlsInTextOnly(t *testing.T) {
 	response := fixtureResponse()
 	response.GetRepositoryView().Repository.Description = "a\tb\nc"

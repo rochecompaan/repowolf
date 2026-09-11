@@ -9,6 +9,7 @@ for arch in amd64 arm64; do
   test -s "$archive"
   tar -tzf "$archive" | grep -E '(^|/)repowolf$' >/dev/null
   tar -tzf "$archive" | grep -E '(^|/)repowolf-client$' >/dev/null
+  tar -tzf "$archive" | grep -E '(^|/)tea$' >/dev/null
 done
 native="$(go env GOARCH)"
 case "$native" in amd64|arm64) ;; *) echo "unsupported smoke architecture: $native" >&2; exit 1 ;; esac
@@ -16,7 +17,6 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 tar -xzf "dist/repowolf_linux_${native}.tar.gz" -C "$tmp"
 "$tmp/repowolf" --version
-ln -s repowolf-client "$tmp/tea"
 set +e
 "$tmp/repowolf-client" >/dev/null 2>&1
 status=$?
