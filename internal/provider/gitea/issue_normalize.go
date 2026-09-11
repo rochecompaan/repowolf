@@ -39,12 +39,12 @@ func normalizeIssue(v *sdk.Issue, owner, repo string) (*normalizedIssue, error) 
 			return nil, fmt.Errorf("invalid issue string")
 		}
 	}
-	if v.Poster.UserName == "" || v.HTMLURL == "" || v.Title == "" || v.Created.IsZero() || v.Updated.IsZero() || v.Updated.Before(v.Created) {
+	if v.Poster.UserName == "" || v.HTMLURL == "" || v.Title == "" || !validProtoTime(v.Created) || !validProtoTime(v.Updated) || v.Updated.Before(v.Created) {
 		return nil, fmt.Errorf("invalid issue fields")
 	}
 	n := &normalizedIssue{index: v.Index, authorID: v.Poster.ID, commentCount: int64(v.Comments), state: state, author: v.Poster.UserName, url: v.HTMLURL, title: v.Title, body: v.Body, owner: owner, repo: repo, created: v.Created, updated: v.Updated}
 	if v.Deadline != nil {
-		if v.Deadline.IsZero() {
+		if !validProtoTime(*v.Deadline) {
 			return nil, fmt.Errorf("invalid deadline")
 		}
 		d := *v.Deadline
@@ -117,8 +117,12 @@ func projectIssue(n *normalizedIssue, fields []repowolfv1.GiteaIssueField) *repo
 
 var allIssueFields = []repowolfv1.GiteaIssueField{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}
 
+func validProtoTime(value time.Time) bool {
+	return !value.IsZero() && timestamppb.New(value).IsValid()
+}
+
 func normalizeComment(v *sdk.Comment) (*repowolfv1.GiteaCommentRecord, error) {
-	if v == nil || v.ID <= 0 || v.Poster == nil || v.Poster.ID <= 0 || v.Poster.UserName == "" || v.HTMLURL == "" || v.Created.IsZero() || v.Updated.IsZero() || v.Updated.Before(v.Created) {
+	if v == nil || v.ID <= 0 || v.Poster == nil || v.Poster.ID <= 0 || v.Poster.UserName == "" || v.HTMLURL == "" || !validProtoTime(v.Created) || !validProtoTime(v.Updated) || v.Updated.Before(v.Created) {
 		return nil, fmt.Errorf("invalid comment")
 	}
 	for _, s := range []string{v.Poster.UserName, v.HTMLURL, v.Body} {

@@ -5,6 +5,7 @@ package integration_test
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -55,6 +56,10 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "open issue", "body": "private issue body"}, &open, "", "")
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "closed issue", "body": "closed body"}, &closed, "", "")
 	giteaJSON(t, httpClient, http.MethodPatch, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(closed.Index, 10), token.SHA1, map[string]any{"state": "closed"}, nil, "", "")
+	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/branches", token.SHA1, map[string]any{"new_branch_name": "pull-fixture", "old_branch_name": "main"}, nil, "", "")
+	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/contents/pull-fixture.txt", token.SHA1, map[string]any{"branch": "pull-fixture", "message": "seed pull request", "content": base64.StdEncoding.EncodeToString([]byte("pull request fixture\n"))}, nil, "", "")
+	var pull createdIssue
+	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/pulls", token.SHA1, map[string]any{"base": "main", "head": "pull-fixture", "title": "pull request"}, &pull, "", "")
 	for i := 1; i <= 51; i++ {
 		giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(open.Index, 10)+"/comments", token.SHA1, map[string]any{"body": "comment " + strconv.Itoa(i)}, nil, "", "")
 	}
@@ -75,10 +80,28 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	if err := json.Unmarshal(list, &rows); err != nil || len(rows) != 2 {
 		t.Fatalf("list=%s err=%v", list, err)
 	}
-	for _, row := range rows {
-		if len(row) != 4 || row["index"] == nil || row["title"] == nil || row["state"] == nil || row["comments"] == nil {
-			t.Fatalf("row=%#v", row)
+	wantRows := []struct {
+		index    int64
+		title    string
+		state    string
+		comments float64
+	}{
+		{index: closed.Index, title: "closed issue", state: "closed", comments: 0},
+		{index: open.Index, title: "open issue", state: "open", comments: 51},
+	}
+	for i, row := range rows {
+		if len(row) != 4 || row["index"] != float64(wantRows[i].index) || row["title"] != wantRows[i].title || row["state"] != wantRows[i].state || row["comments"] != wantRows[i].comments {
+			t.Fatalf("row %d = %#v, want %#v", i, row, wantRows[i])
 		}
+	}
+	openList := runTeaArgs(t, binaries.Tea, env, "issues", "--repo", "CanonicalOwner/CanonicalRepo", "--state", "open", "--page", "1", "--limit", "50", "--fields", "index,state", "--output", "json")
+	var openRows []map[string]any
+	if err := json.Unmarshal(openList, &openRows); err != nil || len(openRows) != 1 || openRows[0]["index"] != float64(open.Index) || openRows[0]["state"] != "open" {
+		t.Fatalf("open list=%s err=%v", openList, err)
+	}
+	emptyList := runTeaArgs(t, binaries.Tea, env, "issues", "--repo", "CanonicalOwner/CanonicalRepo", "--state", "all", "--page", "2", "--limit", "50", "--fields", "index", "--output", "json")
+	if string(emptyList) != "[]\n" {
+		t.Fatalf("empty page = %q", emptyList)
 	}
 	viewCommand := exec.Command(binaries.Tea, "issues", strconv.FormatInt(open.Index, 10), "--repo", "CanonicalOwner/CanonicalRepo", "--comments", "--output", "json")
 	viewCommand.Env = env
@@ -102,12 +125,39 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 			t.Fatal("comments out of order")
 		}
 	}
+	deniedOutput, deniedDiagnostic := runTeaFailure(t, binaries.Tea, env, "issues", "--repo", "CanonicalOwner/OtherRepo", "--output", "json")
+	if len(deniedOutput) != 0 || deniedDiagnostic != "tea: Gitea operation failed\n" {
+		t.Fatalf("denied output=%q diagnostic=%q", deniedOutput, deniedDiagnostic)
+	}
+	pullOutput, pullDiagnostic := runTeaFailure(t, binaries.Tea, env, "issues", strconv.FormatInt(pull.Index, 10), "--repo", "CanonicalOwner/CanonicalRepo", "--comments", "--output", "json")
+	if len(pullOutput) != 0 || pullDiagnostic != "tea: index is a pull request; use tea pulls\n" {
+		t.Fatalf("pull output=%q diagnostic=%q broker=%s audit=%s", pullOutput, pullDiagnostic, mustRead(broker.StderrPath), mustRead(broker.AuditPath))
+	}
 	broker.Stop(t)
 	audit := string(mustRead(broker.AuditPath))
 	if !strings.Contains(audit, `"operation":"gitea.issue_list"`) || !strings.Contains(audit, `"operation":"gitea.issue_view"`) || strings.Contains(audit, "private issue body") {
 		t.Fatalf("unexpected audit: %s", audit)
 	}
+	logs := dockerOutput(t, "logs", container)
+	commentPath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + strconv.FormatInt(open.Index, 10) + "/comments"
+	if !giteaLogContainsBoundedGET(logs, commentPath, 1, 50) {
+		t.Fatalf("Gitea log does not contain bounded comment request for %s", commentPath)
+	}
+	pullCommentPath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + strconv.FormatInt(pull.Index, 10) + "/comments"
+	if strings.Contains(logs, "GET "+pullCommentPath) || strings.Contains(logs, "/CanonicalOwner/OtherRepo/issues") {
+		t.Fatalf("unexpected provider request in Gitea logs")
+	}
 }
+
+func giteaLogContainsBoundedGET(logs, path string, page, limit int) bool {
+	for _, line := range strings.Split(logs, "\n") {
+		if strings.Contains(line, "GET "+path) && strings.Contains(line, "page="+strconv.Itoa(page)) && strings.Contains(line, "limit="+strconv.Itoa(limit)) {
+			return true
+		}
+	}
+	return false
+}
+
 func runTeaArgs(t *testing.T, binary string, env []string, args ...string) []byte {
 	t.Helper()
 	command := exec.Command(binary, args...)
@@ -119,4 +169,17 @@ func runTeaArgs(t *testing.T, binary string, env []string, args ...string) []byt
 		t.Fatalf("tea %v: %v: %s", args, err, stderr.String())
 	}
 	return stdout.Bytes()
+}
+
+func runTeaFailure(t *testing.T, binary string, env []string, args ...string) ([]byte, string) {
+	t.Helper()
+	command := exec.Command(binary, args...)
+	command.Env = env
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	if err := command.Run(); err == nil {
+		t.Fatalf("tea %v unexpectedly succeeded: %s", args, stdout.String())
+	}
+	return stdout.Bytes(), stderr.String()
 }

@@ -78,13 +78,13 @@ func loadIssueComments(ctx context.Context, api issueAPI, owner, repo string, in
 }
 
 func issueViewResponseSize(issue *repowolfv1.GiteaIssueRecord, comments []*repowolfv1.GiteaCommentRecord) int {
-	candidate := *issue
+	candidate := proto.Clone(issue).(*repowolfv1.GiteaIssueRecord)
 	candidate.Comments = comments
 	// Production request IDs are 16 random bytes encoded as 32 hex digits.
 	return proto.Size(&repowolfv1.GiteaResponse{
 		Meta: &repowolfv1.ResponseMeta{RequestId: "00000000000000000000000000000000"},
 		Result: &repowolfv1.GiteaResponse_IssueView{
-			IssueView: &repowolfv1.GiteaIssueViewResult{Issue: &candidate},
+			IssueView: &repowolfv1.GiteaIssueViewResult{Issue: candidate},
 		},
 	})
 }
