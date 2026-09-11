@@ -28,6 +28,7 @@ type rawProvider struct {
 	SSHUser  string            `yaml:"sshUser"`
 	SSHPort  *uint16           `yaml:"sshPort"`
 	TokenEnv rawOptionalString `yaml:"tokenEnv"`
+	CAFile   rawCAFile         `yaml:"caFile"`
 }
 
 type rawOptionalString struct {
@@ -39,6 +40,17 @@ func (value *rawOptionalString) UnmarshalYAML(node *yaml.Node) error {
 	value.present = true
 	if node.Tag != "!!str" {
 		return fmt.Errorf("tokenEnv must be a string")
+	}
+	value.value = node.Value
+	return nil
+}
+
+type rawCAFile rawOptionalString
+
+func (value *rawCAFile) UnmarshalYAML(node *yaml.Node) error {
+	value.present = true
+	if node.Tag != "!!str" {
+		return fmt.Errorf("caFile must be a string")
 	}
 	value.value = node.Value
 	return nil
@@ -122,7 +134,7 @@ func rejectDuplicateKeys(data []byte) error {
 	if err := duplicateKey(&document); err != nil {
 		return err
 	}
-	if err := rejectNullProviderTokenEnv(&document); err != nil {
+	if err := rejectNullProviderFields(&document); err != nil {
 		return err
 	}
 	var second yaml.Node
@@ -135,72 +147,100 @@ func rejectDuplicateKeys(data []byte) error {
 	return nil
 }
 
-func rejectNullProviderTokenEnv(document *yaml.Node) error {
+func rejectNullProviderFields(document *yaml.Node) error {
 	// yaml.v3 bypasses UnmarshalYAML for explicit null values.
-	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+	if len(document.Content) == 0 {
 		return nil
 	}
-	root := document.Content[0]
-	providers, ok := effectiveMappingValue(root, "providers", make(map[*yaml.Node]struct{}))
+	root, err := resolveEffectiveMapping(document.Content[0])
+	if err != nil {
+		return err
+	}
+	providers, ok := effectiveMappingValue(root, "providers")
 	if !ok {
 		return nil
 	}
-	for providers != nil && providers.Kind == yaml.AliasNode {
-		providers = providers.Alias
+	providerEntries, err := resolveEffectiveMapping(providers)
+	if err != nil {
+		return err
 	}
-	if providers == nil || providers.Kind != yaml.MappingNode {
-		return nil
-	}
-	for providerIndex := 1; providerIndex < len(providers.Content); providerIndex += 2 {
-		value, ok := effectiveMappingValue(providers.Content[providerIndex], "tokenEnv", make(map[*yaml.Node]struct{}))
-		if ok && isNullNode(value) {
-			return fmt.Errorf("tokenEnv must be a string")
+	for _, provider := range providerEntries {
+		fields, err := resolveEffectiveMapping(provider.value)
+		if err != nil {
+			return err
+		}
+		for _, field := range []string{"tokenEnv", "caFile"} {
+			value, ok := effectiveMappingValue(fields, field)
+			if ok && isNullNode(value) {
+				return fmt.Errorf("%s must be a string", field)
+			}
 		}
 	}
 	return nil
 }
 
-func effectiveMappingValue(node *yaml.Node, field string, active map[*yaml.Node]struct{}) (*yaml.Node, bool) {
+type effectiveMappingEntry struct {
+	key   string
+	value *yaml.Node
+}
+
+func resolveEffectiveMapping(node *yaml.Node) ([]effectiveMappingEntry, error) {
+	var entries []effectiveMappingEntry
+	err := collectEffectiveMapping(node, false, make(map[*yaml.Node]struct{}), make(map[string]struct{}), &entries)
+	return entries, err
+}
+
+func collectEffectiveMapping(node *yaml.Node, allowSequence bool, active map[*yaml.Node]struct{}, seen map[string]struct{}, entries *[]effectiveMappingEntry) error {
 	if node == nil {
-		return nil, false
+		return nil
 	}
 	if _, exists := active[node]; exists {
-		return nil, false
+		return fmt.Errorf("cyclic YAML alias")
 	}
 	active[node] = struct{}{}
 	defer delete(active, node)
 
 	if node.Kind == yaml.AliasNode {
-		return effectiveMappingValue(node.Alias, field, active)
+		return collectEffectiveMapping(node.Alias, allowSequence, active, seen, entries)
+	}
+	if node.Kind == yaml.SequenceNode && allowSequence {
+		for _, mapping := range node.Content {
+			if err := collectEffectiveMapping(mapping, false, active, seen, entries); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	if node.Kind != yaml.MappingNode {
-		return nil, false
+		return nil
 	}
 
-	var merge *yaml.Node
 	for index := 0; index < len(node.Content); index += 2 {
 		key, value := node.Content[index], node.Content[index+1]
 		if isMergeKey(key) {
-			merge = value
 			continue
 		}
-		if key.Value == field {
-			return value, true
+		if _, exists := seen[key.Value]; exists {
+			continue
+		}
+		seen[key.Value] = struct{}{}
+		*entries = append(*entries, effectiveMappingEntry{key: key.Value, value: value})
+	}
+	for index := 0; index < len(node.Content); index += 2 {
+		key, value := node.Content[index], node.Content[index+1]
+		if isMergeKey(key) {
+			if err := collectEffectiveMapping(value, true, active, seen, entries); err != nil {
+				return err
+			}
 		}
 	}
-	return mergedMappingValue(merge, field, active)
+	return nil
 }
 
-func mergedMappingValue(node *yaml.Node, field string, active map[*yaml.Node]struct{}) (*yaml.Node, bool) {
-	if node == nil {
-		return nil, false
-	}
-	if node.Kind != yaml.SequenceNode {
-		return effectiveMappingValue(node, field, active)
-	}
-	for _, mapping := range node.Content {
-		if value, ok := effectiveMappingValue(mapping, field, active); ok {
-			return value, true
+func effectiveMappingValue(entries []effectiveMappingEntry, field string) (*yaml.Node, bool) {
+	for _, entry := range entries {
+		if entry.key == field {
+			return entry.value, true
 		}
 	}
 	return nil, false
@@ -271,11 +311,14 @@ func normalize(raw rawConfig) (Config, error) {
 		if provider.TokenEnv.present && provider.TokenEnv.value == "" {
 			return Config{}, fmt.Errorf("provider %q tokenEnv must not be empty", id)
 		}
+		if provider.CAFile.present && provider.CAFile.value == "" {
+			return Config{}, fmt.Errorf("provider %q caFile must not be empty", id)
+		}
 		port := uint16(defaultSSHPort)
 		if provider.SSHPort != nil {
 			port = *provider.SSHPort
 		}
-		cfg.Providers[id] = Provider{Kind: provider.Kind, APIHost: provider.APIHost, GitHost: provider.GitHost, SSHUser: provider.SSHUser, SSHPort: port, TokenEnv: provider.TokenEnv.value}
+		cfg.Providers[id] = Provider{Kind: provider.Kind, APIHost: provider.APIHost, GitHost: provider.GitHost, SSHUser: provider.SSHUser, SSHPort: port, TokenEnv: provider.TokenEnv.value, CAFile: provider.CAFile.value}
 	}
 	for id, repository := range raw.Repositories {
 		policy := defaultPushPolicy()

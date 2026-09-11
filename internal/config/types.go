@@ -52,6 +52,7 @@ type Provider struct {
 	SSHUser  string       `yaml:"sshUser"`
 	SSHPort  uint16       `yaml:"sshPort"`
 	TokenEnv string       `yaml:"tokenEnv"`
+	CAFile   string       `yaml:"caFile"`
 }
 
 type Repository struct {
