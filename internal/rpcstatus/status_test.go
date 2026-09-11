@@ -26,6 +26,7 @@ func TestErrorMapsDomainFailuresToStableStatuses(t *testing.T) {
 		{"unsupported", rpcstatus.ErrUnsupported, codes.Unimplemented, "unsupported operation"},
 		{"repository", rpcstatus.ErrRepositoryUnavailable, codes.Unavailable, "repository unavailable"},
 		{"provider", runner.ErrCommandFailed, codes.Unavailable, "provider failure"},
+		{"provider sentinel", rpcstatus.ErrProviderFailure, codes.Unavailable, "provider failure"},
 		{"deadline", context.DeadlineExceeded, codes.DeadlineExceeded, "deadline exceeded"},
 		{"limit", runner.ErrOutputLimit, codes.ResourceExhausted, "request limit exceeded"},
 		{"service", rpcstatus.ErrServiceUnavailable, codes.Unavailable, "service unavailable"},
