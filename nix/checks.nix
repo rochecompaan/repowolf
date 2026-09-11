@@ -23,7 +23,7 @@ in
     status=$?
     set -e
     test "$status" -eq 2
-    test "$diagnostic" = 'tea: expected repos OWNER/REPO --repo OWNER/REPO [--output table|simple|json]'
+    test "$diagnostic" = 'tea: expected repos OWNER/REPO --repo OWNER/REPO or issues [list|INDEX] --repo OWNER/REPO [approved flags]'
 
     closure="$(cat ${clientClosure}/store-paths)"
     for forbidden in ${pkgs.gh} ${pkgs.openssh} ${repowolf}; do
