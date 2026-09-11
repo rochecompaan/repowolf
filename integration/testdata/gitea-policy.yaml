@@ -37,6 +37,7 @@ principals:
       - repository: project
         capabilities:
           - repository:read
+          - issues:read
 limits:
   maxConcurrentRequests: 8
   maxConcurrentRequestsPerPrincipal: 4
