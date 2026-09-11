@@ -222,7 +222,7 @@ func (a *RepositoryAdapter) issueView(ctx context.Context, repository policy.Res
 	}
 	record := projectIssue(n, allIssueFields)
 	if r.IncludeComments {
-		comments, e := loadIssueComments(ctx, a.api, owner, name, r.Index)
+		comments, e := loadIssueComments(ctx, a.api, owner, name, r.Index, record)
 		if e != nil {
 			return nil, e
 		}

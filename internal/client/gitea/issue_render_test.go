@@ -1,10 +1,12 @@
 package gitea
 
 import (
-	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"strings"
 	"testing"
 	"time"
+
+	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func issueFixture() *repowolfv1.GiteaIssueRecord {
@@ -30,5 +32,23 @@ func TestRenderIssueViewOmitsComments(t *testing.T) {
 	response := &repowolfv1.GiteaResponse{Meta: &repowolfv1.ResponseMeta{RequestId: "r"}, Result: &repowolfv1.GiteaResponse_IssueView{IssueView: &repowolfv1.GiteaIssueViewResult{Issue: issueFixture()}}}
 	if _, err := render(command{request: request, format: outputJSON}, response); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRenderIssueViewPreservesSimpleCommentBody(t *testing.T) {
+	issue := issueFixture()
+	issue.CommentCount = 1
+	issue.Comments = []*repowolfv1.GiteaCommentRecord{{
+		Id: 1, AuthorId: 2, Author: "alice", Url: "https://g/o/r/issues/7#issuecomment-1",
+		Body: "first line\nsecond\tline", Created: timestamppb.New(time.Unix(3, 0)), Updated: timestamppb.New(time.Unix(4, 0)),
+	}}
+	request := &repowolfv1.GiteaRequest{Operation: &repowolfv1.GiteaRequest_IssueView{IssueView: &repowolfv1.GiteaIssueViewRequest{Index: 7, IncludeComments: true}}}
+	response := &repowolfv1.GiteaResponse{Meta: &repowolfv1.ResponseMeta{RequestId: "r"}, Result: &repowolfv1.GiteaResponse_IssueView{IssueView: &repowolfv1.GiteaIssueViewResult{Issue: issue}}}
+	got, err := render(command{request: request, format: outputSimple}, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "  body: first line\nsecond\tline\n") {
+		t.Fatalf("comment body was not preserved: %q", got)
 	}
 }

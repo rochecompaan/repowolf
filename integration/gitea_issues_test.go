@@ -55,7 +55,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "open issue", "body": "private issue body"}, &open, "", "")
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "closed issue", "body": "closed body"}, &closed, "", "")
 	giteaJSON(t, httpClient, http.MethodPatch, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(closed.Index, 10), token.SHA1, map[string]any{"state": "closed"}, nil, "", "")
-	for i := 1; i <= 49; i++ {
+	for i := 1; i <= 51; i++ {
 		giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(open.Index, 10)+"/comments", token.SHA1, map[string]any{"body": "comment " + strconv.Itoa(i)}, nil, "", "")
 	}
 	agentToken, err := auth.Generate(rand.Reader)
@@ -94,7 +94,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 			ID int64 `json:"id"`
 		} `json:"comments"`
 	}
-	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Comments) != 49 {
+	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Comments) != 51 {
 		t.Fatalf("view=%s err=%v", view, err)
 	}
 	for i, c := range detail.Comments {

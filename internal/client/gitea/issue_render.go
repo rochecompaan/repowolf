@@ -153,6 +153,10 @@ func renderIssueView(parsed command, result *repowolfv1.GiteaIssueViewResult) ([
 						return nil, e
 					}
 					for _, f := range fields {
+						if f.name == "body" {
+							fmt.Fprintf(&b, "  body: %v\n", f.value)
+							continue
+						}
 						fmt.Fprintf(&b, "  %s: %s\n", f.name, textValue(f.value))
 					}
 				}
