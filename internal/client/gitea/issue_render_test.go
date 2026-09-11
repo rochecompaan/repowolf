@@ -27,11 +27,45 @@ func TestRenderIssueListFormats(t *testing.T) {
 		}
 	}
 }
+func TestRenderIssueListRejectsNegativeCommentCount(t *testing.T) {
+	fields := []repowolfv1.GiteaIssueField{repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_COMMENTS}
+	request := &repowolfv1.GiteaRequest{Operation: &repowolfv1.GiteaRequest_IssueList{IssueList: &repowolfv1.GiteaIssueListRequest{Limit: 30, Fields: fields}}}
+	issue := issueFixture()
+	issue.CommentCount = -1
+	response := &repowolfv1.GiteaResponse{Meta: &repowolfv1.ResponseMeta{RequestId: "r"}, Result: &repowolfv1.GiteaResponse_IssueList{IssueList: &repowolfv1.GiteaIssueListResult{Issues: []*repowolfv1.GiteaIssueRecord{issue}}}}
+	if output, err := render(command{request: request, format: outputJSON, fields: fields}, response); err == nil || output != nil {
+		t.Fatalf("render() = %q, %v, want rejection", output, err)
+	}
+}
+
 func TestRenderIssueViewOmitsComments(t *testing.T) {
 	request := &repowolfv1.GiteaRequest{Operation: &repowolfv1.GiteaRequest_IssueView{IssueView: &repowolfv1.GiteaIssueViewRequest{Index: 7}}}
 	response := &repowolfv1.GiteaResponse{Meta: &repowolfv1.ResponseMeta{RequestId: "r"}, Result: &repowolfv1.GiteaResponse_IssueView{IssueView: &repowolfv1.GiteaIssueViewResult{Issue: issueFixture()}}}
 	if _, err := render(command{request: request, format: outputJSON}, response); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestValidateIssueRecordEnforcesCommentLimit(t *testing.T) {
+	issue := issueFixture()
+	issue.Comments = make([]*repowolfv1.GiteaCommentRecord, maximumIssueComments)
+	for i := range issue.Comments {
+		issue.Comments[i] = &repowolfv1.GiteaCommentRecord{
+			Id: int64(i + 1), AuthorId: 2, Author: "alice", Url: "https://g/o/r/issues/7#comment",
+			Created: timestamppb.New(time.Unix(3, 0)), Updated: timestamppb.New(time.Unix(4, 0)),
+		}
+	}
+	issue.CommentCount = maximumIssueComments
+	if err := validateIssueRecord(issue, true); err != nil {
+		t.Fatalf("1,000 comments rejected: %v", err)
+	}
+	issue.Comments = append(issue.Comments, &repowolfv1.GiteaCommentRecord{
+		Id: maximumIssueComments + 1, AuthorId: 2, Author: "alice", Url: "https://g/o/r/issues/7#comment",
+		Created: timestamppb.New(time.Unix(3, 0)), Updated: timestamppb.New(time.Unix(4, 0)),
+	})
+	issue.CommentCount = maximumIssueComments + 1
+	if err := validateIssueRecord(issue, true); err == nil {
+		t.Fatal("1,001 comments accepted")
 	}
 }
 

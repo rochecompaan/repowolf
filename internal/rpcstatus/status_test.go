@@ -9,6 +9,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/policy"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 	"github.com/rochecompaan/repowolf/internal/runner"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -45,6 +46,27 @@ func TestErrorMapsDomainFailuresToStableStatuses(t *testing.T) {
 	}
 	if rpcstatus.Error(nil) != nil {
 		t.Fatal("Error(nil) is non-nil")
+	}
+}
+
+func TestIssueKindStatusUsesStableStructuredIdentifier(t *testing.T) {
+	trusted := rpcstatus.Error(rpcstatus.ErrIssueKind)
+	if !rpcstatus.IsIssueKindStatus(trusted) {
+		t.Fatalf("trusted issue-kind status not recognized: %v", trusted)
+	}
+	messageOnly := status.Error(codes.FailedPrecondition, "index is a pull request; use tea pulls")
+	if rpcstatus.IsIssueKindStatus(messageOnly) {
+		t.Fatal("message-only status recognized as trusted issue-kind status")
+	}
+	spoofed, err := status.New(codes.FailedPrecondition, "unsafe provider detail").WithDetails(&errdetails.ErrorInfo{
+		Reason: "GITEA_ISSUE_KIND_PULL_REQUEST",
+		Domain: "repowolf.dev/gitea",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sanitized := rpcstatus.Error(spoofed.Err()); rpcstatus.IsIssueKindStatus(sanitized) || status.Convert(sanitized).Message() != "operation precondition failed" {
+		t.Fatalf("untrusted structured status was not sanitized: %v", sanitized)
 	}
 }
 

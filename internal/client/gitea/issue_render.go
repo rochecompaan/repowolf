@@ -89,6 +89,8 @@ func renderIssueList(parsed command, result *repowolfv1.GiteaIssueListResult) ([
 	return b.Bytes(), nil
 }
 
+const maximumIssueComments = 1000
+
 var detailOrder = []repowolfv1.GiteaIssueField{1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 7}
 
 func renderIssueView(parsed command, result *repowolfv1.GiteaIssueViewResult) ([]byte, error) {
@@ -196,6 +198,9 @@ func validateIssueRecord(issue *repowolfv1.GiteaIssueRecord, commentsRequested b
 	}
 	if !validTime(issue.Created) || !validTime(issue.Updated) || issue.Updated.AsTime().Before(issue.Created.AsTime()) || issue.Deadline != nil && !validTime(issue.Deadline) {
 		return fmt.Errorf("invalid issue timestamp")
+	}
+	if len(issue.Comments) > maximumIssueComments {
+		return fmt.Errorf("too many comments")
 	}
 	if !commentsRequested && len(issue.Comments) > 0 {
 		return fmt.Errorf("unexpected comments")
@@ -305,6 +310,9 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 		}
 		return nonnil(i.Labels), true, nil
 	case 14:
+		if i.CommentCount < 0 {
+			return nil, false, fmt.Errorf("invalid comment count")
+		}
 		if len(i.Comments) > 0 {
 			raw := make([]json.RawMessage, len(i.Comments))
 			for n, c := range i.Comments {

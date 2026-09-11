@@ -60,7 +60,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/contents/pull-fixture.txt", token.SHA1, map[string]any{"branch": "pull-fixture", "message": "seed pull request", "content": base64.StdEncoding.EncodeToString([]byte("pull request fixture\n"))}, nil, "", "")
 	var pull createdIssue
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/pulls", token.SHA1, map[string]any{"base": "main", "head": "pull-fixture", "title": "pull request"}, &pull, "", "")
-	for i := 1; i <= 51; i++ {
+	for i := 1; i <= 50; i++ {
 		giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(open.Index, 10)+"/comments", token.SHA1, map[string]any{"body": "comment " + strconv.Itoa(i)}, nil, "", "")
 	}
 	agentToken, err := auth.Generate(rand.Reader)
@@ -87,7 +87,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 		comments float64
 	}{
 		{index: closed.Index, title: "closed issue", state: "closed", comments: 0},
-		{index: open.Index, title: "open issue", state: "open", comments: 51},
+		{index: open.Index, title: "open issue", state: "open", comments: 50},
 	}
 	for i, row := range rows {
 		if len(row) != 4 || row["index"] != float64(wantRows[i].index) || row["title"] != wantRows[i].title || row["state"] != wantRows[i].state || row["comments"] != wantRows[i].comments {
@@ -117,7 +117,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 			ID int64 `json:"id"`
 		} `json:"comments"`
 	}
-	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Comments) != 51 {
+	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Comments) != 50 {
 		t.Fatalf("view=%s err=%v", view, err)
 	}
 	for i, c := range detail.Comments {
@@ -140,8 +140,8 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	}
 	logs := dockerOutput(t, "logs", container)
 	commentPath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + strconv.FormatInt(open.Index, 10) + "/comments"
-	if !giteaLogContainsBoundedGET(logs, commentPath, 1, 50) {
-		t.Fatalf("Gitea log does not contain bounded comment request for %s", commentPath)
+	if !giteaLogContainsBoundedGET(logs, commentPath, 1, 50) || !giteaLogContainsBoundedGET(logs, commentPath, 2, 50) {
+		t.Fatalf("Gitea log does not contain exact-50 compatibility probes for %s", commentPath)
 	}
 	pullCommentPath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + strconv.FormatInt(pull.Index, 10) + "/comments"
 	if strings.Contains(logs, "GET "+pullCommentPath) || strings.Contains(logs, "/CanonicalOwner/OtherRepo/issues") {

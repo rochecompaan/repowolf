@@ -8,8 +8,7 @@ import (
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/clientconfig"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 )
 
 const operationTimeout = 2 * time.Minute
@@ -42,7 +41,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if errors.Is(operationContext.Err(), context.Canceled) {
 			return interrupted(operationContext, stderr)
 		}
-		if status.Code(err) == codes.FailedPrecondition && status.Convert(err).Message() == "index is a pull request; use tea pulls" {
+		if rpcstatus.IsIssueKindStatus(err) {
 			writeDiagnostic(stderr, "tea: index is a pull request; use tea pulls\n")
 		} else {
 			writeDiagnostic(stderr, "tea: Gitea operation failed\n")

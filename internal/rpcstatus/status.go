@@ -7,8 +7,14 @@ import (
 
 	"github.com/rochecompaan/repowolf/internal/policy"
 	"github.com/rochecompaan/repowolf/internal/runner"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+const (
+	issueKindReason = "GITEA_ISSUE_KIND_PULL_REQUEST"
+	issueKindDomain = "repowolf.dev/gitea"
 )
 
 var (
@@ -52,7 +58,7 @@ func mapDomainError(err error) error {
 	case errors.Is(err, ErrNotFound):
 		return status.Error(codes.NotFound, "not found")
 	case errors.Is(err, ErrIssueKind):
-		return status.Error(codes.FailedPrecondition, "index is a pull request; use tea pulls")
+		return issueKindError()
 	case errors.Is(err, context.DeadlineExceeded):
 		return status.Error(codes.DeadlineExceeded, "deadline exceeded")
 	case errors.Is(err, context.Canceled):
@@ -68,6 +74,32 @@ func mapDomainError(err error) error {
 	default:
 		return nil
 	}
+}
+
+func issueKindError() error {
+	value, err := status.New(codes.FailedPrecondition, "index is a pull request; use tea pulls").WithDetails(&errdetails.ErrorInfo{
+		Reason: issueKindReason,
+		Domain: issueKindDomain,
+	})
+	if err != nil {
+		return status.Error(codes.Internal, "internal failure")
+	}
+	return value.Err()
+}
+
+// IsIssueKindStatus recognizes only the trusted structured issue-kind status.
+func IsIssueKindStatus(err error) bool {
+	value, ok := status.FromError(err)
+	if !ok || value.Code() != codes.FailedPrecondition {
+		return false
+	}
+	for _, detail := range value.Details() {
+		info, ok := detail.(*errdetails.ErrorInfo)
+		if ok && info.Reason == issueKindReason && info.Domain == issueKindDomain {
+			return true
+		}
+	}
+	return false
 }
 
 func canonical(code codes.Code) error {

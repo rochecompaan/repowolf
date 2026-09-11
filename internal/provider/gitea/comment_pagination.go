@@ -17,7 +17,7 @@ const (
 )
 
 func loadIssueComments(ctx context.Context, api issueAPI, owner, repo string, index int64, issue *repowolfv1.GiteaIssueRecord) ([]*repowolfv1.GiteaCommentRecord, error) {
-	if issue == nil {
+	if issue == nil || issue.CommentCount < 0 {
 		return nil, rpcstatus.ErrProviderFailure
 	}
 	comments := make([]*repowolfv1.GiteaCommentRecord, 0)
@@ -44,17 +44,20 @@ func loadIssueComments(ctx context.Context, api issueAPI, owner, repo string, in
 			if len(values) != 0 {
 				return nil, runner.ErrOutputLimit
 			}
-			return comments, nil
+			return completeIssueComments(issue, comments)
 		}
-		normalized := make([]*repowolfv1.GiteaCommentRecord, len(values))
-		next := last
-		for i, v := range values {
-			c, e := normalizeComment(v)
-			if e != nil || c.Id <= next {
-				return nil, rpcstatus.ErrProviderFailure
+		if page == 2 && issue.CommentCount == commentPageSize && len(comments) == commentPageSize && len(values) == commentPageSize {
+			probe, _, err := normalizeCommentPage(values, 0)
+			if err != nil {
+				return nil, err
 			}
-			normalized[i] = c
-			next = c.Id
+			if equalComments(comments, probe) {
+				return completeIssueComments(issue, comments)
+			}
+		}
+		normalized, next, err := normalizeCommentPage(values, last)
+		if err != nil {
+			return nil, err
 		}
 		candidate := make([]*repowolfv1.GiteaCommentRecord, 0, len(comments)+len(normalized))
 		candidate = append(candidate, comments...)
@@ -64,17 +67,47 @@ func loadIssueComments(ctx context.Context, api issueAPI, owner, repo string, in
 		}
 		comments = candidate
 		last = next
-		if unpaginated {
-			if int64(len(comments)) != issue.CommentCount {
-				return nil, rpcstatus.ErrProviderFailure
-			}
-			return comments, nil
+		if int64(len(comments)) > issue.CommentCount {
+			return nil, rpcstatus.ErrProviderFailure
 		}
-		if len(values) < commentPageSize {
-			return comments, nil
+		if unpaginated || len(values) < commentPageSize {
+			return completeIssueComments(issue, comments)
 		}
 	}
 	return nil, runner.ErrOutputLimit
+}
+
+func normalizeCommentPage(values []*sdk.Comment, last int64) ([]*repowolfv1.GiteaCommentRecord, int64, error) {
+	normalized := make([]*repowolfv1.GiteaCommentRecord, len(values))
+	next := last
+	for i, value := range values {
+		comment, err := normalizeComment(value)
+		if err != nil || comment.Id <= next {
+			return nil, 0, rpcstatus.ErrProviderFailure
+		}
+		normalized[i] = comment
+		next = comment.Id
+	}
+	return normalized, next, nil
+}
+
+func equalComments(left, right []*repowolfv1.GiteaCommentRecord) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if !proto.Equal(left[i], right[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func completeIssueComments(issue *repowolfv1.GiteaIssueRecord, comments []*repowolfv1.GiteaCommentRecord) ([]*repowolfv1.GiteaCommentRecord, error) {
+	if int64(len(comments)) != issue.CommentCount {
+		return nil, rpcstatus.ErrProviderFailure
+	}
+	return comments, nil
 }
 
 func issueViewResponseSize(issue *repowolfv1.GiteaIssueRecord, comments []*repowolfv1.GiteaCommentRecord) int {
