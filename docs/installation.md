@@ -8,7 +8,7 @@ macOS and Windows users run the OCI image through Docker Desktop.
 
 ## Native release archives
 
-Each GitHub release has `repowolf_linux_amd64.tar.gz`, `repowolf_linux_arm64.tar.gz`, and `checksums.txt`. An archive contains both binaries. Verify and install the archive matching `go env GOARCH`:
+Each GitHub release has `repowolf_linux_amd64.tar.gz`, `repowolf_linux_arm64.tar.gz`, and `checksums.txt`. An archive contains the RepoWolf service, multicall client, and restricted `tea` executable. Verify and install the archive matching `go env GOARCH`:
 
 ```sh
 sha256sum -c checksums.txt --ignore-missing
