@@ -49,7 +49,7 @@ func render(parsed command, response *repowolfv1.GiteaResponse) ([]byte, error) 
 		URL: repository.Url, SSHURL: repository.SshUrl, CloneURL: repository.CloneUrl,
 		Private: repository.Private, Archived: repository.Archived, Fork: repository.Fork, Mirror: repository.Mirror, Empty: repository.Empty,
 		Stars: repository.Stars, Forks: repository.Forks, OpenIssues: repository.OpenIssues, Size: repository.Size,
-		Topics: append([]string(nil), repository.Topics...), Created: repository.Created.AsTime().UTC().Format(time.RFC3339), Updated: repository.Updated.AsTime().UTC().Format(time.RFC3339),
+		Topics: append([]string{}, repository.Topics...), Created: repository.Created.AsTime().UTC().Format(time.RFC3339), Updated: repository.Updated.AsTime().UTC().Format(time.RFC3339),
 	}
 	var output []byte
 	var err error

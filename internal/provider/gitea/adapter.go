@@ -71,7 +71,7 @@ func (adapter *RepositoryAdapter) Execute(ctx context.Context, repository policy
 		FullName: result.FullName, Description: result.Description, DefaultBranch: result.DefaultBranch,
 		Url: result.HTMLURL, SshUrl: result.SSHURL, CloneUrl: result.CloneURL,
 		Private: result.Private, Archived: result.Archived, Fork: result.Fork, Mirror: result.Mirror, Empty: result.Empty,
-		Stars: uint64(result.Stars), Forks: uint64(result.Forks), OpenIssues: uint64(result.OpenIssues), Size: uint64(result.Size), Topics: append([]string(nil), result.Topics...),
+		Stars: uint64(result.Stars), Forks: uint64(result.Forks), OpenIssues: uint64(result.OpenIssues), Size: uint64(result.Size), Topics: append([]string{}, result.Topics...),
 		Created: timestamppb.New(result.Created), Updated: timestamppb.New(result.Updated),
 	}
 	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_RepositoryView{RepositoryView: &repowolfv1.GiteaRepositoryViewResult{Repository: record}}}, nil

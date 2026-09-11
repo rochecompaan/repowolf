@@ -29,6 +29,11 @@ func TestRenderFormats(t *testing.T) {
 	if strings.Contains(string(jsonOutput), "FullName") || !strings.Contains(string(jsonOutput), `"topics":["one","two"]`) || !strings.Contains(string(jsonOutput), `"created":"2026-01-02T02:04:05Z"`) {
 		t.Fatalf("json = %s", jsonOutput)
 	}
+	response.GetRepositoryView().Repository.Topics = nil
+	jsonOutput, _ = render(command{format: outputJSON}, response)
+	if !strings.Contains(string(jsonOutput), `"topics":[]`) {
+		t.Fatalf("empty topics are not an array: %s", jsonOutput)
+	}
 }
 
 func TestRenderRejectsMalformedResponse(t *testing.T) {
