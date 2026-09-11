@@ -37,10 +37,40 @@ type repositoryJSON struct {
 }
 
 func render(parsed command, response *repowolfv1.GiteaResponse) ([]byte, error) {
-	if response == nil || response.GetMeta().GetRequestId() == "" || response.GetRepositoryView() == nil || response.GetRepositoryView().GetRepository() == nil {
+	if response == nil || response.GetMeta().GetRequestId() == "" {
 		return nil, fmt.Errorf("invalid response")
 	}
-	repository := response.GetRepositoryView().GetRepository()
+	if parsed.request == nil && response.GetRepositoryView() != nil {
+		parsed.request = &repowolfv1.GiteaRequest{Operation: &repowolfv1.GiteaRequest_RepositoryView{RepositoryView: &repowolfv1.GiteaRepositoryViewRequest{}}}
+	}
+	if parsed.request == nil {
+		return nil, fmt.Errorf("invalid response")
+	}
+	var output []byte
+	var err error
+	switch {
+	case parsed.request.GetRepositoryView() != nil && response.GetRepositoryView() != nil:
+		output, err = renderRepository(parsed, response.GetRepositoryView().GetRepository())
+	case parsed.request.GetIssueList() != nil && response.GetIssueList() != nil:
+		output, err = renderIssueList(parsed, response.GetIssueList())
+	case parsed.request.GetIssueView() != nil && response.GetIssueView() != nil:
+		output, err = renderIssueView(parsed, response.GetIssueView())
+	default:
+		return nil, fmt.Errorf("invalid response branch")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(output) > maxRenderedBytes {
+		return nil, fmt.Errorf("rendered output exceeds client limit")
+	}
+	return output, nil
+}
+
+func renderRepository(parsed command, repository *repowolfv1.GiteaRepositoryRecord) ([]byte, error) {
+	if repository == nil {
+		return nil, fmt.Errorf("invalid response")
+	}
 	if repository.Created == nil || repository.Updated == nil || !repository.Created.IsValid() || !repository.Updated.IsValid() {
 		return nil, fmt.Errorf("invalid response timestamp")
 	}
@@ -76,9 +106,6 @@ func render(parsed command, response *repowolfv1.GiteaResponse) ([]byte, error) 
 	}
 	if err != nil {
 		return nil, fmt.Errorf("encode response: %w", err)
-	}
-	if len(output) > maxRenderedBytes {
-		return nil, fmt.Errorf("rendered output exceeds client limit")
 	}
 	return output, nil
 }
