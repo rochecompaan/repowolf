@@ -5,6 +5,7 @@ if [ "$#" -eq 1 ] && [ "${1-}" = "--inside" ]; then
   test -z "${GH_TOKEN+x}"
   test -z "${REPOWOLF_TOKEN_GITHUB_PUBLIC+x}"
   test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
+  test "$(readlink /usr/local/bin/tea)" = "repowolf-client"
   test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
   if command -v ssh >/dev/null 2>&1; then
     exit 1

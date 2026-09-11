@@ -16,8 +16,15 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 tar -xzf "dist/repowolf_linux_${native}.tar.gz" -C "$tmp"
 "$tmp/repowolf" --version
+ln -s repowolf-client "$tmp/tea"
 set +e
 "$tmp/repowolf-client" >/dev/null 2>&1
 status=$?
 set -e
 test "$status" -eq 2
+set +e
+diagnostic="$("$tmp/tea" login 2>&1)"
+status=$?
+set -e
+test "$status" -eq 2
+test "$diagnostic" = 'tea: expected repos OWNER/REPO --repo OWNER/REPO [--output table|simple|json]'
