@@ -104,6 +104,14 @@ func matches(selector Selector, repository config.Repository, provider config.Pr
 	return (selector.Kind == "" || selector.Kind == provider.Kind) &&
 		(selector.Host == "" || selector.Host == provider.GitHost) &&
 		(selector.SSHPort == 0 || selector.SSHPort == provider.SSHPort) &&
-		(selector.Owner == "" || selector.Owner == repository.Owner) &&
+		matchesRepositoryIdentity(selector, repository, provider.Kind)
+}
+
+func matchesRepositoryIdentity(selector Selector, repository config.Repository, kind config.ProviderKind) bool {
+	if kind == config.ProviderGitea {
+		return (selector.Owner == "" || asciiEqualFold(selector.Owner, repository.Owner)) &&
+			(selector.Name == "" || asciiEqualFold(selector.Name, repository.Name))
+	}
+	return (selector.Owner == "" || selector.Owner == repository.Owner) &&
 		(selector.Name == "" || selector.Name == repository.Name)
 }

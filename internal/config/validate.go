@@ -146,7 +146,7 @@ func ValidRepositoryIdentity(kind ProviderKind, owner, name string) bool {
 	case ProviderGitHub:
 		return ownerName.MatchString(owner) && repositoryName.MatchString(name)
 	case ProviderGitea:
-		return validGiteaName(owner) && validGiteaName(name) && !strings.HasSuffix(name, ".git")
+		return validGiteaName(owner) && validGiteaName(name) && !strings.HasSuffix(strings.ToLower(name), ".git")
 	default:
 		return false
 	}

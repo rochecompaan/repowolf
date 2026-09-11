@@ -27,6 +27,12 @@ type Certificate struct {
 // GenerateCertificate creates a private CA and loopback server certificate.
 func GenerateCertificate(t testing.TB, directory string) Certificate {
 	t.Helper()
+	return GenerateCertificateForIPs(t, directory, []net.IP{net.ParseIP("127.0.0.1")})
+}
+
+// GenerateCertificateForIPs creates a test certificate for explicit loopback or container addresses.
+func GenerateCertificateForIPs(t testing.TB, directory string, addresses []net.IP) Certificate {
+	t.Helper()
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +47,7 @@ func GenerateCertificate(t testing.TB, directory string) Certificate {
 	serverKey := newKey(t)
 	server := &x509.Certificate{
 		SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "localhost"},
-		DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+		DNSNames: []string{"localhost"}, IPAddresses: append([]net.IP(nil), addresses...),
 		NotBefore: now, NotAfter: now.Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		KeyUsage: x509.KeyUsageDigitalSignature,
 	}

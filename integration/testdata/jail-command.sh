@@ -31,7 +31,7 @@ home_entries=(/home/jail/*)
 : > /tmp/repowolf-jail-write-test
 [[ -r "$REPOWOLF_CA_FILE" ]] || { printf 'trusted CA is unavailable\n' >&2; exit 24; }
 
-[[ -x "$client_root/bin/gh" && -x "$client_root/bin/repowolf-git-ssh" ]] || exit 25
+[[ -x "$client_root/bin/gh" && -x "$client_root/bin/tea" && -x "$client_root/bin/repowolf-git-ssh" ]] || exit 25
 [[ ! -e "$client_root/bin/repowolf" && ! -e "$client_root/bin/ssh" ]] || exit 26
 command -v gh >/dev/null 2>&1 && { printf 'host gh is discoverable\n' >&2; exit 27; }
 command -v ssh >/dev/null 2>&1 && { printf 'host ssh is discoverable\n' >&2; exit 28; }

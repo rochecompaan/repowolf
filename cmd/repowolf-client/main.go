@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	clientgitea "github.com/rochecompaan/repowolf/internal/client/gitea"
 	clientgithub "github.com/rochecompaan/repowolf/internal/client/github"
 	"github.com/rochecompaan/repowolf/internal/client/gitssh"
 )
@@ -52,18 +53,22 @@ func (cause signalCause) ExitCode() int { return 128 + int(cause.signal) }
 func runClient(ctx context.Context, name string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	mode, ok := modeForBase(name)
 	if !ok {
-		fmt.Fprintln(stderr, "usage: gh | repowolf-git-ssh")
+		fmt.Fprintln(stderr, "usage: gh | tea | repowolf-git-ssh")
 		return 2
 	}
-	if mode == "gh" {
+	switch mode {
+	case "gh":
 		return clientgithub.Run(ctx, args, stdout, stderr)
+	case "tea":
+		return clientgitea.Run(ctx, args, stdout, stderr)
+	default:
+		return gitssh.Run(ctx, args, stdin, stdout, stderr)
 	}
-	return gitssh.Run(ctx, args, stdin, stdout, stderr)
 }
 
 func modeForBase(name string) (string, bool) {
 	switch base := filepath.Base(name); base {
-	case "gh", "repowolf-git-ssh":
+	case "gh", "tea", "repowolf-git-ssh":
 		return base, true
 	default:
 		return "", false

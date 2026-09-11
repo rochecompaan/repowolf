@@ -12,7 +12,7 @@ import (
 )
 
 func TestModeForBase(t *testing.T) {
-	for _, name := range []string{"gh", "repowolf-git-ssh"} {
+	for _, name := range []string{"gh", "tea", "repowolf-git-ssh"} {
 		if mode, ok := modeForBase(name); !ok || mode != name {
 			t.Fatalf("modeForBase(%q) = %q, %v", name, mode, ok)
 		}

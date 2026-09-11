@@ -26,11 +26,24 @@ builds:
       - arm64
     ldflags:
       - -s -w -X github.com/rochecompaan/repowolf/internal/buildinfo.Version={{ .Version }}
+  - id: tea
+    main: ./cmd/repowolf-client
+    binary: tea
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/rochecompaan/repowolf/internal/buildinfo.Version={{ .Version }}
 
 archives:
   - ids:
       - repowolf
       - repowolf-client
+      - tea
     formats:
       - tar.gz
     name_template: "repowolf_{{ .Os }}_{{ .Arch }}"

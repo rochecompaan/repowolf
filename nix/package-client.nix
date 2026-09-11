@@ -17,6 +17,7 @@ buildGo126Module {
 
   postInstall = ''
     ln -s repowolf-client $out/bin/gh
+    ln -s repowolf-client $out/bin/tea
     ln -s repowolf-client $out/bin/repowolf-git-ssh
   '';
 

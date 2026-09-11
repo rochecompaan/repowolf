@@ -348,6 +348,8 @@ func TestValidateGiteaRepositoryNames(t *testing.T) {
 		{owner: "..", repository: "repo", valid: false},
 		{owner: "group", repository: "..", valid: false},
 		{owner: "group", repository: "repo.git", valid: false},
+		{owner: "group", repository: "repo.Git", valid: false},
+		{owner: "group", repository: "repo.GIT", valid: false},
 	} {
 		t.Run(test.owner+"/"+test.repository, func(t *testing.T) {
 			cfg := validConfig()

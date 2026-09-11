@@ -16,6 +16,7 @@ var (
 	ErrInvalidArgument       = errors.New("invalid argument")
 	ErrUnsupported           = errors.New("unsupported operation")
 	ErrRepositoryUnavailable = errors.New("repository unavailable")
+	ErrProviderFailure       = errors.New("provider failure")
 	ErrResourceExhausted     = errors.New("resource exhausted")
 	ErrServiceUnavailable    = errors.New("service unavailable")
 )
@@ -54,6 +55,8 @@ func mapDomainError(err error) error {
 		return status.Error(codes.ResourceExhausted, "request limit exceeded")
 	case errors.Is(err, ErrServiceUnavailable):
 		return status.Error(codes.Unavailable, "service unavailable")
+	case errors.Is(err, ErrProviderFailure):
+		return status.Error(codes.Unavailable, "provider failure")
 	case errors.Is(err, runner.ErrStartFailed), errors.Is(err, runner.ErrCommandFailed), errors.Is(err, runner.ErrCleanupFailed):
 		return status.Error(codes.Unavailable, "provider failure")
 	default:

@@ -1,7 +1,7 @@
 # RepoWolf Docker example
 
 This example keeps provider credentials and real provider tools on the broker
-side. The sandbox gets only `repowolf-client` (as `gh` and
+side. The sandbox gets only `repowolf-client` (as `gh`, `tea`, and
 `repowolf-git-ssh`), its RepoWolf token, endpoint, and public CA.
 
 Two run modes share the same sandbox image:
@@ -60,6 +60,7 @@ docker compose run --rm --entrypoint sh sandbox -c '
   test -z "${GH_TOKEN+x}"
   test -z "${REPOWOLF_TOKEN_GITHUB_PUBLIC+x}"
   test "$(readlink /usr/local/bin/gh)" = "repowolf-client"
+  test "$(readlink /usr/local/bin/tea)" = "repowolf-client"
   test "$(readlink /usr/local/bin/repowolf-git-ssh)" = "repowolf-client"
   ! command -v ssh
 '

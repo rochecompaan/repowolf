@@ -22,6 +22,7 @@ RUN apk add --no-cache git ca-certificates \
     && adduser -D -u 65532 -G agent agent
 COPY --from=fetch /fetch/repowolf-client /usr/local/bin/repowolf-client
 RUN ln -s repowolf-client /usr/local/bin/gh \
+    && ln -s repowolf-client /usr/local/bin/tea \
     && ln -s repowolf-client /usr/local/bin/repowolf-git-ssh
 ENV GIT_SSH_COMMAND=repowolf-git-ssh
 USER 65532:65532

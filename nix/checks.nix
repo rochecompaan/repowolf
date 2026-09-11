@@ -16,7 +16,14 @@ in
 
     test -x ${repowolf-client}/bin/repowolf-client
     test "$(readlink ${repowolf-client}/bin/gh)" = repowolf-client
+    test "$(readlink ${repowolf-client}/bin/tea)" = repowolf-client
     test "$(readlink ${repowolf-client}/bin/repowolf-git-ssh)" = repowolf-client
+    set +e
+    diagnostic="$(${repowolf-client}/bin/tea login 2>&1)"
+    status=$?
+    set -e
+    test "$status" -eq 2
+    test "$diagnostic" = 'tea: expected repos OWNER/REPO --repo OWNER/REPO [--output table|simple|json]'
 
     closure="$(cat ${clientClosure}/store-paths)"
     for forbidden in ${pkgs.gh} ${pkgs.openssh} ${repowolf}; do
