@@ -35,6 +35,11 @@ func TestRestrictedTeaRepositoryViewAgainstGitea(t *testing.T) {
 	dockerOutput(t, "network", "create", "--subnet", "172.29.9.0/24", network)
 	t.Cleanup(func() { _ = exec.Command("docker", "network", "rm", network).Run() })
 	giteaCertificate := testutil.GenerateCertificateForIPs(t, filepath.Join(work, "gitea-cert"), []net.IP{net.ParseIP(giteaAddress)})
+	// The Gitea process runs as a non-host UID and needs to traverse the
+	// bind-mounted certificate directory on hosted CI runners.
+	if err := os.Chmod(filepath.Dir(giteaCertificate.CertificateFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	for _, path := range []string{giteaCertificate.CertificateFile, giteaCertificate.KeyFile} {
 		if err := os.Chmod(path, 0o644); err != nil {
 			t.Fatal(err)
