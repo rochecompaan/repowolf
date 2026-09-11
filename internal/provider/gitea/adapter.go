@@ -17,12 +17,17 @@ import (
 type repositoryGetter interface {
 	GetRepo(context.Context, string, string) (*sdk.Repository, error)
 }
+type sdkRepositoryClient interface {
+	SetContext(context.Context)
+	GetRepo(string, string) (*sdk.Repository, *sdk.Response, error)
+}
+
 type sdkRepositoryGetter struct {
-	client *sdk.Client
+	client sdkRepositoryClient
 	slot   chan struct{}
 }
 
-func newSDKRepositoryGetter(client *sdk.Client) *sdkRepositoryGetter {
+func newSDKRepositoryGetter(client sdkRepositoryClient) *sdkRepositoryGetter {
 	slot := make(chan struct{}, 1)
 	slot <- struct{}{}
 	return &sdkRepositoryGetter{client: client, slot: slot}
@@ -34,7 +39,10 @@ func (getter *sdkRepositoryGetter) GetRepo(ctx context.Context, owner, name stri
 		return nil, ctx.Err()
 	case <-getter.slot:
 	}
-	defer func() { getter.slot <- struct{}{} }()
+	defer func() {
+		getter.client.SetContext(context.Background())
+		getter.slot <- struct{}{}
+	}()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

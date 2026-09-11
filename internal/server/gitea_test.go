@@ -115,7 +115,7 @@ func TestGiteaServiceFailsClosed(t *testing.T) {
 			}
 		})
 	}
-	for _, mutate := range []func(*repowolfv1.GiteaRequest){func(r *repowolfv1.GiteaRequest) { r.Context.Repository.Host = "evil" }, func(r *repowolfv1.GiteaRequest) { r.Context.Repository.SshPort = 22 }, func(r *repowolfv1.GiteaRequest) { r.Operation = nil }} {
+	for _, mutate := range []func(*repowolfv1.GiteaRequest){func(r *repowolfv1.GiteaRequest) { r.Context.Repository.Host = "evil" }, func(r *repowolfv1.GiteaRequest) { r.Context.Repository.SshPort = 22 }, func(r *repowolfv1.GiteaRequest) { r.Context.Repository.SshUser = "git" }, func(r *repowolfv1.GiteaRequest) { r.Operation = nil }} {
 		executor := &fakeGiteaExecutor{}
 		service := newGiteaService(giteaPolicy(t, config.RepositoryRead, config.ProviderGitea), executor, &eventSink{})
 		request := giteaRequest()

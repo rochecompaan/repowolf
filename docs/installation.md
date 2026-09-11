@@ -15,13 +15,16 @@ sha256sum -c checksums.txt --ignore-missing
 tar -xzf "repowolf_linux_$(go env GOARCH).tar.gz"
 install -m 0755 repowolf /usr/local/bin/repowolf
 install -m 0755 repowolf-client /usr/local/bin/repowolf-client
+install -m 0755 tea /usr/local/bin/tea
+ln -s repowolf-client /usr/local/bin/gh
 ln -s repowolf-client /usr/local/bin/repowolf-git-ssh
 ```
 
-Inside a sandbox, install only `repowolf-client` and link both restricted entry points:
+Inside a sandbox, install only `repowolf-client` and link the restricted entry points:
 
 ```sh
 ln -s repowolf-client /sandbox/bin/gh
+ln -s repowolf-client /sandbox/bin/tea
 ln -s repowolf-client /sandbox/bin/repowolf-git-ssh
 ```
 
@@ -36,7 +39,7 @@ nix profile install github:rochecompaan/repowolf#repowolf
 nix profile install github:rochecompaan/repowolf#repowolf-client
 ```
 
-The client package supplies `gh` and `repowolf-git-ssh` links. It does not contain the service, real provider tools, configuration, or credentials. The OCI archive is available as `.#ociImage` for image publishing; OCI consumers do not need Nix.
+The client package supplies `gh`, `tea`, and `repowolf-git-ssh` links. It does not contain the service, real provider tools, configuration, or credentials. The OCI archive is available as `.#ociImage` for image publishing; OCI consumers do not need Nix.
 
 ## OCI image
 

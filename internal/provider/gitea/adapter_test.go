@@ -13,6 +13,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/policy"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
+	"google.golang.org/grpc/metadata"
 )
 
 type fakeRepositoryGetter struct {
@@ -20,6 +21,20 @@ type fakeRepositoryGetter struct {
 	owner, name string
 	repository  *sdk.Repository
 	err         error
+}
+
+type recordingSDKRepositoryClient struct {
+	contexts   []context.Context
+	repository *sdk.Repository
+	err        error
+}
+
+func (client *recordingSDKRepositoryClient) SetContext(ctx context.Context) {
+	client.contexts = append(client.contexts, ctx)
+}
+
+func (client *recordingSDKRepositoryClient) GetRepo(string, string) (*sdk.Repository, *sdk.Response, error) {
+	return client.repository, nil, client.err
 }
 
 func (f *fakeRepositoryGetter) GetRepo(_ context.Context, owner, name string) (*sdk.Repository, error) {
@@ -114,6 +129,35 @@ func TestSDKRepositoryGetterObservesCancellationWhileQueued(t *testing.T) {
 	close(release)
 	if err := <-firstDone; err != nil {
 		t.Fatalf("first GetRepo() error = %v", err)
+	}
+}
+
+func TestSDKRepositoryGetterDoesNotRetainRequestContext(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		repository *sdk.Repository
+		err        error
+	}{
+		{name: "success", repository: sdkRepository()},
+		{name: "error", err: errors.New("provider failure")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := &recordingSDKRepositoryClient{repository: test.repository, err: test.err}
+			getter := newSDKRepositoryGetter(client)
+			requestContext := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer secret"))
+
+			_, _ = getter.GetRepo(requestContext, "Owner", "Repo")
+
+			if len(client.contexts) != 2 {
+				t.Fatalf("SetContext calls = %d, want request and reset", len(client.contexts))
+			}
+			if values := metadata.ValueFromIncomingContext(client.contexts[0], "authorization"); len(values) != 1 || values[0] != "Bearer secret" {
+				t.Fatalf("request authorization metadata = %q", values)
+			}
+			if values := metadata.ValueFromIncomingContext(client.contexts[1], "authorization"); len(values) != 0 {
+				t.Fatalf("reset context retained authorization metadata = %q", values)
+			}
+		})
 	}
 }
 
