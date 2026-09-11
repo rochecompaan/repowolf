@@ -1,0 +1,49 @@
+apiVersion: repowolf.dev/v1alpha1
+listen: __LISTEN__
+tls:
+  certificate: __CERTIFICATE__
+  privateKey: __PRIVATE_KEY__
+tools:
+  ssh: __SSH__
+providers:
+  gitea:
+    kind: gitea
+    apiHost: __GITEA_API_HOST__
+    gitHost: 127.0.0.1
+    sshUser: git
+    sshPort: 22
+    tokenEnv: REPOWOLF_TOKEN_GITEA
+    caFile: __GITEA_CA_FILE__
+repositories:
+  project:
+    provider: gitea
+    owner: CanonicalOwner
+    name: CanonicalRepo
+    git:
+      denyDeletes: true
+      maxRefUpdates: 16
+  ungranted:
+    provider: gitea
+    owner: CanonicalOwner
+    name: OtherRepo
+    git:
+      denyDeletes: true
+      maxRefUpdates: 16
+principals:
+  agent:
+    tokenEnvs:
+      - REPOWOLF_TOKEN_AGENT
+    grants:
+      - repository: project
+        capabilities:
+          - repository:read
+limits:
+  maxConcurrentRequests: 8
+  maxConcurrentRequestsPerPrincipal: 4
+  maxMessageBytes: 1048576
+  maxStreamChunkBytes: 65536
+  maxPushPrefixBytes: 1048576
+  maxGitBytesPerDirection: 1073741824
+  initialStreamTimeout: 5s
+  operationTimeout: 30s
+  idleStreamTimeout: 5s

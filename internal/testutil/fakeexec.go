@@ -9,11 +9,12 @@ import (
 	"testing"
 )
 
-// Binaries are the service and the two public multicall client links.
+// Binaries are the service and public multicall client links.
 type Binaries struct {
 	Service string
 	Client  string
 	GH      string
+	Tea     string
 	GitSSH  string
 }
 
@@ -28,8 +29,11 @@ func BuildBinaries(t testing.TB, directory string) Binaries {
 	client := filepath.Join(directory, "repowolf-client")
 	build(t, root, service, "./cmd/repowolf")
 	build(t, root, client, "./cmd/repowolf-client")
-	binaries := Binaries{Service: service, Client: client, GH: filepath.Join(directory, "gh"), GitSSH: filepath.Join(directory, "repowolf-git-ssh")}
+	binaries := Binaries{Service: service, Client: client, GH: filepath.Join(directory, "gh"), Tea: filepath.Join(directory, "tea"), GitSSH: filepath.Join(directory, "repowolf-git-ssh")}
 	if err := os.Symlink(client, binaries.GH); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(client, binaries.Tea); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(client, binaries.GitSSH); err != nil {

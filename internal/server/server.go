@@ -62,8 +62,11 @@ func New(options Options) (*Server, error) {
 		grpc.ChainStreamInterceptor(service.streamInterceptors()...),
 	)
 	grpc_health_v1.RegisterHealthServer(service.grpc, service.health)
-	if options.Policy != nil {
+	if options.GitHub != nil {
 		repowolfv1.RegisterGitHubServiceServer(service.grpc, newGitHubService(options.Policy, options.GitHub, options.AuditWriter))
+	}
+	if options.Gitea != nil {
+		repowolfv1.RegisterGiteaServiceServer(service.grpc, newGiteaService(options.Policy, options.Gitea, options.AuditWriter))
 	}
 	if options.Git != nil {
 		repowolfv1.RegisterGitServiceServer(service.grpc, options.Git)
@@ -99,8 +102,11 @@ func validateOptions(options Options) error {
 	if options.OperationTimeout <= 0 || options.GracePeriod <= 0 {
 		return fmt.Errorf("invalid server time limits")
 	}
-	if (options.Policy == nil) != (options.GitHub == nil) {
-		return fmt.Errorf("incomplete GitHub service dependencies")
+	if options.Policy == nil && (options.GitHub != nil || options.Gitea != nil) {
+		return fmt.Errorf("provider policy is required")
+	}
+	if options.Policy != nil && options.GitHub == nil && options.Gitea == nil {
+		return fmt.Errorf("provider executor is required")
 	}
 	return nil
 }

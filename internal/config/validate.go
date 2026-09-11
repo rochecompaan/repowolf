@@ -113,7 +113,10 @@ func validateProvider(id string, provider Provider) error {
 	} else if !tokenEnvName.MatchString(provider.TokenEnv) {
 		return fmt.Errorf("provider %q has invalid token environment name", id)
 	}
-	if !validHost(provider.APIHost) || !validHost(provider.GitHost) {
+	if provider.CAFile != "" && provider.Kind != ProviderGitea {
+		return fmt.Errorf("provider %q caFile is supported only for Gitea", id)
+	}
+	if !ValidProviderHost(provider.APIHost) || !ValidProviderHost(provider.GitHost) {
 		return fmt.Errorf("provider %q has invalid host", id)
 	}
 	if !sshUserName.MatchString(provider.SSHUser) {
@@ -130,14 +133,23 @@ func validateRepository(id string, repository Repository, providers map[string]P
 	if !ok {
 		return fmt.Errorf("repository %q references undefined provider %q", id, repository.Provider)
 	}
-	if provider.Kind == ProviderGitea {
-		if !validGiteaName(repository.Owner) || !validGiteaName(repository.Name) || strings.HasSuffix(repository.Name, ".git") {
-			return fmt.Errorf("repository %q has invalid owner or name", id)
-		}
-	} else if !ownerName.MatchString(repository.Owner) || !repositoryName.MatchString(repository.Name) {
+	if !ValidRepositoryIdentity(provider.Kind, repository.Owner, repository.Name) {
 		return fmt.Errorf("repository %q has invalid owner or name", id)
 	}
 	return validatePushPolicy(id, repository.Git)
+}
+
+// ValidRepositoryIdentity reports whether owner and name satisfy kind's
+// configured repository grammar.
+func ValidRepositoryIdentity(kind ProviderKind, owner, name string) bool {
+	switch kind {
+	case ProviderGitHub:
+		return ownerName.MatchString(owner) && repositoryName.MatchString(name)
+	case ProviderGitea:
+		return validGiteaName(owner) && validGiteaName(name) && !strings.HasSuffix(strings.ToLower(name), ".git")
+	default:
+		return false
+	}
 }
 
 func validGiteaName(value string) bool {
@@ -310,7 +322,8 @@ func validateLimits(limits Limits) error {
 	return nil
 }
 
-func validHost(host string) bool {
+// ValidProviderHost reports whether host uses the host-only provider grammar.
+func ValidProviderHost(host string) bool {
 	if host == "" || len(host) > 253 || strings.ContainsAny(host, ":/@ ") {
 		return false
 	}

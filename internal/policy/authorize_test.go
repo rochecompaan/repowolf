@@ -27,6 +27,120 @@ func TestResolveExactGrantedRepository(t *testing.T) {
 	}
 }
 
+func TestResolveKeepsGitHubRepositoryIdentityCaseSensitive(t *testing.T) {
+	snapshot := testSnapshot(t)
+	_, err := snapshot.Resolve("infra-agent", Selector{
+		Kind: config.ProviderGitHub, Host: "github.com", SSHPort: 22, Owner: "ALPHA", Name: "SAMPLE-PROJECT",
+	}, config.RepositoryRead)
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("Resolve() error = %v, want ErrDenied", err)
+	}
+}
+
+func TestResolveGiteaRepositoryIdentityUsesASCIICaseFold(t *testing.T) {
+	cfg := testConfig()
+	cfg.Repositories["kelvin"] = config.Repository{Provider: "gitea", Owner: "Kelvin", Name: "Repo"}
+	principal := cfg.Principals["infra-agent"]
+	principal.Grants = append(principal.Grants, config.Grant{Repository: "kelvin", Capabilities: []config.Capability{config.RepositoryRead}})
+	cfg.Principals["infra-agent"] = principal
+	snapshot, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := snapshot.Resolve("infra-agent", Selector{
+		Kind: config.ProviderGitea, Owner: "kELVIN", Name: "rEPO",
+	}, config.RepositoryRead)
+	if err != nil || resolved.ID != "kelvin" {
+		t.Fatalf("ASCII case-folded Resolve() = %#v, %v", resolved, err)
+	}
+
+	_, err = snapshot.Resolve("infra-agent", Selector{
+		Kind: config.ProviderGitea, Owner: "Kelvin", Name: "Repo",
+	}, config.RepositoryRead)
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("Unicode-confusable Resolve() error = %v, want ErrDenied", err)
+	}
+}
+
+func TestResolveGitProviderAwareAuthority(t *testing.T) {
+	snapshot := testSnapshot(t)
+
+	resolved, err := snapshot.ResolveGit("infra-agent", GitSelector{
+		SSHUser: "forge_user", Host: "gitea.example", SSHPort: 2222,
+		Owner: "team_name", Name: "repo.one",
+	}, config.GitRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.ID != "gitea-read" || resolved.Provider.Kind != config.ProviderGitea || resolved.Repository.Owner != "Team_Name" || resolved.Repository.Name != "Repo.One" {
+		t.Fatalf("resolved = %#v", resolved)
+	}
+
+	for _, selector := range []GitSelector{
+		{SSHUser: "forge_user", Host: "GITEA.EXAMPLE", Owner: "TEAM_NAME", Name: "REPO.ONE"},
+		{SSHUser: "git", Host: "GITHUB.COM", Owner: "alpha", Name: "sample-project"},
+		{Host: "github.com", Owner: "alpha", Name: "sample-project"},
+	} {
+		if _, err := snapshot.ResolveGit("infra-agent", selector, config.GitRead); err != nil {
+			t.Fatalf("ResolveGit(%#v): %v", selector, err)
+		}
+	}
+}
+
+func TestResolveGitDenialsAndLegacyUserCompatibility(t *testing.T) {
+	snapshot := testSnapshot(t)
+	denied := []GitSelector{
+		{SSHUser: "git", Host: "gitea.example", Owner: "Team_Name", Name: "Repo.One"},
+		{SSHUser: "forge_user", Host: "gitea.example", SSHPort: 22, Owner: "Team_Name", Name: "Repo.One"},
+		{Host: "gitea.example", Owner: "Team_Name", Name: "Repo.One"},
+		{SSHUser: "git", Host: "github.com", Owner: "ALPHA", Name: "sample-project"},
+	}
+	for _, selector := range denied {
+		if _, err := snapshot.ResolveGit("infra-agent", selector, config.GitRead); !errors.Is(err, ErrDenied) {
+			t.Fatalf("ResolveGit(%#v) = %v, want denied", selector, err)
+		}
+	}
+	if _, err := snapshot.ResolveGit("infra-agent", GitSelector{SSHUser: "forge_user", Host: "gitea.example", Owner: "Team_Name", Name: "Repo.One"}, config.GitWrite); !errors.Is(err, ErrDenied) {
+		t.Fatalf("missing capability = %v, want denied", err)
+	}
+}
+
+func TestResolveGitDeniesAmbiguousCoordinates(t *testing.T) {
+	cfg := testConfig()
+	cfg.Repositories["gitea-copy"] = config.Repository{Provider: "gitea", Owner: "TEAM_NAME", Name: "REPO.ONE"}
+	principal := cfg.Principals["infra-agent"]
+	principal.Grants = append(principal.Grants, config.Grant{Repository: "gitea-copy", Capabilities: []config.Capability{config.GitRead}})
+	cfg.Principals["infra-agent"] = principal
+	snapshot, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = snapshot.ResolveGit("infra-agent", GitSelector{SSHUser: "forge_user", Host: "gitea.example", Owner: "team_name", Name: "repo.one"}, config.GitRead)
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("ambiguous ResolveGit = %v, want denied", err)
+	}
+}
+
+func TestResolveGitRejectsUnicodeCaseFoldConfusables(t *testing.T) {
+	cfg := testConfig()
+	cfg.Repositories["kelvin"] = config.Repository{Provider: "gitea", Owner: "Kelvin", Name: "Repo"}
+	principal := cfg.Principals["infra-agent"]
+	principal.Grants = append(principal.Grants, config.Grant{Repository: "kelvin", Capabilities: []config.Capability{config.GitRead}})
+	cfg.Principals["infra-agent"] = principal
+	snapshot, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = snapshot.ResolveGit("infra-agent", GitSelector{
+		SSHUser: "forge_user", Host: "gitea.example", Owner: "Kelvin", Name: "Repo",
+	}, config.GitRead)
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("Unicode-confusable ResolveGit = %v, want denied", err)
+	}
+}
+
 func TestResolveMultiRepositoryPrincipal(t *testing.T) {
 	snapshot := testSnapshot(t)
 
@@ -168,16 +282,19 @@ func testConfig() config.Config {
 		Providers: map[string]config.Provider{
 			"github": {Kind: config.ProviderGitHub, APIHost: "api.github.com", GitHost: "github.com", SSHUser: "git", SSHPort: 22},
 			"forge":  {Kind: config.ProviderGitHub, APIHost: "api.example.test", GitHost: "ssh.example.test", SSHUser: "git", SSHPort: 2222},
+			"gitea":  {Kind: config.ProviderGitea, APIHost: "gitea.example", GitHost: "Gitea.Example", SSHUser: "forge_user", SSHPort: 2222},
 		},
 		Repositories: map[string]config.Repository{
 			"sample-project": {Provider: "github", Owner: "alpha", Name: "sample-project", Git: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, DenyDeletes: true, MaxRefUpdates: 16}},
 			"tools":          {Provider: "forge", Owner: "ops", Name: "tools", Git: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 16}},
 			"private":        {Provider: "github", Owner: "other", Name: "private", Git: config.PushPolicy{DenyRefs: []string{"refs/heads/main"}, MaxRefUpdates: 16}},
+			"gitea-read":     {Provider: "gitea", Owner: "Team_Name", Name: "Repo.One", Git: config.PushPolicy{MaxRefUpdates: 16}},
 		},
 		Principals: map[string]config.Principal{
 			"infra-agent": {Grants: []config.Grant{
 				{Repository: "sample-project", Capabilities: []config.Capability{config.RepositoryRead, config.GitRead, config.GitWrite}},
 				{Repository: "tools", Capabilities: []config.Capability{config.RepositoryRead, config.GitRead}},
+				{Repository: "gitea-read", Capabilities: []config.Capability{config.GitRead}},
 			}},
 			"other-agent": {Grants: []config.Grant{{Repository: "private", Capabilities: []config.Capability{config.RepositoryRead}}}},
 		},

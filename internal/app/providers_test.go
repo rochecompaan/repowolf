@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	sdk "code.gitea.io/sdk/gitea"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/credentials"
@@ -30,21 +32,32 @@ func TestBuildProviderInstancesCreatesIsolatedGitHubAdapters(t *testing.T) {
 	tokenFree := []string{"SAFE=value"}
 	caller := &recordingCaller{result: repositoryViewResult()}
 
-	instances, err := buildProviderInstances(cfg, snapshot, runner.Toolset{GH: "/pinned/gh"}, tokenFree, caller)
+	var constructed []string
+	constructor := func(provider config.Provider, token string) (*sdk.Client, error) {
+		constructed = append(constructed, provider.APIHost+"="+token)
+		return &sdk.Client{}, nil
+	}
+	instances, err := buildProviderInstances(cfg, snapshot, runner.Toolset{GH: "/pinned/gh"}, tokenFree, caller, constructor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(instances) != 3 {
-		t.Fatalf("len(instances) = %d, want 3", len(instances))
+	if len(instances) != 4 {
+		t.Fatalf("len(instances) = %d, want 4", len(instances))
 	}
 	if instances["github-a"].github == nil || instances["github-b"].github == nil {
 		t.Fatalf("GitHub instances = %#v, want adapters", instances)
 	}
-	if instances["gitea-lab"].github != nil {
+	if instances["gitea-lab"].github != nil || instances["gitea-two"].github != nil {
 		t.Fatal("Gitea instance unexpectedly has a GitHub adapter")
 	}
-	if instances["gitea-lab"].token != "gitea-secret" {
-		t.Fatalf("Gitea token = %q, want gitea-secret", instances["gitea-lab"].token)
+	if instances["github-a"].gitea != nil || instances["github-b"].gitea != nil {
+		t.Fatal("GitHub instance unexpectedly has a Gitea client")
+	}
+	if instances["gitea-lab"].gitea == nil || instances["gitea-two"].gitea == nil || instances["gitea-lab"].gitea == instances["gitea-two"].gitea {
+		t.Fatal("Gitea instances did not retain distinct clients")
+	}
+	if want := []string{"gitea.invalid=gitea-secret", "gitea-two.invalid=gitea-two-secret"}; !reflect.DeepEqual(constructed, want) {
+		t.Fatalf("Gitea construction = %q, want %q", constructed, want)
 	}
 	if instances["github-a"].legacy {
 		t.Fatal("explicit GitHub instance is marked legacy")
@@ -92,7 +105,7 @@ func TestBuildProviderInstancesRejectsUnsupportedKindWithoutPartialInstances(t *
 	provider.Kind = config.ProviderKind("unsupported")
 	cfg.Providers["github-b"] = provider
 
-	instances, err := buildProviderInstances(cfg, snapshot, runner.Toolset{GH: "/pinned/gh"}, nil, &recordingCaller{})
+	instances, err := buildProviderInstances(cfg, snapshot, runner.Toolset{GH: "/pinned/gh"}, nil, &recordingCaller{}, func(config.Provider, string) (*sdk.Client, error) { return &sdk.Client{}, nil })
 	if err == nil {
 		t.Fatal("buildProviderInstances() error = nil")
 	}
@@ -106,9 +119,19 @@ func TestBuildProviderInstancesRejectsInvalidGitHubTool(t *testing.T) {
 	tokenFree := []string{"SAFE=value"}
 	caller := &recordingCaller{result: repositoryViewResult()}
 
-	_, err := buildProviderInstances(cfg, snapshot, runner.Toolset{GH: "relative-gh"}, tokenFree, caller)
+	_, err := buildProviderInstances(cfg, snapshot, runner.Toolset{GH: "relative-gh"}, tokenFree, caller, func(config.Provider, string) (*sdk.Client, error) { return &sdk.Client{}, nil })
 	if err == nil || !strings.Contains(err.Error(), "GitHub provider") {
 		t.Fatalf("buildProviderInstances() error = %v", err)
+	}
+}
+
+func TestBuildProviderInstancesFailsClosedOnGiteaConstructorError(t *testing.T) {
+	cfg, snapshot := providerInstanceFixture(t)
+	instances, err := buildProviderInstances(cfg, snapshot, runner.Toolset{GH: "/pinned/gh"}, nil, &recordingCaller{}, func(config.Provider, string) (*sdk.Client, error) {
+		return nil, errors.New("invalid CA")
+	})
+	if err == nil || instances != nil || !strings.Contains(err.Error(), "gitea-lab") {
+		t.Fatalf("buildProviderInstances() = %#v, %v", instances, err)
 	}
 }
 
@@ -119,13 +142,15 @@ func providerInstanceFixture(t *testing.T) (config.Config, *credentials.Snapshot
 			"github-a":  {Kind: config.ProviderGitHub, APIHost: "safe.invalid", GitHost: "safe.invalid", SSHUser: "git", SSHPort: 22, TokenEnv: "REPOWOLF_TOKEN_GITHUB_A"},
 			"github-b":  {Kind: config.ProviderGitHub, APIHost: "safe.invalid", GitHost: "safe.invalid", SSHUser: "git", SSHPort: 22},
 			"gitea-lab": {Kind: config.ProviderGitea, APIHost: "gitea.invalid", TokenEnv: "REPOWOLF_TOKEN_GITEA"},
+			"gitea-two": {Kind: config.ProviderGitea, APIHost: "gitea-two.invalid", TokenEnv: "REPOWOLF_TOKEN_GITEA_TWO"},
 		},
 		Limits: config.Limits{OperationTimeout: time.Minute},
 	}
 	values := map[string]string{
-		"REPOWOLF_TOKEN_GITHUB_A": "github-a-secret",
-		"GH_TOKEN":                "github-b-secret",
-		"REPOWOLF_TOKEN_GITEA":    "gitea-secret",
+		"REPOWOLF_TOKEN_GITHUB_A":  "github-a-secret",
+		"GH_TOKEN":                 "github-b-secret",
+		"REPOWOLF_TOKEN_GITEA":     "gitea-secret",
+		"REPOWOLF_TOKEN_GITEA_TWO": "gitea-two-secret",
 	}
 	snapshot, err := credentials.Load(cfg, func(name string) (string, bool) {
 		value, ok := values[name]

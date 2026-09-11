@@ -142,12 +142,12 @@ func assertAuditInvocations(t *testing.T, contents string, expected [][]auditExp
 
 func forgeAuditExpectations(operations ...string) [][]auditExpectation {
 	acceptedFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}
-	terminalFields := []string{"timestamp", "request_id", "principal", "operation", "outcome", "reason"}
+	terminalFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome", "reason", "input_bytes", "output_bytes"}
 	result := make([][]auditExpectation, 0, len(operations))
 	for _, operation := range operations {
 		result = append(result, []auditExpectation{
 			{operation: operation, outcome: "accepted", principal: "agent", provider: "github", repository: "alpha", required: acceptedFields},
-			{operation: "/repowolf.v1.GitHubService/Execute", outcome: "completed", principal: "agent", reason: "OK", required: terminalFields, optional: []string{"duration_ms"}},
+			{operation: operation, outcome: "completed", principal: "agent", provider: "github", repository: "alpha", reason: "OK", inputPositive: true, outputPositive: true, required: terminalFields, optional: []string{"duration_ms"}},
 		})
 	}
 	return result
@@ -182,6 +182,64 @@ func gitAuditExpectations(allowedRef, deniedRef string) [][]auditExpectation {
 	}
 }
 
+func giteaControlledPushAuditExpectations(allowedRef, deniedRef string) [][]auditExpectation {
+	return [][]auditExpectation{
+		giteaUploadInvocation(),
+		giteaUploadInvocation(),
+		giteaReceiveInvocation("completed", "GIT_TERMINAL_CATEGORY_COMPLETED", allowedRef, true),
+		giteaReceiveInvocation("denied", "GIT_TERMINAL_CATEGORY_INVALID_REQUEST", deniedRef, false),
+	}
+}
+
+func giteaGitAuditExpectations(allowedRef, deniedRef string) [][]auditExpectation {
+	return [][]auditExpectation{
+		giteaUploadInvocation(),
+		giteaUploadInvocation(),
+		giteaUnauthorizedUploadInvocation(),
+		giteaReceiveInvocation("completed", "GIT_TERMINAL_CATEGORY_COMPLETED", allowedRef, true),
+		giteaReceiveInvocation("denied", "GIT_TERMINAL_CATEGORY_INVALID_REQUEST", deniedRef, false),
+	}
+}
+
+func giteaUploadInvocation() []auditExpectation {
+	acceptedFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}
+	providerFields := append(append([]string(nil), acceptedFields...), "reason", "input_bytes", "output_bytes")
+	return []auditExpectation{
+		giteaAccepted("git.upload-pack"),
+		{operation: "git.upload-pack", outcome: "completed", principal: "agent", provider: "gitea", repository: "gitea-read", reason: "GIT_TERMINAL_CATEGORY_COMPLETED", required: providerFields, optional: []string{"duration_ms"}, inputPositive: true, outputPositive: true},
+		gitStream("/repowolf.v1.GitService/UploadPack"),
+	}
+}
+
+func giteaUnauthorizedUploadInvocation() []auditExpectation {
+	streamFields := []string{"timestamp", "request_id", "principal", "operation", "outcome", "reason"}
+	return []auditExpectation{
+		{operation: "git.upload-pack", outcome: "denied", principal: "agent", reason: "GIT_TERMINAL_CATEGORY_PERMISSION_DENIED", required: streamFields, optional: []string{"duration_ms"}},
+		gitStream("/repowolf.v1.GitService/UploadPack"),
+	}
+}
+
+func giteaReceiveInvocation(outcome, reason, ref string, inputPositive bool) []auditExpectation {
+	acceptedFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}
+	providerFields := append(append([]string(nil), acceptedFields...), "reason", "output_bytes", "refs", "update_count")
+	if inputPositive {
+		providerFields = append(providerFields, "input_bytes")
+	}
+	return []auditExpectation{
+		giteaAccepted("git.receive-pack"),
+		{operation: "git.receive-pack", outcome: outcome, principal: "agent", provider: "gitea", repository: "gitea-read", reason: reason, required: providerFields, optional: []string{"duration_ms"}, refs: []string{ref}, updateCount: 1, inputPositive: inputPositive, outputPositive: true},
+		gitStream("/repowolf.v1.GitService/ReceivePack"),
+	}
+}
+
+func giteaAccepted(operation string) auditExpectation {
+	return auditExpectation{operation: operation, outcome: "accepted", principal: "agent", provider: "gitea", repository: "gitea-read", required: []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}, optional: []string{"duration_ms"}}
+}
+
+func gitStream(operation string) auditExpectation {
+	return auditExpectation{operation: operation, outcome: "completed", principal: "agent", reason: "OK", required: []string{"timestamp", "request_id", "principal", "operation", "outcome", "reason"}, optional: []string{"duration_ms"}}
+}
+
 func auditLeakMarkers() []string {
 	return []string{agentToken, providerCredential, giteaCredential, ambientGHCredential, ambientGitHubCredential, providerStderr, environmentMarker, issueBodyMarker, commentMarker, argvMarker, packMarker, sshStderrMarker}
 }
@@ -208,9 +266,10 @@ func TestParseAuditRecordsRejectsUnsafeJSONL(t *testing.T) {
 func TestGitAcceptedAuditDurationMSIsOptional(t *testing.T) {
 	const accepted = `{"timestamp":"2026-08-01T00:00:00Z","request_id":"request-1","principal":"agent","provider":"github","repository":"alpha","operation":"git.upload-pack","outcome":"accepted","duration_ms":1}`
 
-	assertAuditInvocations(t, accepted, [][]auditExpectation{{
-		gitAuditExpectations("refs/heads/allowed", "refs/heads/denied")[0][0],
-	}}, nil)
+	assertAuditInvocations(t, accepted, [][]auditExpectation{{{
+		operation: "git.upload-pack", outcome: "accepted", principal: "agent", provider: "github", repository: "alpha",
+		required: []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}, optional: []string{"duration_ms"},
+	}}}, nil)
 	unexpected := strings.Replace(accepted, `"duration_ms":1`, `"duration_ms":1,"secret":"unsafe"`, 1)
 	if _, err := parseAuditRecords([]byte(unexpected), nil); err == nil {
 		t.Fatal("parseAuditRecords accepted an unexpected field")

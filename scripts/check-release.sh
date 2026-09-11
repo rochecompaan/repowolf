@@ -9,6 +9,7 @@ for arch in amd64 arm64; do
   test -s "$archive"
   tar -tzf "$archive" | grep -E '(^|/)repowolf$' >/dev/null
   tar -tzf "$archive" | grep -E '(^|/)repowolf-client$' >/dev/null
+  tar -tzf "$archive" | grep -E '(^|/)tea$' >/dev/null
 done
 native="$(go env GOARCH)"
 case "$native" in amd64|arm64) ;; *) echo "unsupported smoke architecture: $native" >&2; exit 1 ;; esac
@@ -21,3 +22,9 @@ set +e
 status=$?
 set -e
 test "$status" -eq 2
+set +e
+diagnostic="$("$tmp/tea" login 2>&1)"
+status=$?
+set -e
+test "$status" -eq 2
+test "$diagnostic" = 'tea: expected repos OWNER/REPO --repo OWNER/REPO [--output table|simple|json]'

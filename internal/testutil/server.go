@@ -22,12 +22,14 @@ const (
 
 // ServerOptions describe one external RepoWolf test service.
 type ServerOptions struct {
-	Binary      string
-	PolicyPath  string
-	Certificate Certificate
-	GHPath      string
-	SSHPath     string
-	Environment []string
+	Binary       string
+	PolicyPath   string
+	Certificate  Certificate
+	GHPath       string
+	SSHPath      string
+	GiteaAPIHost string
+	GiteaCAFile  string
+	Environment  []string
 }
 
 // Server is a real loopback TLS service process.
@@ -117,6 +119,7 @@ func startServerAttempt(t testing.TB, options ServerOptions, template []byte, ad
 	values := map[string]string{
 		"__LISTEN__": address, "__CERTIFICATE__": options.Certificate.CertificateFile,
 		"__PRIVATE_KEY__": options.Certificate.KeyFile, "__GH__": options.GHPath, "__SSH__": options.SSHPath,
+		"__GITEA_API_HOST__": options.GiteaAPIHost, "__GITEA_CA_FILE__": options.GiteaCAFile,
 	}
 	for marker, value := range values {
 		config = strings.ReplaceAll(config, marker, strconv.Quote(value))

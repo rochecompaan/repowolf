@@ -121,6 +121,33 @@ func TestNewRuntimeBuildsMixedAndMultipleProviderRuntime(t *testing.T) {
 	}
 }
 
+func TestNewRuntimeRejectsInvalidGiteaCAFileBeforeReadiness(t *testing.T) {
+	missingCA := filepath.Join(t.TempDir(), "missing-ca.pem")
+	fixture := newRuntimeProviderFixture(t, `
+  gitea-lab:
+    kind: gitea
+    apiHost: gitea.example
+    gitHost: gitea.example
+    sshUser: git
+    tokenEnv: REPOWOLF_TOKEN_GITEA
+    caFile: `+missingCA+`
+`, `
+  project:
+    provider: gitea-lab
+    owner: alpha
+    name: project
+`)
+	token := fixture.setToken(t, "REPOWOLF_TOKEN_GITEA")
+	fixture.setToken(t, "REPOWOLF_TOKEN_AGENT")
+	runtime, err := app.NewRuntime(fixture.configPath, &bytes.Buffer{})
+	if err == nil || runtime != nil || !strings.Contains(err.Error(), "gitea-lab") || !strings.Contains(err.Error(), missingCA) {
+		t.Fatalf("NewRuntime() = %#v, %v", runtime, err)
+	}
+	if strings.Contains(err.Error(), token) {
+		t.Fatalf("NewRuntime() error disclosed token: %v", err)
+	}
+}
+
 func TestNewRuntimeRejectsDuplicatePrincipalAndProviderValue(t *testing.T) {
 	fixture := newRuntimeProviderFixture(t, `
   github:

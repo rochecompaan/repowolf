@@ -18,6 +18,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Confirm Go 1.26
+        run: go env GOVERSION | grep -Eq '^go1\.26([.]|$)'
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
       - name: Lint Protobuf
         run: go tool buf lint
@@ -29,6 +31,12 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -race ./...
+      - name: Test pinned Gitea Git interoperability
+        env:
+          REPOWOLF_GITEA_INTEGRATION: "1"
+        run: go test ./integration -run '^TestPinnedGiteaGitInteroperability$' -count=1 -v
+      - name: Test restricted tea against Gitea 1.27.2
+        run: go test -tags=gitea_integration ./integration -run '^TestRestrictedTeaRepositoryViewAgainstGitea$' -count=1 -v
       - name: Permit Bubblewrap user namespaces
         run: |
           if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
@@ -117,6 +125,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Confirm Go 1.26
+        run: go env GOVERSION | grep -Eq '^go1\.26([.]|$)'
       - uses: cachix/install-nix-action@b4b293eae0b79aac8a161bb32925a5508c9cca93 # v31
       - name: Confirm native architecture
         run: test "$(go env GOARCH)" = "${{ matrix.arch }}"

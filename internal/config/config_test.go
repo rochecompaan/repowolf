@@ -24,6 +24,9 @@ func TestDecodeFixturesAndDefaults(t *testing.T) {
 	if cfg.Providers["github"].SSHPort != 22 {
 		t.Fatalf("SSHPort = %d, want 22", cfg.Providers["github"].SSHPort)
 	}
+	if cfg.Providers["github"].CAFile != "" {
+		t.Fatalf("CAFile = %q, want omitted", cfg.Providers["github"].CAFile)
+	}
 	if got, want := cfg.Repositories["sample-project"].Git.DenyRefs, []string{"refs/heads/main"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("default DenyRefs = %v, want %v", got, want)
 	}
@@ -152,6 +155,30 @@ func TestDecodeAllowsNonCyclicAlias(t *testing.T) {
 	yaml := strings.Replace(validYAML(), "certificate: /run/repowolf/tls.crt\n  privateKey: /run/repowolf/tls.key", "certificate: &certificate /run/repowolf/tls.crt\n  privateKey: *certificate", 1)
 	if _, err := Decode(strings.NewReader(yaml)); err != nil {
 		t.Fatalf("Decode error = %v, want non-cyclic alias accepted", err)
+	}
+}
+
+func TestValidRepositoryIdentityUsesProviderGrammar(t *testing.T) {
+	tests := []struct {
+		name  string
+		kind  ProviderKind
+		owner string
+		repo  string
+		want  bool
+	}{
+		{name: "GitHub", kind: ProviderGitHub, owner: "alpha", repo: "repo", want: true},
+		{name: "Gitea", kind: ProviderGitea, owner: "Team_Name", repo: "Repo.One", want: true},
+		{name: "Gitea dot owner", kind: ProviderGitea, owner: ".", repo: "repo"},
+		{name: "Gitea dotdot repository", kind: ProviderGitea, owner: "team", repo: ".."},
+		{name: "Gitea git suffix", kind: ProviderGitea, owner: "team", repo: "repo.git"},
+		{name: "unknown provider", kind: "gitlab", owner: "team", repo: "repo"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ValidRepositoryIdentity(test.kind, test.owner, test.repo); got != test.want {
+				t.Fatalf("ValidRepositoryIdentity(%q, %q, %q) = %t, want %t", test.kind, test.owner, test.repo, got, test.want)
+			}
+		})
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/credentials"
 	"github.com/rochecompaan/repowolf/internal/gitservice"
 	"github.com/rochecompaan/repowolf/internal/policy"
+	providergitea "github.com/rochecompaan/repowolf/internal/provider/gitea"
 	"github.com/rochecompaan/repowolf/internal/runner"
 	"github.com/rochecompaan/repowolf/internal/server"
 	"github.com/rochecompaan/repowolf/internal/tlsconfig"
@@ -30,6 +31,7 @@ type Runtime struct {
 	Policy         *policy.Snapshot
 	SSHEnvironment []string
 	GitHub         server.GitHubExecutor
+	Gitea          server.GiteaExecutor
 	Git            *gitservice.Service
 	Server         *server.Server
 	providers      map[string]providerInstance
@@ -60,11 +62,15 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 	}
 	tokenFreeEnvironment := runner.TokenFreeEnvironment(os.Environ(), credentialSnapshot.EnvironmentNames())
 	providerRunner := &runner.Runner{}
-	instances, err := buildProviderInstances(cfg, credentialSnapshot, tools, tokenFreeEnvironment, providerRunner)
+	instances, err := buildProviderInstances(cfg, credentialSnapshot, tools, tokenFreeEnvironment, providerRunner, providergitea.New)
 	if err != nil {
 		return nil, fmt.Errorf("create provider instances: %w", err)
 	}
 	githubExecutor := buildGitHubExecutor(instances)
+	giteaExecutor, err := buildGiteaExecutor(instances)
+	if err != nil {
+		return nil, fmt.Errorf("create Gitea executor: %w", err)
+	}
 
 	auditWriter := audit.NewWriter(auditOutput)
 	git, err := gitservice.New(gitservice.Options{
@@ -74,11 +80,16 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create Git service: %w", err)
 	}
-	var githubPolicy *policy.Snapshot
+	var providerPolicy *policy.Snapshot
 	var githubService server.GitHubExecutor
+	var giteaService server.GiteaExecutor
 	if githubExecutor != nil {
-		githubPolicy = policySnapshot
+		providerPolicy = policySnapshot
 		githubService = githubExecutor
+	}
+	if giteaExecutor != nil {
+		providerPolicy = policySnapshot
+		giteaService = giteaExecutor
 	}
 	grpcServer, err := server.New(server.Options{
 		TLSConfig: tlsConfig, Tokens: credentialSnapshot.AuthIndex(), AuditWriter: auditWriter,
@@ -86,8 +97,9 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 		MaxConcurrentRequestsPerPrincipal: cfg.Limits.MaxConcurrentRequestsPerPrincipal,
 		OperationTimeout:                  cfg.Limits.OperationTimeout,
 		GracePeriod:                       shutdownGracePeriod,
-		Policy:                            githubPolicy,
+		Policy:                            providerPolicy,
 		GitHub:                            githubService,
+		Gitea:                             giteaService,
 		Git:                               git,
 		Cleanup:                           providerRunner.Cleanup,
 	})
@@ -102,6 +114,7 @@ func NewRuntime(configPath string, auditOutput io.Writer) (*Runtime, error) {
 		Policy:         policySnapshot,
 		SSHEnvironment: append([]string(nil), tokenFreeEnvironment...),
 		GitHub:         githubService,
+		Gitea:          giteaService,
 		Git:            git,
 		Server:         grpcServer,
 		providers:      instances,

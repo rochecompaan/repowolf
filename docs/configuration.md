@@ -53,6 +53,14 @@ providers:
     sshUser: git
     tokenEnv: REPOWOLF_TOKEN_GITHUB_PUBLIC
 
+  gitea-lab:
+    kind: gitea
+    apiHost: gitea.example.com
+    gitHost: gitea.example.com
+    sshUser: git
+    tokenEnv: REPOWOLF_TOKEN_GITEA_LAB
+    caFile: /run/repowolf/gitea-ca.pem
+
 repositories:
   example:
     provider: github-public
@@ -101,6 +109,21 @@ For the exact supported command forms and resource bounds, read the
 
 `gh --version` is a local command. It does not require a capability.
 
+### Gitea repository view
+
+The restricted `tea` personality supports exactly this repository-view form (with
+`repo` as an alias for `repos`):
+
+```sh
+tea repos OWNER/REPO --repo OWNER/REPO [--output table|simple|json]
+```
+
+The positional and flagged selectors must identify the same configured Gitea
+repository, compared with ASCII case-insensitive matching. The command requires
+exactly the `repository:read` capability for that repository. Output defaults to
+`simple`; all other `tea` commands, flags, inference paths, prompts, login,
+help, and version paths are rejected.
+
 Validate policy without loading token values, TLS files, or provider executables:
 
 ```sh
@@ -113,6 +136,7 @@ For this example, export the values in the protected service environment:
 
 ```sh
 export REPOWOLF_TOKEN_GITHUB_PUBLIC='<provider-token>'
+export REPOWOLF_TOKEN_GITEA_LAB='<provider-token>'
 export REPOWOLF_TOKEN_EXAMPLE_AGENT='<generated-principal-token>'
 ```
 
@@ -120,8 +144,19 @@ New GitHub records and all Gitea records require an explicit `tokenEnv`. An
 empty or null `tokenEnv` stops startup. One GitHub record can omit `tokenEnv`
 during migration. In that case, startup accepts exactly one non-empty
 `GH_TOKEN` or `GITHUB_TOKEN`. Startup stops if both variables are present, both
-are absent, or the one present value is empty. Gitea provider records are
-runtime state only in Issue 1. They do not enable Gitea operations.
+are absent, or the one present value is empty.
+
+A Gitea provider may set `caFile` to a non-empty path to a private PEM CA
+bundle. The file must be readable, regular, contain at least one valid
+certificate, and be no larger than 1 MiB. These certificates augment the
+system trust roots rather than replacing them. `caFile` is rejected for GitHub
+providers.
+
+Each Gitea API client requires TLS 1.3 with normal API-hostname verification,
+rejects every redirect, limits a whole operation to two minutes, and limits
+each decoded response body to 8 MiB. The client is constructed at startup
+without probing Gitea and is used only by the restricted repository-view RPC.
+Changes to a provider token, `caFile`, or CA bundle require a service restart.
 
 SSH configuration belongs only in the service environment and filesystem. A
 `null` tool path resolves `gh` or `ssh` once from service startup `PATH`; an
@@ -144,6 +179,8 @@ Each sandbox receives only these values:
 - `REPOWOLF_CA_FILE`: a readable PEM public CA certificate, unless the CA is already in the platform trust store;
 - optional `REPOWOLF_SERVER_NAME`: an explicit TLS server name when it must differ from the endpoint host.
 
-Put the restricted `gh` first in sandbox `PATH` and set `GIT_SSH_COMMAND=repowolf-git-ssh`. Do not put token values in Git remotes, URLs, arguments, repository files, or logs.
+Put the restricted `gh` and `tea` personalities first in sandbox `PATH` and set
+`GIT_SSH_COMMAND=repowolf-git-ssh`. Do not put token values in Git remotes,
+URLs, arguments, repository files, or logs.
 
 After configuration, [select a deployment](deployment.md).

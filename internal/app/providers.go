@@ -4,20 +4,24 @@ import (
 	"fmt"
 	"sort"
 
+	giteasdk "code.gitea.io/sdk/gitea"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/credentials"
+	providergitea "github.com/rochecompaan/repowolf/internal/provider/gitea"
 	providergithub "github.com/rochecompaan/repowolf/internal/provider/github"
 	"github.com/rochecompaan/repowolf/internal/runner"
 	"github.com/rochecompaan/repowolf/internal/server"
 )
 
-// providerInstance holds the configuration and credential for one provider ID.
+// providerInstance holds the configured executors for one provider ID.
 type providerInstance struct {
 	provider config.Provider
-	token    string
 	legacy   bool
 	github   server.GitHubExecutor
+	gitea    *giteasdk.Client
 }
+
+type giteaClientConstructor func(config.Provider, string) (*giteasdk.Client, error)
 
 func buildProviderInstances(
 	cfg config.Config,
@@ -25,6 +29,7 @@ func buildProviderInstances(
 	tools runner.Toolset,
 	tokenFreeEnvironment []string,
 	caller providergithub.Caller,
+	newGiteaClient giteaClientConstructor,
 ) (map[string]providerInstance, error) {
 	instances := make(map[string]providerInstance, len(cfg.Providers))
 	for _, id := range sortedProviderIDs(cfg.Providers) {
@@ -35,7 +40,6 @@ func buildProviderInstances(
 		}
 		instance := providerInstance{
 			provider: provider,
-			token:    token,
 			legacy:   snapshot.UsesLegacyProviderToken(id),
 		}
 
@@ -53,7 +57,11 @@ func buildProviderInstances(
 			}
 			instance.github = adapter
 		case config.ProviderGitea:
-			// Issue 4 constructs the Gitea SDK client.
+			client, err := newGiteaClient(provider, token)
+			if err != nil {
+				return nil, fmt.Errorf("create Gitea provider %q: %w", id, err)
+			}
+			instance.gitea = client
 		default:
 			return nil, fmt.Errorf("create provider %q: unsupported kind", id)
 		}
@@ -73,6 +81,24 @@ func buildGitHubExecutor(instances map[string]providerInstance) *githubExecutor 
 		return nil
 	}
 	return &githubExecutor{adapters: adapters}
+}
+
+func buildGiteaExecutor(instances map[string]providerInstance) (*giteaExecutor, error) {
+	adapters := make(map[string]server.GiteaExecutor)
+	for id, instance := range instances {
+		if instance.gitea == nil {
+			continue
+		}
+		adapter, err := providergitea.NewRepositoryAdapter(instance.gitea)
+		if err != nil {
+			return nil, fmt.Errorf("create Gitea repository adapter %q: %w", id, err)
+		}
+		adapters[id] = adapter
+	}
+	if len(adapters) == 0 {
+		return nil, nil
+	}
+	return &giteaExecutor{adapters: adapters}, nil
 }
 
 func sortedProviderIDs(providers map[string]config.Provider) []string {

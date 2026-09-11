@@ -10,12 +10,21 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 func (service *Server) auditUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		started := time.Now()
+		var inputBytes int64
+		if message, ok := request.(proto.Message); ok && message != nil {
+			inputBytes = int64(proto.Size(message))
+		}
+		ctx = withProviderMetadata(ctx, info.FullMethod, inputBytes)
 		response, err := handler(ctx, request)
+		if message, ok := response.(proto.Message); ok && message != nil {
+			providerMetadataFrom(ctx).outputBytes = int64(proto.Size(message))
+		}
 		if writeErr := service.writeTerminal(ctx, info.FullMethod, started, err); writeErr != nil {
 			return nil, status.Error(codes.Unavailable, "audit unavailable")
 		}
@@ -50,11 +59,19 @@ func (service *Server) writeTerminal(ctx context.Context, operation string, star
 	principal, _ := auth.Principal(ctx)
 	requestID, _ := auth.RequestID(ctx)
 	mapped := rpcstatus.Error(err)
-	return service.audit.Write(audit.Event{
+	event := audit.Event{
 		RequestID: requestID, Principal: principal, Operation: operation,
 		Outcome: auditOutcome(mapped), Reason: status.Code(mapped).String(),
 		DurationMS: time.Since(started).Milliseconds(),
-	})
+	}
+	if metadata := providerMetadataFrom(ctx); metadata != nil {
+		event.Operation = metadata.operation
+		event.Provider = metadata.provider
+		event.Repository = metadata.repository
+		event.InputBytes = metadata.inputBytes
+		event.OutputBytes = metadata.outputBytes
+	}
+	return service.audit.Write(event)
 }
 
 func auditOutcome(err error) audit.Outcome {
