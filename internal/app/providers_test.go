@@ -59,9 +59,6 @@ func TestBuildProviderInstancesCreatesIsolatedGitHubAdapters(t *testing.T) {
 	if want := []string{"gitea.invalid=gitea-secret", "gitea-two.invalid=gitea-two-secret"}; !reflect.DeepEqual(constructed, want) {
 		t.Fatalf("Gitea construction = %q, want %q", constructed, want)
 	}
-	if instances["gitea-lab"].token != "gitea-secret" {
-		t.Fatalf("Gitea token = %q, want gitea-secret", instances["gitea-lab"].token)
-	}
 	if instances["github-a"].legacy {
 		t.Fatal("explicit GitHub instance is marked legacy")
 	}

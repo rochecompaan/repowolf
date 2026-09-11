@@ -1,10 +1,6 @@
 package policy
 
-import (
-	"strings"
-
-	"github.com/rochecompaan/repowolf/internal/config"
-)
+import "github.com/rochecompaan/repowolf/internal/config"
 
 // Selector describes optional exact repository identity fields supplied by a client.
 type Selector struct {
@@ -113,8 +109,8 @@ func matches(selector Selector, repository config.Repository, provider config.Pr
 
 func matchesRepositoryIdentity(selector Selector, repository config.Repository, kind config.ProviderKind) bool {
 	if kind == config.ProviderGitea {
-		return (selector.Owner == "" || strings.EqualFold(selector.Owner, repository.Owner)) &&
-			(selector.Name == "" || strings.EqualFold(selector.Name, repository.Name))
+		return (selector.Owner == "" || asciiEqualFold(selector.Owner, repository.Owner)) &&
+			(selector.Name == "" || asciiEqualFold(selector.Name, repository.Name))
 	}
 	return (selector.Owner == "" || selector.Owner == repository.Owner) &&
 		(selector.Name == "" || selector.Name == repository.Name)

@@ -3,12 +3,14 @@ package server
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/policy"
+	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 )
 
 type fakeGiteaExecutor struct {
@@ -60,6 +62,38 @@ func TestGiteaServiceAuthorizesAndCompletes(t *testing.T) {
 		})
 	}
 }
+func TestGiteaServiceRejectsInvalidRepositorySelectorsBeforePolicy(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		owner string
+		repo  string
+	}{
+		{name: "Unicode confusable", owner: "Kelvin", repo: "Repo"},
+		{name: "NUL", owner: "Owner\x00", repo: "Repo"},
+		{name: "dot owner", owner: ".", repo: "Repo"},
+		{name: "dot-dot repository", owner: "Owner", repo: ".."},
+		{name: "leading punctuation", owner: "-Owner", repo: "Repo"},
+		{name: "Git suffix", owner: "Owner", repo: "Repo.GIT"},
+		{name: "overlong owner", owner: strings.Repeat("a", 101), repo: "Repo"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			executor := &fakeGiteaExecutor{}
+			service := newGiteaService(giteaPolicy(t, config.RepositoryRead, config.ProviderGitea), executor, &eventSink{})
+			request := giteaRequest()
+			request.Context.Repository.Owner = test.owner
+			request.Context.Repository.Name = test.repo
+
+			_, err := service.Execute(auth.WithPrincipal(context.Background(), "agent"), request)
+			if !errors.Is(err, rpcstatus.ErrInvalidArgument) {
+				t.Fatalf("Execute() error = %v, want invalid argument", err)
+			}
+			if executor.calls != 0 {
+				t.Fatal("executor called")
+			}
+		})
+	}
+}
+
 func TestGiteaServiceFailsClosed(t *testing.T) {
 	for _, test := range []struct {
 		name   string

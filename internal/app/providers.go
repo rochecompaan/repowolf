@@ -13,10 +13,9 @@ import (
 	"github.com/rochecompaan/repowolf/internal/server"
 )
 
-// providerInstance holds the configuration and credential for one provider ID.
+// providerInstance holds the configured executors for one provider ID.
 type providerInstance struct {
 	provider config.Provider
-	token    string
 	legacy   bool
 	github   server.GitHubExecutor
 	gitea    *giteasdk.Client
@@ -41,7 +40,6 @@ func buildProviderInstances(
 		}
 		instance := providerInstance{
 			provider: provider,
-			token:    token,
 			legacy:   snapshot.UsesLegacyProviderToken(id),
 		}
 

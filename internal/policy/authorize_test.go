@@ -37,6 +37,32 @@ func TestResolveKeepsGitHubRepositoryIdentityCaseSensitive(t *testing.T) {
 	}
 }
 
+func TestResolveGiteaRepositoryIdentityUsesASCIICaseFold(t *testing.T) {
+	cfg := testConfig()
+	cfg.Repositories["kelvin"] = config.Repository{Provider: "gitea", Owner: "Kelvin", Name: "Repo"}
+	principal := cfg.Principals["infra-agent"]
+	principal.Grants = append(principal.Grants, config.Grant{Repository: "kelvin", Capabilities: []config.Capability{config.RepositoryRead}})
+	cfg.Principals["infra-agent"] = principal
+	snapshot, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := snapshot.Resolve("infra-agent", Selector{
+		Kind: config.ProviderGitea, Owner: "kELVIN", Name: "rEPO",
+	}, config.RepositoryRead)
+	if err != nil || resolved.ID != "kelvin" {
+		t.Fatalf("ASCII case-folded Resolve() = %#v, %v", resolved, err)
+	}
+
+	_, err = snapshot.Resolve("infra-agent", Selector{
+		Kind: config.ProviderGitea, Owner: "Kelvin", Name: "Repo",
+	}, config.RepositoryRead)
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("Unicode-confusable Resolve() error = %v, want ErrDenied", err)
+	}
+}
+
 func TestResolveGitProviderAwareAuthority(t *testing.T) {
 	snapshot := testSnapshot(t)
 

@@ -61,7 +61,8 @@ func giteaSelector(request *repowolfv1.GiteaRequest) (policy.Selector, error) {
 		return policy.Selector{}, rpcstatus.ErrInvalidArgument
 	}
 	repository := request.GetContext().GetRepository()
-	if repository.Owner == "" || repository.Name == "" || repository.Host != "" || repository.SshPort != 0 {
+	if repository.Host != "" || repository.SshPort != 0 ||
+		!config.ValidRepositoryIdentity(config.ProviderGitea, repository.Owner, repository.Name) {
 		return policy.Selector{}, rpcstatus.ErrInvalidArgument
 	}
 	return policy.Selector{Kind: config.ProviderGitea, Owner: repository.Owner, Name: repository.Name}, nil
