@@ -42,6 +42,7 @@ func Dial(ctx context.Context, config Config) (*grpc.ClientConn, error) {
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsSettings)),
 		grpc.WithPerRPCCredentials(bearerCredentials{token: config.Token}),
+		grpc.WithDisableRetry(),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(responseLimitBytes),
 			grpc.MaxCallSendMsgSize(messageLimitBytes),
