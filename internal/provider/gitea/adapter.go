@@ -25,29 +25,33 @@ type giteaAPI interface {
 	ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) (issueCommentPage, error)
 }
 
-type sdkClient interface {
+type repositorySDKClient interface {
 	GetRepo(context.Context, string, string) (*sdk.Repository, *sdk.Response, error)
+}
+
+type issueSDKClient interface {
 	ListRepoIssues(context.Context, string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error)
 	GetIssue(context.Context, string, string, int64) (*sdk.Issue, *sdk.Response, error)
 	ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error)
 }
 
 type sdkAPI struct {
-	client sdkClient
+	repositories repositorySDKClient
+	issues       issueSDKClient
 }
 
 func (a *sdkAPI) GetRepo(ctx context.Context, owner, repo string) (*sdk.Repository, error) {
-	value, _, err := a.client.GetRepo(ctx, owner, repo)
+	value, _, err := a.repositories.GetRepo(ctx, owner, repo)
 	return value, err
 }
 
 func (a *sdkAPI) ListRepoIssues(ctx context.Context, owner, repo string, options sdk.ListIssueOption) ([]*sdk.Issue, error) {
-	values, _, err := a.client.ListRepoIssues(ctx, owner, repo, options)
+	values, _, err := a.issues.ListRepoIssues(ctx, owner, repo, options)
 	return values, err
 }
 
 func (a *sdkAPI) GetIssue(ctx context.Context, owner, repo string, index int64) (*sdk.Issue, int, error) {
-	value, response, err := a.client.GetIssue(ctx, owner, repo, index)
+	value, response, err := a.issues.GetIssue(ctx, owner, repo, index)
 	status := 0
 	if response != nil {
 		status = response.StatusCode
@@ -56,7 +60,7 @@ func (a *sdkAPI) GetIssue(ctx context.Context, owner, repo string, index int64) 
 }
 
 func (a *sdkAPI) ListIssueTimeline(ctx context.Context, owner, repo string, index int64, options sdk.ListIssueCommentOptions) (issueCommentPage, error) {
-	values, _, err := a.client.ListIssueTimeline(ctx, owner, repo, index, options)
+	values, _, err := a.issues.ListIssueTimeline(ctx, owner, repo, index, options)
 	page := issueCommentPage{entryCount: len(values), comments: make([]*sdk.Comment, 0, len(values))}
 	for _, value := range values {
 		if value == nil {
@@ -84,7 +88,7 @@ func NewRepositoryAdapter(client *sdk.Client) (*RepositoryAdapter, error) {
 	if client == nil {
 		return nil, fmt.Errorf("construct Gitea repository adapter: nil client")
 	}
-	return &RepositoryAdapter{api: &sdkAPI{client: client}}, nil
+	return &RepositoryAdapter{api: &sdkAPI{repositories: client.Repositories, issues: client.Issues}}, nil
 }
 func newRepositoryAdapter(api giteaAPI) (*RepositoryAdapter, error) {
 	if api == nil {

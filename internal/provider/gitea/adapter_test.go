@@ -85,13 +85,28 @@ func TestRepositoryAdapterMapsOneCanonicalCall(t *testing.T) {
 		t.Fatalf("fake=%#v record=%#v", fake, record)
 	}
 }
+func TestNewRepositoryAdapterCapturesInitializedSDKServices(t *testing.T) {
+	client, err := sdk.NewClient("https://gitea.example/", sdk.SetGiteaVersion(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := NewRepositoryAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, ok := adapter.api.(*sdkAPI)
+	if !ok || api.repositories != client.Repositories || api.issues != client.Issues {
+		t.Fatalf("sdk services were not captured at construction: %#v", api)
+	}
+}
+
 func TestSDKAPIUsesPaginatedTimelineComments(t *testing.T) {
 	now := time.Now().UTC()
 	client := &recordingSDKRepositoryClient{timeline: []*sdk.TimelineComment{
 		{ID: 1, Type: "label", Created: now, Updated: now},
 		{ID: 2, Type: "comment", Poster: &sdk.User{ID: 3, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7#issuecomment-2", Body: "body", Created: now, Updated: now},
 	}}
-	api := &sdkAPI{client: client}
+	api := &sdkAPI{repositories: client, issues: client}
 	page, err := api.ListIssueTimeline(context.Background(), "Owner", "Repo", 7, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: 2, PageSize: 50}})
 	if err != nil || page.entryCount != 2 || len(page.comments) != 1 || page.comments[0].ID != 2 || page.comments[0].Body != "body" {
 		t.Fatalf("ListIssueTimeline() = %#v, %v", page, err)
@@ -111,7 +126,7 @@ func TestSDKTimelineDecodesLabelEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := (&sdkAPI{client: client}).ListIssueTimeline(context.Background(), "Owner", "Repo", 7, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: 1, PageSize: 50}})
+	page, err := (&sdkAPI{repositories: client, issues: client}).ListIssueTimeline(context.Background(), "Owner", "Repo", 7, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: 1, PageSize: 50}})
 	if err != nil || page.entryCount != 2 || len(page.comments) != 1 || page.comments[0].ID != 2 {
 		t.Fatalf("ListIssueTimeline() = %#v, %v", page, err)
 	}
@@ -139,7 +154,7 @@ func TestSDKAPIObservesConcurrentCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	getter := &sdkAPI{client: client}
+	getter := &sdkAPI{repositories: client, issues: client}
 	firstDone := make(chan error, 1)
 	go func() {
 		_, err := getter.GetRepo(context.Background(), "Owner", "Repo")
@@ -184,7 +199,7 @@ func TestSDKAPIPassesRequestContextDirectly(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			client := &recordingSDKRepositoryClient{repository: test.repository, err: test.err}
-			getter := &sdkAPI{client: client}
+			getter := &sdkAPI{repositories: client, issues: client}
 			requestContext := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer secret"))
 
 			_, _ = getter.GetRepo(requestContext, "Owner", "Repo")

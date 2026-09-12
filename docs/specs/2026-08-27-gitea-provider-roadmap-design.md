@@ -198,7 +198,7 @@ The parser will accept only documented command forms from the restricted command
 
 ### Gitea adapter
 
-The production Gitea adapter is SDK-native. It calls the pinned `code.gitea.io/sdk/gitea` module directly over HTTPS, in-process, through the existing TLS and dialing modules. There is no `tea` subprocess in the serving path.
+The production Gitea adapter is SDK-native. It calls the pinned `gitea.dev/sdk` module directly over HTTPS, in-process, through the existing TLS and dialing modules. There is no `tea` subprocess in the serving path.
 
 A narrow executor interface will separate the Gitea service from the adapter implementation. The executor seam is built in Milestone 1 with the SDK-native executor as the production path. The pinned `tea` 0.15.1 executable implements the same seam inside the test harness, where it acts as the certification oracle. There is no production-switchable `tea` fallback: the SDK and `tea` share the same API behavior, since `tea` itself wraps that SDK.
 

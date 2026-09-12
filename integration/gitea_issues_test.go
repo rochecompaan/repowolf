@@ -22,13 +22,17 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	type createdIssue struct {
 		Index int64 `json:"number"`
 	}
-	type createdLabel struct {
+	type createdResource struct {
 		ID int64 `json:"id"`
 	}
-	var label createdLabel
+	var label, milestone createdResource
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/labels", token.SHA1, map[string]any{"name": "bug", "color": "ee0701"}, &label, "", "")
+	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/milestones", token.SHA1, map[string]any{"title": "issue-read milestone"}, &milestone, "", "")
 	var open, closed createdIssue
-	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "open issue", "body": "private issue body", "labels": []int64{label.ID}}, &open, "", "")
+	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{
+		"title": "open issue", "body": "private issue body", "labels": []int64{label.ID}, "assignees": []string{"CanonicalOwner"},
+		"milestone": milestone.ID, "due_date": "2026-10-01T00:00:00Z",
+	}, &open, "", "")
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "closed issue", "body": "closed body"}, &closed, "", "")
 	giteaJSON(t, httpClient, http.MethodPatch, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(closed.Index, 10), token.SHA1, map[string]any{"state": "closed"}, nil, "", "")
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/branches", token.SHA1, map[string]any{"new_branch_name": "pull-fixture", "old_branch_name": "main"}, nil, "", "")
@@ -46,7 +50,7 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	var firstCommentPage, secondCommentPage []commentPageRecord
 	giteaJSON(t, httpClient, http.MethodGet, commentURL+"?page=1&limit=50", token.SHA1, nil, &firstCommentPage, "", "")
 	giteaJSON(t, httpClient, http.MethodGet, commentURL+"?page=2&limit=50", token.SHA1, nil, &secondCommentPage, "", "")
-	if len(firstCommentPage) != 50 || len(secondCommentPage) != 2 || secondCommentPage[0].ID <= firstCommentPage[49].ID {
+	if len(firstCommentPage) != 50 || len(secondCommentPage) != 4 || secondCommentPage[0].ID <= firstCommentPage[49].ID {
 		t.Fatalf("Gitea timeline pagination returned page sizes %d and %d", len(firstCommentPage), len(secondCommentPage))
 	}
 	timelineTypes := map[string]int{}
@@ -95,13 +99,18 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	}
 	view := viewOutput.Bytes()
 	var detail struct {
-		Index    int64    `json:"index"`
-		Labels   []string `json:"labels"`
-		Comments []struct {
+		Index     int64    `json:"index"`
+		Assignees []string `json:"assignees"`
+		Milestone string   `json:"milestone"`
+		Deadline  string   `json:"deadline"`
+		Labels    []string `json:"labels"`
+		Comments  []struct {
 			ID int64 `json:"id"`
 		} `json:"comments"`
 	}
-	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Labels) != 1 || detail.Labels[0] != "bug" || len(detail.Comments) != 51 {
+	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index ||
+		len(detail.Assignees) != 1 || detail.Assignees[0] != "CanonicalOwner" || detail.Milestone != "issue-read milestone" || detail.Deadline != "2026-10-01T00:00:00Z" ||
+		len(detail.Labels) != 1 || detail.Labels[0] != "bug" || len(detail.Comments) != 51 {
 		t.Fatalf("view=%s err=%v", view, err)
 	}
 	for i, c := range detail.Comments {
@@ -119,9 +128,25 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	}
 	broker.Stop(t)
 	audit := string(mustRead(broker.AuditPath))
-	if !strings.Contains(audit, `"operation":"gitea.issue_list"`) || !strings.Contains(audit, `"operation":"gitea.issue_view"`) || strings.Contains(audit, "private issue body") {
-		t.Fatalf("unexpected audit: %s", audit)
+	acceptedFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome"}
+	terminalFields := []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome", "reason", "input_bytes", "output_bytes"}
+	success := func(operation string) []auditExpectation {
+		return []auditExpectation{
+			{operation: operation, outcome: "accepted", principal: "agent", provider: "gitea", repository: "project", required: acceptedFields},
+			{operation: operation, outcome: "completed", principal: "agent", provider: "gitea", repository: "project", reason: "OK", inputPositive: true, outputPositive: true, required: terminalFields, optional: []string{"duration_ms"}},
+		}
 	}
+	assertAuditInvocations(t, audit, [][]auditExpectation{
+		success("gitea.issue_list"),
+		success("gitea.issue_list"),
+		success("gitea.issue_list"),
+		success("gitea.issue_view"),
+		{{operation: "gitea.issue_list", outcome: "denied", principal: "agent", reason: "PermissionDenied", inputPositive: true, required: []string{"timestamp", "request_id", "principal", "operation", "outcome", "reason", "input_bytes"}, optional: []string{"duration_ms"}}},
+		{
+			{operation: "gitea.issue_view", outcome: "accepted", principal: "agent", provider: "gitea", repository: "project", required: acceptedFields},
+			{operation: "gitea.issue_view", outcome: "failed", principal: "agent", provider: "gitea", repository: "project", reason: "FailedPrecondition", inputPositive: true, required: []string{"timestamp", "request_id", "principal", "provider", "repository", "operation", "outcome", "reason", "input_bytes"}, optional: []string{"duration_ms"}},
+		},
+	}, []string{token.SHA1, "private issue body", "open issue", "bug", "issue-read milestone", "comment 1"})
 	logs := dockerOutput(t, "logs", container)
 	commentPath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + strconv.FormatInt(open.Index, 10) + "/timeline"
 	if pageOneCalls, pageTwoCalls := giteaLogCountBoundedGET(logs, commentPath, 1, 50), giteaLogCountBoundedGET(logs, commentPath, 2, 50); pageOneCalls != 2 || pageTwoCalls != 2 {
