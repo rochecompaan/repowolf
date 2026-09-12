@@ -17,6 +17,7 @@ import (
 )
 
 type fakeRepositoryGetter struct {
+	fakeIssueAPI
 	calls       int
 	owner, name string
 	repository  *sdk.Repository
@@ -26,6 +27,7 @@ type fakeRepositoryGetter struct {
 type recordingSDKRepositoryClient struct {
 	contexts   []context.Context
 	repository *sdk.Repository
+	timeline   []*sdk.TimelineComment
 	err        error
 }
 
@@ -35,6 +37,15 @@ func (client *recordingSDKRepositoryClient) SetContext(ctx context.Context) {
 
 func (client *recordingSDKRepositoryClient) GetRepo(string, string) (*sdk.Repository, *sdk.Response, error) {
 	return client.repository, nil, client.err
+}
+func (client *recordingSDKRepositoryClient) ListRepoIssues(string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error) {
+	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) GetIssue(string, string, int64) (*sdk.Issue, *sdk.Response, error) {
+	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) ListIssueTimeline(string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error) {
+	return client.timeline, nil, client.err
 }
 
 func (f *fakeRepositoryGetter) GetRepo(_ context.Context, owner, name string) (*sdk.Repository, error) {
@@ -76,7 +87,20 @@ func TestRepositoryAdapterMapsOneCanonicalCall(t *testing.T) {
 		t.Fatalf("fake=%#v record=%#v", fake, record)
 	}
 }
-func TestSDKRepositoryGetterObservesCancellationWhileQueued(t *testing.T) {
+func TestSerializedSDKAPIUsesPaginatedTimelineComments(t *testing.T) {
+	now := time.Now().UTC()
+	client := &recordingSDKRepositoryClient{timeline: []*sdk.TimelineComment{
+		{ID: 1, Type: "label", Created: now, Updated: now},
+		{ID: 2, Type: "comment", Poster: &sdk.User{ID: 3, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7#issuecomment-2", Body: "body", Created: now, Updated: now},
+	}}
+	api := newSerializedSDKAPI(client)
+	page, err := api.ListIssueTimeline(context.Background(), "Owner", "Repo", 7, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: 2, PageSize: 50}})
+	if err != nil || page.entryCount != 2 || len(page.comments) != 1 || page.comments[0].ID != 2 || page.comments[0].Body != "body" {
+		t.Fatalf("ListIssueTimeline() = %#v, %v", page, err)
+	}
+}
+
+func TestSerializedSDKAPIObservesCancellationWhileQueued(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	t.Cleanup(func() {
@@ -98,7 +122,7 @@ func TestSDKRepositoryGetterObservesCancellationWhileQueued(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	getter := newSDKRepositoryGetter(client)
+	getter := newSerializedSDKAPI(client)
 	firstDone := make(chan error, 1)
 	go func() {
 		_, err := getter.GetRepo(context.Background(), "Owner", "Repo")
@@ -132,7 +156,7 @@ func TestSDKRepositoryGetterObservesCancellationWhileQueued(t *testing.T) {
 	}
 }
 
-func TestSDKRepositoryGetterDoesNotRetainRequestContext(t *testing.T) {
+func TestSerializedSDKAPIDoesNotRetainRequestContext(t *testing.T) {
 	for _, test := range []struct {
 		name       string
 		repository *sdk.Repository
@@ -143,7 +167,7 @@ func TestSDKRepositoryGetterDoesNotRetainRequestContext(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			client := &recordingSDKRepositoryClient{repository: test.repository, err: test.err}
-			getter := newSDKRepositoryGetter(client)
+			getter := newSerializedSDKAPI(client)
 			requestContext := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer secret"))
 
 			_, _ = getter.GetRepo(requestContext, "Owner", "Repo")

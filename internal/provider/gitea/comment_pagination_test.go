@@ -3,12 +3,12 @@ package gitea
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	sdk "code.gitea.io/sdk/gitea"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 	"github.com/rochecompaan/repowolf/internal/runner"
 )
 
@@ -30,61 +30,81 @@ func TestCommentPaginationUsesExplicitPages(t *testing.T) {
 	if err != nil || len(got) != 51 || f.commentCalls != 2 {
 		t.Fatalf("len=%d calls=%d err=%v", len(got), f.commentCalls, err)
 	}
+	for i, option := range f.commentOptions {
+		if option.Page != i+1 || option.PageSize != commentPageSize {
+			t.Fatalf("comment option %d = %#v", i, option)
+		}
+	}
 }
 
-func TestCommentPaginationAcceptsExactPageFromGiteaUnpaginatedEndpoint(t *testing.T) {
-	all := make([]*sdk.Comment, commentPageSize)
-	for i := range all {
-		all[i] = sdkComment(int64(i + 1))
+func TestCommentPaginationContinuesPastFullTimelinePageWithEvents(t *testing.T) {
+	first := make([]*sdk.Comment, commentPageSize-1)
+	for i := range first {
+		first[i] = sdkComment(int64(i + 1))
 	}
-	f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: all, 2: all}}
+	f := &fakeIssueAPI{
+		comments:           map[int][]*sdk.Comment{1: first, 2: {sdkComment(commentPageSize)}},
+		commentEntryCounts: map[int]int{1: commentPageSize, 2: 1},
+	}
 	got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(commentPageSize))
 	if err != nil || len(got) != commentPageSize || f.commentCalls != 2 {
 		t.Fatalf("len=%d calls=%d err=%v", len(got), f.commentCalls, err)
 	}
 }
 
-func TestCommentPaginationAcceptsGiteaUnpaginatedResponse(t *testing.T) {
-	all := make([]*sdk.Comment, 51)
-	for i := range all {
-		all[i] = sdkComment(int64(i + 1))
+func TestCommentPaginationRejectsProviderPageLongerThanRequested(t *testing.T) {
+	page := make([]*sdk.Comment, commentPageSize+1)
+	for i := range page {
+		page[i] = sdkComment(int64(i + 1))
 	}
-	f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: all}}
-	got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(51))
-	if err != nil || len(got) != 51 || f.commentCalls != 1 {
-		t.Fatalf("len=%d calls=%d err=%v", len(got), f.commentCalls, err)
-	}
-}
-
-func TestCommentPaginationRejectsOversizedUnpaginatedResponse(t *testing.T) {
-	all := make([]*sdk.Comment, maximumComments+1)
-	for i := range all {
-		all[i] = sdkComment(int64(i + 1))
-	}
-	f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: all}}
-	got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(int64(len(all))))
-	if got != nil || !errors.Is(err, runner.ErrOutputLimit) || f.commentCalls != 1 {
+	f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: page}}
+	got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(int64(len(page))))
+	if got != nil || !errors.Is(err, rpcstatus.ErrProviderFailure) || f.commentCalls != 1 {
 		t.Fatalf("comments=%#v calls=%d err=%v", got, f.commentCalls, err)
 	}
 }
 
-func TestCommentPaginationEnforcesAggregateResponseBudget(t *testing.T) {
+func TestCommentPaginationReturnsNoPartialResultOnProviderFailure(t *testing.T) {
 	first := make([]*sdk.Comment, commentPageSize)
-	second := make([]*sdk.Comment, 40)
-	body := strings.Repeat("x", 100<<10)
 	for i := range first {
 		first[i] = sdkComment(int64(i + 1))
-		first[i].Body = body
 	}
-	for i := range second {
-		second[i] = sdkComment(int64(commentPageSize + i + 1))
-		second[i].Body = body
+	f := &fakeIssueAPI{
+		comments:      map[int][]*sdk.Comment{1: first},
+		commentErrors: map[int]error{2: errors.New("provider details")},
 	}
-	f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: first, 2: second}}
-	got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(90))
-	if got != nil || !errors.Is(err, runner.ErrOutputLimit) || f.commentCalls != 2 {
+	got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(commentPageSize+1))
+	if got != nil || !errors.Is(err, rpcstatus.ErrProviderFailure) || f.commentCalls != 2 {
 		t.Fatalf("comments=%#v calls=%d err=%v", got, f.commentCalls, err)
 	}
+}
+
+func TestCommentPaginationHonorsCancellationBeforeAndBetweenPages(t *testing.T) {
+	t.Run("before page one", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		f := &fakeIssueAPI{}
+		got, err := loadIssueComments(ctx, f, "o", "r", 7, commentIssue(0))
+		if got != nil || !errors.Is(err, context.Canceled) || f.commentCalls != 0 {
+			t.Fatalf("comments=%#v calls=%d err=%v", got, f.commentCalls, err)
+		}
+	})
+	t.Run("between pages", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		first := make([]*sdk.Comment, commentPageSize)
+		for i := range first {
+			first[i] = sdkComment(int64(i + 1))
+		}
+		f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: first}, afterCommentPage: func(page int) {
+			if page == 1 {
+				cancel()
+			}
+		}}
+		got, err := loadIssueComments(ctx, f, "o", "r", 7, commentIssue(commentPageSize+1))
+		if got != nil || !errors.Is(err, context.Canceled) || f.commentCalls != 1 {
+			t.Fatalf("comments=%#v calls=%d err=%v", got, f.commentCalls, err)
+		}
+	})
 }
 
 func TestCommentPaginationRequiresIssueCommentCountOnEveryCompletion(t *testing.T) {
@@ -104,15 +124,6 @@ func TestCommentPaginationRequiresIssueCommentCountOnEveryCompletion(t *testing.
 				t.Fatalf("comments=%#v err=%v, want no partial result", got, err)
 			}
 		})
-	}
-
-	unpaginated := make([]*sdk.Comment, commentPageSize+1)
-	for i := range unpaginated {
-		unpaginated[i] = sdkComment(int64(i + 1))
-	}
-	f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: unpaginated}}
-	if got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(commentPageSize+2)); got != nil || err == nil {
-		t.Fatalf("unpaginated comments=%#v err=%v, want count mismatch", got, err)
 	}
 }
 
@@ -165,9 +176,19 @@ func TestCommentPaginationClassifiesEveryNonEmptyOverflowProbeAsOutputLimit(t *t
 	}
 }
 
-func TestCommentPaginationRejectsOrder(t *testing.T) {
-	f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: {sdkComment(2), sdkComment(1)}}}
-	if got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(2)); err == nil || got != nil {
-		t.Fatalf("%#v %v", got, err)
+func TestCommentPaginationRejectsMalformedOrOutOfOrderComments(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		values []*sdk.Comment
+	}{
+		{name: "nil", values: []*sdk.Comment{nil}},
+		{name: "decreasing IDs", values: []*sdk.Comment{sdkComment(2), sdkComment(1)}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := &fakeIssueAPI{comments: map[int][]*sdk.Comment{1: test.values}}
+			if got, err := loadIssueComments(context.Background(), f, "o", "r", 7, commentIssue(int64(len(test.values)))); !errors.Is(err, rpcstatus.ErrProviderFailure) || got != nil {
+				t.Fatalf("comments=%#v err=%v", got, err)
+			}
+		})
 	}
 }

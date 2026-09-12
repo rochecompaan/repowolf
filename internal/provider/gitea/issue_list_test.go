@@ -14,7 +14,11 @@ type fakeIssueAPI struct {
 	issues                            []*sdk.Issue
 	issue                             *sdk.Issue
 	comments                          map[int][]*sdk.Comment
+	commentEntryCounts                map[int]int
+	commentErrors                     map[int]error
+	afterCommentPage                  func(int)
 	listCalls, getCalls, commentCalls int
+	commentOptions                    []sdk.ListIssueCommentOptions
 	option                            sdk.ListIssueOption
 }
 
@@ -30,9 +34,18 @@ func (f *fakeIssueAPI) GetIssue(context.Context, string, string, int64) (*sdk.Is
 	f.getCalls++
 	return f.issue, 200, nil
 }
-func (f *fakeIssueAPI) ListIssueComments(_ context.Context, _, _ string, _ int64, o sdk.ListIssueCommentOptions) ([]*sdk.Comment, error) {
+func (f *fakeIssueAPI) ListIssueTimeline(_ context.Context, _, _ string, _ int64, o sdk.ListIssueCommentOptions) (issueCommentPage, error) {
 	f.commentCalls++
-	return f.comments[o.Page], nil
+	f.commentOptions = append(f.commentOptions, o)
+	values := f.comments[o.Page]
+	entryCount := len(values)
+	if count, ok := f.commentEntryCounts[o.Page]; ok {
+		entryCount = count
+	}
+	if f.afterCommentPage != nil {
+		f.afterCommentPage(o.Page)
+	}
+	return issueCommentPage{entryCount: entryCount, comments: values}, f.commentErrors[o.Page]
 }
 func sdkIssue() *sdk.Issue {
 	return &sdk.Issue{Index: 7, Poster: &sdk.User{ID: 2, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7", Title: "title", State: sdk.StateOpen, Created: time.Unix(1, 0), Updated: time.Unix(2, 0), Repository: &sdk.RepositoryMeta{Owner: "Owner", Name: "Repo", FullName: "Owner/Repo"}}

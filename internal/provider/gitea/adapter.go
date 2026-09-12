@@ -13,49 +13,24 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type repositoryGetter interface {
+type issueCommentPage struct {
+	entryCount int
+	comments   []*sdk.Comment
+}
+
+type giteaAPI interface {
 	GetRepo(context.Context, string, string) (*sdk.Repository, error)
-}
-type sdkRepositoryClient interface {
-	SetContext(context.Context)
-	GetRepo(string, string) (*sdk.Repository, *sdk.Response, error)
-}
-type sdkRepositoryGetter struct {
-	client sdkRepositoryClient
-	slot   chan struct{}
-}
-
-func newSDKRepositoryGetter(client sdkRepositoryClient) *sdkRepositoryGetter {
-	s := &sdkRepositoryGetter{client: client, slot: make(chan struct{}, 1)}
-	s.slot <- struct{}{}
-	return s
-}
-func (a *sdkRepositoryGetter) GetRepo(ctx context.Context, o, r string) (*sdk.Repository, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-a.slot:
-	}
-	defer func() { a.client.SetContext(context.Background()); a.slot <- struct{}{} }()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	a.client.SetContext(ctx)
-	v, _, err := a.client.GetRepo(o, r)
-	return v, err
-}
-
-type issueAPI interface {
 	ListRepoIssues(context.Context, string, string, sdk.ListIssueOption) ([]*sdk.Issue, error)
 	GetIssue(context.Context, string, string, int64) (*sdk.Issue, int, error)
-	ListIssueComments(context.Context, string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.Comment, error)
+	ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) (issueCommentPage, error)
 }
+
 type sdkClient interface {
 	SetContext(context.Context)
 	GetRepo(string, string) (*sdk.Repository, *sdk.Response, error)
 	ListRepoIssues(string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error)
 	GetIssue(string, string, int64) (*sdk.Issue, *sdk.Response, error)
-	ListIssueComments(string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.Comment, *sdk.Response, error)
+	ListIssueTimeline(string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error)
 }
 type serializedSDKAPI struct {
 	client sdkClient
@@ -100,45 +75,53 @@ func (a *serializedSDKAPI) GetIssue(ctx context.Context, o, r string, i int64) (
 	})
 	return
 }
-func (a *serializedSDKAPI) ListIssueComments(ctx context.Context, o, r string, i int64, opt sdk.ListIssueCommentOptions) (v []*sdk.Comment, err error) {
-	err = a.with(ctx, func() error { var e error; v, _, e = a.client.ListIssueComments(o, r, i, opt); return e })
+func (a *serializedSDKAPI) ListIssueTimeline(ctx context.Context, o, r string, i int64, opt sdk.ListIssueCommentOptions) (page issueCommentPage, err error) {
+	err = a.with(ctx, func() error {
+		values, _, callErr := a.client.ListIssueTimeline(o, r, i, opt)
+		page.entryCount = len(values)
+		page.comments = make([]*sdk.Comment, 0, len(values))
+		for _, value := range values {
+			if value == nil {
+				page.comments = append(page.comments, nil)
+				continue
+			}
+			if value.Type != "comment" {
+				continue
+			}
+			page.comments = append(page.comments, &sdk.Comment{
+				ID: value.ID, HTMLURL: value.HTMLURL, PRURL: value.PRURL,
+				IssueURL: value.IssueURL, Poster: value.Poster,
+				OriginalAuthor: value.OriginalAuthor, OriginalAuthorID: value.OriginalAuthorID,
+				Body: value.Body, Created: value.Created, Updated: value.Updated,
+			})
+		}
+		return callErr
+	})
 	return
 }
 
 type RepositoryAdapter struct {
-	getter repositoryGetter
-	api    issueAPI
+	api giteaAPI
 }
 
 func NewRepositoryAdapter(client *sdk.Client) (*RepositoryAdapter, error) {
 	if client == nil {
 		return nil, fmt.Errorf("construct Gitea repository adapter: nil client")
 	}
-	api := newSerializedSDKAPI(client)
-	return &RepositoryAdapter{getter: api, api: api}, nil
+	return &RepositoryAdapter{api: newSerializedSDKAPI(client)}, nil
 }
-func newRepositoryAdapter(getter repositoryGetter) (*RepositoryAdapter, error) {
-	if getter == nil {
-		return nil, fmt.Errorf("construct Gitea repository adapter: nil getter")
-	}
-	a := &RepositoryAdapter{getter: getter}
-	if api, ok := getter.(issueAPI); ok {
-		a.api = api
-	}
-	return a, nil
-}
-func newIssueAdapter(api interface {
-	repositoryGetter
-	issueAPI
-}) (*RepositoryAdapter, error) {
+func newRepositoryAdapter(api giteaAPI) (*RepositoryAdapter, error) {
 	if api == nil {
-		return nil, fmt.Errorf("nil api")
+		return nil, fmt.Errorf("construct Gitea repository adapter: nil api")
 	}
-	return &RepositoryAdapter{getter: api, api: api}, nil
+	return &RepositoryAdapter{api: api}, nil
+}
+func newIssueAdapter(api giteaAPI) (*RepositoryAdapter, error) {
+	return newRepositoryAdapter(api)
 }
 
 func (a *RepositoryAdapter) Execute(ctx context.Context, repo policy.ResolvedRepository, request *repowolfv1.GiteaRequest) (*repowolfv1.GiteaResponse, error) {
-	if a == nil || a.getter == nil {
+	if a == nil || a.api == nil {
 		return nil, rpcstatus.ErrServiceUnavailable
 	}
 	if ValidateRequest(request) != nil {
@@ -148,20 +131,14 @@ func (a *RepositoryAdapter) Execute(ctx context.Context, repo policy.ResolvedRep
 	case request.GetRepositoryView() != nil:
 		return a.repository(ctx, repo)
 	case request.GetIssueList() != nil:
-		if a.api == nil {
-			return nil, rpcstatus.ErrServiceUnavailable
-		}
 		return a.issueList(ctx, repo, request.GetIssueList())
 	case request.GetIssueView() != nil:
-		if a.api == nil {
-			return nil, rpcstatus.ErrServiceUnavailable
-		}
 		return a.issueView(ctx, repo, request.GetIssueView())
 	}
 	return nil, ErrInvalidRequest
 }
 func (a *RepositoryAdapter) repository(ctx context.Context, repository policy.ResolvedRepository) (*repowolfv1.GiteaResponse, error) {
-	result, err := a.getter.GetRepo(ctx, repository.Repository.Owner, repository.Repository.Name)
+	result, err := a.api.GetRepo(ctx, repository.Repository.Owner, repository.Repository.Name)
 	if err != nil {
 		return nil, classifyProviderError(ctx, err)
 	}

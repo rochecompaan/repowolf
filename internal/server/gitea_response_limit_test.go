@@ -63,6 +63,11 @@ func TestGiteaIssueServiceEnforcesFinalProtobufLimit(t *testing.T) {
 	}{
 		{name: "list", request: giteaIssueListRequest},
 		{name: "view", request: giteaIssueViewRequest},
+		{name: "view-comments", request: func() *repowolfv1.GiteaRequest {
+			request := giteaIssueViewRequest()
+			request.GetIssueView().IncludeComments = true
+			return request
+		}},
 	} {
 		for _, size := range []int{responseLimitBytes, responseLimitBytes + 1} {
 			name := "exact limit"
@@ -111,7 +116,12 @@ func giteaIssueResponseWithFinalSize(t *testing.T, target int, requestID, operat
 	} else {
 		record := &repowolfv1.GiteaIssueRecord{}
 		response.Result = &repowolfv1.GiteaResponse_IssueView{IssueView: &repowolfv1.GiteaIssueViewResult{Issue: record}}
-		body = &record.Body
+		if operation == "view-comments" {
+			record.Comments = []*repowolfv1.GiteaCommentRecord{{Body: "first"}, {}}
+			body = &record.Comments[1].Body
+		} else {
+			body = &record.Body
+		}
 	}
 	return fillGiteaResponse(t, response, target, body)
 }

@@ -423,11 +423,16 @@ Expected: FAIL because list dispatch, normalization, and SDK calls do not exist.
 Replace the repository-only getter seam with one adapter-owned API interface:
 
 ```go
+type issueCommentPage struct {
+    entryCount int
+    comments   []*sdk.Comment
+}
+
 type giteaAPI interface {
     GetRepo(context.Context, string, string) (*sdk.Repository, error)
     ListRepoIssues(context.Context, string, string, sdk.ListIssueOption) ([]*sdk.Issue, error)
     GetIssue(context.Context, string, string, int64) (*sdk.Issue, int, error)
-    ListIssueComments(context.Context, string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.Comment, error)
+    ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) (issueCommentPage, error)
 }
 
 type sdkClient interface {
@@ -435,7 +440,7 @@ type sdkClient interface {
     GetRepo(string, string) (*sdk.Repository, *sdk.Response, error)
     ListRepoIssues(string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error)
     GetIssue(string, string, int64) (*sdk.Issue, *sdk.Response, error)
-    ListIssueComments(string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.Comment, *sdk.Response, error)
+    ListIssueTimeline(string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error)
 }
 ```
 
@@ -485,7 +490,7 @@ git commit -m "feat(gitea): list validated issues"
 - Create: `internal/provider/gitea/comment_pagination_test.go`
 
 **Interfaces:**
-- Consumes: `GetIssue`, `ListIssueComments`, and normalization from Task 4.
+- Consumes: `GetIssue`, paginated `ListIssueTimeline`, and normalization from Task 4.
 - Produces: `normalizeComment(*sdk.Comment) (*GiteaCommentRecord, error)`.
 - Produces: `loadIssueComments(context.Context, giteaAPI, owner, repo string, index int64) ([]*GiteaCommentRecord, error)`.
 
@@ -507,7 +512,7 @@ Expected: FAIL because view/comment operations are not implemented.
 
 - [ ] **Step 4: Normalize comments and implement the bounded loop**
 
-`normalizeComment` requires positive comment/author IDs, non-nil author, nonempty author login and HTML URL, valid UTF-8 without NUL for author/URL/body, required valid timestamps, and `updated >= created`.
+`normalizeComment` requires positive comment/author IDs, non-nil author, nonempty author login and HTML URL, valid UTF-8 without NUL for author/URL/body, required valid timestamps, and `updated >= created`. Use Gitea's issue timeline endpoint because the pinned Gitea 1.27.2 issue-comments endpoint does not apply `page` or `limit`, while the timeline endpoint applies both. Retain only timeline entries typed as comments, use the raw timeline entry count for page termination, and require the normalized total to match the issue's validated comment count.
 
 Implement these constants and loop semantics:
 
@@ -520,18 +525,19 @@ const (
 
 for page := 1; page <= maximumCommentPages+1; page++ {
     if err := ctx.Err(); err != nil { return nil, err }
-    values, err := api.ListIssueComments(ctx, owner, repo, index, sdk.ListIssueCommentOptions{
+    values, err := api.ListIssueTimeline(ctx, owner, repo, index, sdk.ListIssueCommentOptions{
         ListOptions: sdk.ListOptions{Page: page, PageSize: commentPageSize},
     })
     if err != nil { return nil, classifyProviderError(ctx, err) }
-    if len(values) > commentPageSize { return nil, rpcstatus.ErrProviderFailure }
+    if values.entryCount > commentPageSize { return nil, rpcstatus.ErrProviderFailure }
     if page == maximumCommentPages+1 {
-        if len(values) != 0 { return nil, runner.ErrOutputLimit }
-        return comments, nil
+        if values.entryCount != 0 { return nil, runner.ErrOutputLimit }
+        return completeIssueComments(issue, comments)
     }
-    // Normalize the complete page into a temporary slice, require each ID to
-    // exceed the previous ID, then append the page atomically.
-    if len(values) < commentPageSize { return comments, nil }
+    // Count all timeline entries for page termination, normalize only typed
+    // comment entries, require each comment ID to exceed the previous ID, then
+    // append the page atomically.
+    if values.entryCount < commentPageSize { return completeIssueComments(issue, comments) }
 }
 ```
 
@@ -648,7 +654,7 @@ tea issues --repo CanonicalOwner/CanonicalRepo --state all --page 1 --limit 2 --
 tea issues INDEX --repo CanonicalOwner/CanonicalRepo --comments --output json
 ```
 
-Assert exact typed JSON fields and values, provider issue order, omission of the pull request, open/closed filtering, an empty page beyond the end, canonical upstream owner/repository paths, and all 51 comments in increasing provider order. Enable/access bounded Gitea request logging and assert one list request plus explicit comment requests for pages 1 and 2; do not infer pagination from returned content alone.
+Assert exact typed JSON fields and values, provider issue order, omission of the pull request, open/closed filtering, an empty page beyond the end, canonical upstream owner/repository paths, and all 51 comments in increasing provider order. Directly verify that the paginated timeline endpoint returns 50 comments on page 1 and one on page 2, then use bounded Gitea request logging to assert the restricted client made those explicit timeline requests; do not infer pagination from returned content alone.
 
 Also assert denied-repository output is empty with the generic diagnostic, authorized pull-request index gets only the fixed corrective diagnostic and no content/comments request, accepted/completed audit pairs use canonical operations, and token/body/filter/comment markers are absent from client environment, process arguments, diagnostics, broker stderr, and audit.
 
