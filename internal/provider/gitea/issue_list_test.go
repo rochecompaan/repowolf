@@ -18,6 +18,10 @@ type fakeIssueAPI struct {
 	commentErrors                     map[int]error
 	afterCommentPage                  func(int)
 	listCalls, getCalls, commentCalls int
+	getOwner, getRepo                 string
+	getIndex                          int64
+	getStatus                         int
+	getError                          error
 	commentOptions                    []sdk.ListIssueCommentOptions
 	option                            sdk.ListIssueOption
 }
@@ -30,9 +34,14 @@ func (f *fakeIssueAPI) ListRepoIssues(_ context.Context, _, _ string, o sdk.List
 	f.option = o
 	return f.issues, nil
 }
-func (f *fakeIssueAPI) GetIssue(context.Context, string, string, int64) (*sdk.Issue, int, error) {
+func (f *fakeIssueAPI) GetIssue(_ context.Context, owner, repo string, index int64) (*sdk.Issue, int, error) {
 	f.getCalls++
-	return f.issue, 200, nil
+	f.getOwner, f.getRepo, f.getIndex = owner, repo, index
+	status := f.getStatus
+	if status == 0 {
+		status = 200
+	}
+	return f.issue, status, f.getError
 }
 func (f *fakeIssueAPI) ListIssueTimeline(_ context.Context, _, _ string, _ int64, o sdk.ListIssueCommentOptions) (issueCommentPage, error) {
 	f.commentCalls++
