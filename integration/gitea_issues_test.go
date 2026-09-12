@@ -156,8 +156,8 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	}
 	logs := dockerOutput(t, "logs", container)
 	commentPath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + strconv.FormatInt(open.Index, 10) + "/timeline"
-	if !giteaLogContainsBoundedGET(logs, commentPath, 1, 50) || !giteaLogContainsBoundedGET(logs, commentPath, 2, 50) {
-		t.Fatalf("Gitea log does not contain explicit comment pages for %s", commentPath)
+	if pageOneCalls, pageTwoCalls := giteaLogCountBoundedGET(logs, commentPath, 1, 50), giteaLogCountBoundedGET(logs, commentPath, 2, 50); pageOneCalls != 2 || pageTwoCalls != 2 {
+		t.Fatalf("Gitea log contains %d page-1 and %d page-2 timeline requests for %s, want one setup proof and one restricted-client request each", pageOneCalls, pageTwoCalls, commentPath)
 	}
 	pullCommentPath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + strconv.FormatInt(pull.Index, 10) + "/timeline"
 	if strings.Contains(logs, "GET "+pullCommentPath) || strings.Contains(logs, "/CanonicalOwner/OtherRepo/issues") {
@@ -165,13 +165,14 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	}
 }
 
-func giteaLogContainsBoundedGET(logs, path string, page, limit int) bool {
+func giteaLogCountBoundedGET(logs, path string, page, limit int) int {
+	count := 0
 	for _, line := range strings.Split(logs, "\n") {
 		if strings.Contains(line, "GET "+path) && strings.Contains(line, "page="+strconv.Itoa(page)) && strings.Contains(line, "limit="+strconv.Itoa(limit)) {
-			return true
+			count++
 		}
 	}
-	return false
+	return count
 }
 
 func runTeaArgs(t *testing.T, binary string, env []string, args ...string) []byte {
