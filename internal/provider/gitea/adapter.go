@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	sdk "code.gitea.io/sdk/gitea"
+	sdk "gitea.dev/sdk"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/policy"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
@@ -26,78 +26,54 @@ type giteaAPI interface {
 }
 
 type sdkClient interface {
-	SetContext(context.Context)
-	GetRepo(string, string) (*sdk.Repository, *sdk.Response, error)
-	ListRepoIssues(string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error)
-	GetIssue(string, string, int64) (*sdk.Issue, *sdk.Response, error)
-	ListIssueTimeline(string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error)
-}
-type serializedSDKAPI struct {
-	client sdkClient
-	slot   chan struct{}
+	GetRepo(context.Context, string, string) (*sdk.Repository, *sdk.Response, error)
+	ListRepoIssues(context.Context, string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error)
+	GetIssue(context.Context, string, string, int64) (*sdk.Issue, *sdk.Response, error)
+	ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error)
 }
 
-func newSerializedSDKAPI(client sdkClient) *serializedSDKAPI {
-	s := &serializedSDKAPI{client: client, slot: make(chan struct{}, 1)}
-	s.slot <- struct{}{}
-	return s
+type sdkAPI struct {
+	client sdkClient
 }
-func (a *serializedSDKAPI) with(ctx context.Context, call func() error) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-a.slot:
+
+func (a *sdkAPI) GetRepo(ctx context.Context, owner, repo string) (*sdk.Repository, error) {
+	value, _, err := a.client.GetRepo(ctx, owner, repo)
+	return value, err
+}
+
+func (a *sdkAPI) ListRepoIssues(ctx context.Context, owner, repo string, options sdk.ListIssueOption) ([]*sdk.Issue, error) {
+	values, _, err := a.client.ListRepoIssues(ctx, owner, repo, options)
+	return values, err
+}
+
+func (a *sdkAPI) GetIssue(ctx context.Context, owner, repo string, index int64) (*sdk.Issue, int, error) {
+	value, response, err := a.client.GetIssue(ctx, owner, repo, index)
+	status := 0
+	if response != nil {
+		status = response.StatusCode
 	}
-	defer func() { a.client.SetContext(context.Background()); a.slot <- struct{}{} }()
-	if err := ctx.Err(); err != nil {
-		return err
+	return value, status, err
+}
+
+func (a *sdkAPI) ListIssueTimeline(ctx context.Context, owner, repo string, index int64, options sdk.ListIssueCommentOptions) (issueCommentPage, error) {
+	values, _, err := a.client.ListIssueTimeline(ctx, owner, repo, index, options)
+	page := issueCommentPage{entryCount: len(values), comments: make([]*sdk.Comment, 0, len(values))}
+	for _, value := range values {
+		if value == nil {
+			page.comments = append(page.comments, nil)
+			continue
+		}
+		if value.Type != "comment" {
+			continue
+		}
+		page.comments = append(page.comments, &sdk.Comment{
+			ID: value.ID, HTMLURL: value.HTMLURL, PRURL: value.PRURL,
+			IssueURL: value.IssueURL, Poster: value.Poster,
+			OriginalAuthor: value.OriginalAuthor, OriginalAuthorID: value.OriginalAuthorID,
+			Body: value.Body, Created: value.Created, Updated: value.Updated,
+		})
 	}
-	a.client.SetContext(ctx)
-	return call()
-}
-func (a *serializedSDKAPI) GetRepo(ctx context.Context, o, r string) (v *sdk.Repository, err error) {
-	err = a.with(ctx, func() error { var e error; v, _, e = a.client.GetRepo(o, r); return e })
-	return
-}
-func (a *serializedSDKAPI) ListRepoIssues(ctx context.Context, o, r string, opt sdk.ListIssueOption) (v []*sdk.Issue, err error) {
-	err = a.with(ctx, func() error { var e error; v, _, e = a.client.ListRepoIssues(o, r, opt); return e })
-	return
-}
-func (a *serializedSDKAPI) GetIssue(ctx context.Context, o, r string, i int64) (v *sdk.Issue, status int, err error) {
-	err = a.with(ctx, func() error {
-		var response *sdk.Response
-		var e error
-		v, response, e = a.client.GetIssue(o, r, i)
-		if response != nil {
-			status = response.StatusCode
-		}
-		return e
-	})
-	return
-}
-func (a *serializedSDKAPI) ListIssueTimeline(ctx context.Context, o, r string, i int64, opt sdk.ListIssueCommentOptions) (page issueCommentPage, err error) {
-	err = a.with(ctx, func() error {
-		values, _, callErr := a.client.ListIssueTimeline(o, r, i, opt)
-		page.entryCount = len(values)
-		page.comments = make([]*sdk.Comment, 0, len(values))
-		for _, value := range values {
-			if value == nil {
-				page.comments = append(page.comments, nil)
-				continue
-			}
-			if value.Type != "comment" {
-				continue
-			}
-			page.comments = append(page.comments, &sdk.Comment{
-				ID: value.ID, HTMLURL: value.HTMLURL, PRURL: value.PRURL,
-				IssueURL: value.IssueURL, Poster: value.Poster,
-				OriginalAuthor: value.OriginalAuthor, OriginalAuthorID: value.OriginalAuthorID,
-				Body: value.Body, Created: value.Created, Updated: value.Updated,
-			})
-		}
-		return callErr
-	})
-	return
+	return page, err
 }
 
 type RepositoryAdapter struct {
@@ -108,7 +84,7 @@ func NewRepositoryAdapter(client *sdk.Client) (*RepositoryAdapter, error) {
 	if client == nil {
 		return nil, fmt.Errorf("construct Gitea repository adapter: nil client")
 	}
-	return &RepositoryAdapter{api: newSerializedSDKAPI(client)}, nil
+	return &RepositoryAdapter{api: &sdkAPI{client: client}}, nil
 }
 func newRepositoryAdapter(api giteaAPI) (*RepositoryAdapter, error) {
 	if api == nil {
@@ -153,7 +129,11 @@ func (a *RepositoryAdapter) issueList(ctx context.Context, repository policy.Res
 	if r.Owner != nil && !strings.EqualFold(r.GetOwner(), owner) {
 		return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueList{IssueList: &repowolfv1.GiteaIssueListResult{Issues: []*repowolfv1.GiteaIssueRecord{}}}}, nil
 	}
-	states := map[repowolfv1.GiteaIssueState]sdk.StateType{1: sdk.StateOpen, 2: sdk.StateClosed, 3: sdk.StateAll}
+	states := map[repowolfv1.GiteaIssueState]sdk.StateType{
+		repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_OPEN:   sdk.StateOpen,
+		repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_CLOSED: sdk.StateClosed,
+		repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_ALL:    sdk.StateAll,
+	}
 	opt := sdk.ListIssueOption{ListOptions: sdk.ListOptions{Page: int(r.Page), PageSize: int(r.Limit)}, State: states[r.State], Type: sdk.IssueTypeIssue, KeyWord: r.GetKeyword(), CreatedBy: r.GetAuthor(), AssignedBy: r.GetAssignee(), MentionedBy: r.GetMentions(), Owner: canonicalOwnerFilter(r, owner)}
 	if r.From != nil {
 		opt.Since = r.From.AsTime()

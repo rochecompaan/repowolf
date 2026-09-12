@@ -1,6 +1,7 @@
 package gitea
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -11,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	sdk "code.gitea.io/sdk/gitea"
+	sdk "gitea.dev/sdk"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/providerhttp"
 	"github.com/rochecompaan/repowolf/internal/testutil"
@@ -62,7 +63,7 @@ func TestSDKServerVersionUsesBoundedAuthenticatedTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	version, _, err := client.ServerVersion()
+	version, _, err := client.ServerVersion(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func TestSDKErrorResponsesDoNotDiscloseBody(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, _, err = client.ServerVersion()
+			_, _, err = client.ServerVersion(context.Background())
 			if err == nil {
 				t.Fatal("ServerVersion() unexpectedly succeeded")
 			}
@@ -134,7 +135,7 @@ func TestSDKTransportFailuresAreStableAndSafe(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, _, err = client.ServerVersion()
+			_, _, err = client.ServerVersion(context.Background())
 			if !errors.Is(err, test.want) {
 				t.Fatalf("ServerVersion() error = %v, want %v", err, test.want)
 			}
@@ -165,8 +166,8 @@ func TestSDKClientsKeepAuthoritiesAndTokensIsolated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstVersion, _, firstErr := firstClient.ServerVersion()
-	secondVersion, _, secondErr := secondClient.ServerVersion()
+	firstVersion, _, firstErr := firstClient.ServerVersion(context.Background())
+	secondVersion, _, secondErr := secondClient.ServerVersion(context.Background())
 	if firstErr != nil || secondErr != nil || firstVersion != "1.1" || secondVersion != "2.2" || firstAuth != "token first-token" || secondAuth != "token second-token" {
 		t.Fatalf("isolated calls = %q/%v/%q, %q/%v/%q", firstVersion, firstErr, firstAuth, secondVersion, secondErr, secondAuth)
 	}
@@ -179,7 +180,7 @@ func TestSDKRejectsUntrustedCertificate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := client.ServerVersion(); err == nil {
+	if _, _, err := client.ServerVersion(context.Background()); err == nil {
 		t.Fatal("untrusted server was accepted")
 	}
 }

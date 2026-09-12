@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	sdk "code.gitea.io/sdk/gitea"
+	sdk "gitea.dev/sdk"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 	"github.com/rochecompaan/repowolf/internal/runner"

@@ -1,8 +1,8 @@
 package gitea
 
 import (
-	sdk "code.gitea.io/sdk/gitea"
 	"context"
+	sdk "gitea.dev/sdk"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/policy"

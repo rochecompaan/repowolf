@@ -4,56 +4,31 @@ package integration_test
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"net"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/rochecompaan/repowolf/internal/auth"
-	"github.com/rochecompaan/repowolf/internal/testutil"
 )
 
 func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Fatalf("Docker required: %v", err)
-	}
-	work := t.TempDir()
-	address := "172.29.10.2"
-	network := "repowolf-gitea-issues"
-	dockerOutput(t, "network", "create", "--subnet", "172.29.10.0/24", network)
-	t.Cleanup(func() { _ = exec.Command("docker", "network", "rm", network).Run() })
-	cert := testutil.GenerateCertificateForIPs(t, filepath.Join(work, "gitea-cert"), []net.IP{net.ParseIP(address)})
-	if err := os.Chmod(filepath.Dir(cert.CertificateFile), 0755); err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range []string{cert.CertificateFile, cert.KeyFile} {
-		if err := os.Chmod(p, 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	container := dockerOutput(t, "run", "--detach", "--rm", "--network", network, "--ip", address, "--volume", filepath.Dir(cert.CertificateFile)+":/certs:ro", "--env", "GITEA__database__DB_TYPE=sqlite3", "--env", "GITEA__security__INSTALL_LOCK=true", "--env", "GITEA__server__PROTOCOL=https", "--env", "GITEA__server__HTTP_PORT=443", "--env", "GITEA__server__SSL_MIN_VERSION=TLSv1.3", "--env", "GITEA__server__SSL_MAX_VERSION=TLSv1.3", "--env", "GITEA__server__CERT_FILE=/certs/server.pem", "--env", "GITEA__server__KEY_FILE=/certs/server-key.pem", "--env", "GITEA__api__MAX_RESPONSE_ITEMS=50", giteaImage)
-	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", container).Run() })
-	baseURL := "https://" + address
-	httpClient := giteaHTTPClient(t, cert.CAFile)
-	waitGitea(t, httpClient, baseURL, container)
-	dockerOutput(t, "exec", "--user", "git", container, "gitea", "admin", "user", "create", "--admin", "--username", "CanonicalOwner", "--password", "correct-horse-battery-staple", "--email", "owner@example.invalid", "--must-change-password=false")
-	var token struct {
-		SHA1 string `json:"sha1"`
-	}
-	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/users/CanonicalOwner/tokens", "", map[string]any{"name": "issues", "scopes": []string{"write:repository", "write:issue", "write:user"}}, &token, "CanonicalOwner", "correct-horse-battery-staple")
-	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/user/repos", token.SHA1, map[string]any{"name": "CanonicalRepo", "private": true, "auto_init": true}, nil, "", "")
+	fixture := newRestrictedGiteaFixture(t, "172.29.10.2", "172.29.10.0/24")
+	baseURL, httpClient, container := fixture.baseURL, fixture.client, fixture.container
+	token := struct {
+		SHA1 string
+	}{SHA1: fixture.token}
 	type createdIssue struct {
 		Index int64 `json:"number"`
 	}
+	type createdLabel struct {
+		ID int64 `json:"id"`
+	}
+	var label createdLabel
+	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/labels", token.SHA1, map[string]any{"name": "bug", "color": "ee0701"}, &label, "", "")
 	var open, closed createdIssue
-	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "open issue", "body": "private issue body"}, &open, "", "")
+	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "open issue", "body": "private issue body", "labels": []int64{label.ID}}, &open, "", "")
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues", token.SHA1, map[string]any{"title": "closed issue", "body": "closed body"}, &closed, "", "")
 	giteaJSON(t, httpClient, http.MethodPatch, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/"+strconv.FormatInt(closed.Index, 10), token.SHA1, map[string]any{"state": "closed"}, nil, "", "")
 	giteaJSON(t, httpClient, http.MethodPost, baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/branches", token.SHA1, map[string]any{"new_branch_name": "pull-fixture", "old_branch_name": "main"}, nil, "", "")
@@ -71,26 +46,18 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	var firstCommentPage, secondCommentPage []commentPageRecord
 	giteaJSON(t, httpClient, http.MethodGet, commentURL+"?page=1&limit=50", token.SHA1, nil, &firstCommentPage, "", "")
 	giteaJSON(t, httpClient, http.MethodGet, commentURL+"?page=2&limit=50", token.SHA1, nil, &secondCommentPage, "", "")
-	if len(firstCommentPage) != 50 || len(secondCommentPage) != 1 || secondCommentPage[0].ID <= firstCommentPage[49].ID {
-		t.Fatalf("Gitea comment pagination returned page sizes %d and %d", len(firstCommentPage), len(secondCommentPage))
+	if len(firstCommentPage) != 50 || len(secondCommentPage) != 2 || secondCommentPage[0].ID <= firstCommentPage[49].ID {
+		t.Fatalf("Gitea timeline pagination returned page sizes %d and %d", len(firstCommentPage), len(secondCommentPage))
 	}
-	for _, comment := range append(firstCommentPage, secondCommentPage...) {
-		if comment.Type != "comment" {
-			t.Fatalf("Gitea timeline returned unexpected entry type %q", comment.Type)
-		}
+	timelineTypes := map[string]int{}
+	for _, entry := range append(firstCommentPage, secondCommentPage...) {
+		timelineTypes[entry.Type]++
 	}
-	agentToken, err := auth.Generate(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
+	if timelineTypes["comment"] != 51 || timelineTypes["label"] != 1 {
+		t.Fatalf("Gitea timeline types = %#v, want 51 comments and one label event", timelineTypes)
 	}
-	binaries := testutil.BuildBinaries(t, filepath.Join(work, "bin"))
-	brokerCert := testutil.GenerateCertificate(t, filepath.Join(work, "broker-cert"))
-	sshPath, err := exec.LookPath("ssh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	broker := testutil.StartServer(t, testutil.ServerOptions{Binary: binaries.Service, PolicyPath: filepath.Join("testdata", "gitea-policy.yaml"), Certificate: brokerCert, SSHPath: sshPath, GiteaAPIHost: address, GiteaCAFile: cert.CAFile, Environment: []string{"REPOWOLF_TOKEN_AGENT=" + agentToken, "REPOWOLF_TOKEN_GITEA=" + token.SHA1}})
-	env := testutil.Environment(os.Environ(), "REPOWOLF_ENDPOINT="+broker.Endpoint, "REPOWOLF_TOKEN="+agentToken, "REPOWOLF_CA_FILE="+broker.Certificate.CAFile, "REPOWOLF_SERVER_NAME="+broker.Certificate.ServerName)
+	service := fixture.startBroker(t)
+	binaries, broker, env := service.binaries, service.server, service.environment
 	list := runTeaArgs(t, binaries.Tea, env, "issues", "--repo", "CanonicalOwner/CanonicalRepo", "--state", "all", "--page", "1", "--limit", "2", "--fields", "index,title,state,comments", "--output", "json")
 	var rows []map[string]any
 	if err := json.Unmarshal(list, &rows); err != nil || len(rows) != 2 {
@@ -128,12 +95,13 @@ func TestRestrictedTeaReadOperationsAgainstGitea(t *testing.T) {
 	}
 	view := viewOutput.Bytes()
 	var detail struct {
-		Index    int64 `json:"index"`
+		Index    int64    `json:"index"`
+		Labels   []string `json:"labels"`
 		Comments []struct {
 			ID int64 `json:"id"`
 		} `json:"comments"`
 	}
-	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Comments) != 51 {
+	if err := json.Unmarshal(view, &detail); err != nil || detail.Index != open.Index || len(detail.Labels) != 1 || detail.Labels[0] != "bug" || len(detail.Comments) != 51 {
 		t.Fatalf("view=%s err=%v", view, err)
 	}
 	for i, c := range detail.Comments {

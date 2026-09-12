@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	giteasdk "code.gitea.io/sdk/gitea"
+	giteasdk "gitea.dev/sdk"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/credentials"
 	providergitea "github.com/rochecompaan/repowolf/internal/provider/gitea"

@@ -1,8 +1,8 @@
 package gitea
 
 import (
-	sdk "code.gitea.io/sdk/gitea"
 	"fmt"
+	sdk "gitea.dev/sdk"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"strings"
@@ -74,48 +74,66 @@ func normalizeIssue(v *sdk.Issue, owner, repo string) (*normalizedIssue, error) 
 	return n, nil
 }
 func projectIssue(n *normalizedIssue, fields []repowolfv1.GiteaIssueField) *repowolfv1.GiteaIssueRecord {
-	r := &repowolfv1.GiteaIssueRecord{Index: n.index, State: n.state, Kind: 1}
+	r := &repowolfv1.GiteaIssueRecord{Index: n.index, State: n.state, Kind: repowolfv1.GiteaIssueKind_GITEA_ISSUE_KIND_ISSUE}
 	for _, f := range fields {
 		switch f {
-		case 3:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_AUTHOR:
 			r.Author = n.author
-		case 4:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_AUTHOR_ID:
 			r.AuthorId = n.authorID
-		case 5:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_URL:
 			r.Url = n.url
-		case 6:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_TITLE:
 			r.Title = n.title
-		case 7:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_BODY:
 			r.Body = n.body
-		case 8:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_CREATED:
 			r.Created = timestamppb.New(n.created)
-		case 9:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_UPDATED:
 			r.Updated = timestamppb.New(n.updated)
-		case 10:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_DEADLINE:
 			if n.deadline != nil {
 				r.Deadline = timestamppb.New(*n.deadline)
 			}
-		case 11:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_ASSIGNEES:
 			r.Assignees = append([]string{}, n.assignees...)
-		case 12:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_MILESTONE:
 			if n.milestone != nil {
 				m := *n.milestone
 				r.Milestone = &m
 			}
-		case 13:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_LABELS:
 			r.Labels = append([]string{}, n.labels...)
-		case 14:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_COMMENTS:
 			r.CommentCount = n.commentCount
-		case 15:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_REPO:
 			r.Repo = n.repo
-		case 16:
+		case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_OWNER:
 			r.Owner = n.owner
 		}
 	}
 	return r
 }
 
-var allIssueFields = []repowolfv1.GiteaIssueField{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}
+var allIssueFields = []repowolfv1.GiteaIssueField{
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_INDEX,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_STATE,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_AUTHOR,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_AUTHOR_ID,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_URL,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_TITLE,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_BODY,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_CREATED,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_UPDATED,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_DEADLINE,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_ASSIGNEES,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_MILESTONE,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_LABELS,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_COMMENTS,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_REPO,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_OWNER,
+	repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_KIND,
+}
 
 func validProtoTime(value time.Time) bool {
 	return !value.IsZero() && timestamppb.New(value).IsValid()

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	sdk "code.gitea.io/sdk/gitea"
+	sdk "gitea.dev/sdk"
 )
 
 func TestNormalizeIssueRejectsProtobufInvalidTimestamps(t *testing.T) {

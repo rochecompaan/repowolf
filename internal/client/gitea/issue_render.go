@@ -91,8 +91,6 @@ func renderIssueList(parsed command, result *repowolfv1.GiteaIssueListResult) ([
 
 const maximumIssueComments = 1000
 
-var detailOrder = []repowolfv1.GiteaIssueField{1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 7}
-
 func renderIssueView(parsed command, result *repowolfv1.GiteaIssueViewResult) ([]byte, error) {
 	if result == nil || result.Issue == nil {
 		return nil, fmt.Errorf("invalid issue view")
@@ -222,8 +220,7 @@ func validateIssueRecord(issue *repowolfv1.GiteaIssueRecord, commentsRequested b
 }
 func validTime(v *timestamppb.Timestamp) bool { return v != nil && v.IsValid() }
 func issueFieldName(f repowolfv1.GiteaIssueField) (string, error) {
-	names := map[repowolfv1.GiteaIssueField]string{1: "index", 2: "state", 3: "author", 4: "author-id", 5: "url", 6: "title", 7: "body", 8: "created", 9: "updated", 10: "deadline", 11: "assignees", 12: "milestone", 13: "labels", 14: "comments", 15: "repo", 16: "owner", 17: "kind"}
-	n, ok := names[f]
+	n, ok := issueFieldNameByValue[f]
 	if !ok {
 		return "", fmt.Errorf("invalid issue field")
 	}
@@ -231,55 +228,55 @@ func issueFieldName(f repowolfv1.GiteaIssueField) (string, error) {
 }
 func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueField) (any, bool, error) {
 	switch f {
-	case 1:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_INDEX:
 		if i.Index <= 0 {
 			return nil, false, fmt.Errorf("invalid index")
 		}
 		return i.Index, true, nil
-	case 2:
-		if i.State == 1 {
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_STATE:
+		if i.State == repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_OPEN {
 			return "open", true, nil
 		}
-		if i.State == 2 {
+		if i.State == repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_CLOSED {
 			return "closed", true, nil
 		}
 		return nil, false, fmt.Errorf("invalid state")
-	case 3:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_AUTHOR:
 		if i.Author == "" || !validOutputString(i.Author) {
 			return nil, false, fmt.Errorf("invalid author")
 		}
 		return i.Author, true, nil
-	case 4:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_AUTHOR_ID:
 		if i.AuthorId <= 0 {
 			return nil, false, fmt.Errorf("invalid author id")
 		}
 		return i.AuthorId, true, nil
-	case 5:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_URL:
 		if i.Url == "" || !validOutputString(i.Url) {
 			return nil, false, fmt.Errorf("invalid url")
 		}
 		return i.Url, true, nil
-	case 6:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_TITLE:
 		if i.Title == "" || !validOutputString(i.Title) {
 			return nil, false, fmt.Errorf("invalid title")
 		}
 		return i.Title, true, nil
-	case 7:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_BODY:
 		if !validOutputString(i.Body) {
 			return nil, false, fmt.Errorf("invalid body")
 		}
 		return i.Body, true, nil
-	case 8:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_CREATED:
 		if !validTime(i.Created) {
 			return nil, false, fmt.Errorf("invalid created")
 		}
 		return i.Created.AsTime().UTC().Format(time.RFC3339), true, nil
-	case 9:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_UPDATED:
 		if !validTime(i.Updated) {
 			return nil, false, fmt.Errorf("invalid updated")
 		}
 		return i.Updated.AsTime().UTC().Format(time.RFC3339), true, nil
-	case 10:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_DEADLINE:
 		if i.Deadline == nil {
 			return nil, false, nil
 		}
@@ -287,14 +284,14 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 			return nil, false, fmt.Errorf("invalid deadline")
 		}
 		return i.Deadline.AsTime().UTC().Format(time.RFC3339), true, nil
-	case 11:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_ASSIGNEES:
 		for _, value := range i.Assignees {
 			if value == "" || !validOutputString(value) {
 				return nil, false, fmt.Errorf("invalid assignee")
 			}
 		}
 		return nonnil(i.Assignees), true, nil
-	case 12:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_MILESTONE:
 		if i.Milestone == nil {
 			return nil, false, nil
 		}
@@ -302,14 +299,14 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 			return nil, false, fmt.Errorf("invalid milestone")
 		}
 		return i.GetMilestone(), true, nil
-	case 13:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_LABELS:
 		for _, value := range i.Labels {
 			if value == "" || !validOutputString(value) {
 				return nil, false, fmt.Errorf("invalid label")
 			}
 		}
 		return nonnil(i.Labels), true, nil
-	case 14:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_COMMENTS:
 		if i.CommentCount < 0 {
 			return nil, false, fmt.Errorf("invalid comment count")
 		}
@@ -328,18 +325,18 @@ func issueFieldValue(i *repowolfv1.GiteaIssueRecord, f repowolfv1.GiteaIssueFiel
 			return raw, true, nil
 		}
 		return i.CommentCount, true, nil
-	case 15:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_REPO:
 		if !validPart(i.Repo) {
 			return nil, false, fmt.Errorf("invalid repo")
 		}
 		return i.Repo, true, nil
-	case 16:
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_OWNER:
 		if !validPart(i.Owner) {
 			return nil, false, fmt.Errorf("invalid owner")
 		}
 		return i.Owner, true, nil
-	case 17:
-		if i.Kind != 1 {
+	case repowolfv1.GiteaIssueField_GITEA_ISSUE_FIELD_KIND:
+		if i.Kind != repowolfv1.GiteaIssueKind_GITEA_ISSUE_KIND_ISSUE {
 			return nil, false, fmt.Errorf("invalid kind")
 		}
 		return "issue", true, nil

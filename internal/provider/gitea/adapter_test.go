@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	sdk "code.gitea.io/sdk/gitea"
+	sdk "gitea.dev/sdk"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/policy"
@@ -31,20 +31,18 @@ type recordingSDKRepositoryClient struct {
 	err        error
 }
 
-func (client *recordingSDKRepositoryClient) SetContext(ctx context.Context) {
+func (client *recordingSDKRepositoryClient) GetRepo(ctx context.Context, _, _ string) (*sdk.Repository, *sdk.Response, error) {
 	client.contexts = append(client.contexts, ctx)
-}
-
-func (client *recordingSDKRepositoryClient) GetRepo(string, string) (*sdk.Repository, *sdk.Response, error) {
 	return client.repository, nil, client.err
 }
-func (client *recordingSDKRepositoryClient) ListRepoIssues(string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error) {
+func (client *recordingSDKRepositoryClient) ListRepoIssues(context.Context, string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error) {
 	return nil, nil, nil
 }
-func (client *recordingSDKRepositoryClient) GetIssue(string, string, int64) (*sdk.Issue, *sdk.Response, error) {
+func (client *recordingSDKRepositoryClient) GetIssue(context.Context, string, string, int64) (*sdk.Issue, *sdk.Response, error) {
 	return nil, nil, nil
 }
-func (client *recordingSDKRepositoryClient) ListIssueTimeline(string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error) {
+func (client *recordingSDKRepositoryClient) ListIssueTimeline(ctx context.Context, _, _ string, _ int64, _ sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error) {
+	client.contexts = append(client.contexts, ctx)
 	return client.timeline, nil, client.err
 }
 
@@ -87,20 +85,39 @@ func TestRepositoryAdapterMapsOneCanonicalCall(t *testing.T) {
 		t.Fatalf("fake=%#v record=%#v", fake, record)
 	}
 }
-func TestSerializedSDKAPIUsesPaginatedTimelineComments(t *testing.T) {
+func TestSDKAPIUsesPaginatedTimelineComments(t *testing.T) {
 	now := time.Now().UTC()
 	client := &recordingSDKRepositoryClient{timeline: []*sdk.TimelineComment{
 		{ID: 1, Type: "label", Created: now, Updated: now},
 		{ID: 2, Type: "comment", Poster: &sdk.User{ID: 3, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7#issuecomment-2", Body: "body", Created: now, Updated: now},
 	}}
-	api := newSerializedSDKAPI(client)
+	api := &sdkAPI{client: client}
 	page, err := api.ListIssueTimeline(context.Background(), "Owner", "Repo", 7, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: 2, PageSize: 50}})
 	if err != nil || page.entryCount != 2 || len(page.comments) != 1 || page.comments[0].ID != 2 || page.comments[0].Body != "body" {
 		t.Fatalf("ListIssueTimeline() = %#v, %v", page, err)
 	}
 }
 
-func TestSerializedSDKAPIObservesCancellationWhileQueued(t *testing.T) {
+func TestSDKTimelineDecodesLabelEvents(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/repos/Owner/Repo/issues/7/timeline" {
+			t.Fatalf("timeline path = %q", request.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`[{"id":1,"type":"label","label":{"id":9,"name":"bug","color":"ee0701"}},{"id":2,"type":"comment","html_url":"https://g/o/r/issues/7#issuecomment-2","user":{"id":3,"login":"alice"},"body":"body","created_at":"2026-09-12T00:00:00Z","updated_at":"2026-09-12T00:00:00Z"}]`))
+	}))
+	t.Cleanup(server.Close)
+	client, err := sdk.NewClient(server.URL+"/", sdk.SetGiteaVersion(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := (&sdkAPI{client: client}).ListIssueTimeline(context.Background(), "Owner", "Repo", 7, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: 1, PageSize: 50}})
+	if err != nil || page.entryCount != 2 || len(page.comments) != 1 || page.comments[0].ID != 2 {
+		t.Fatalf("ListIssueTimeline() = %#v, %v", page, err)
+	}
+}
+
+func TestSDKAPIObservesConcurrentCancellation(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	t.Cleanup(func() {
@@ -122,7 +139,7 @@ func TestSerializedSDKAPIObservesCancellationWhileQueued(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	getter := newSerializedSDKAPI(client)
+	getter := &sdkAPI{client: client}
 	firstDone := make(chan error, 1)
 	go func() {
 		_, err := getter.GetRepo(context.Background(), "Owner", "Repo")
@@ -156,7 +173,7 @@ func TestSerializedSDKAPIObservesCancellationWhileQueued(t *testing.T) {
 	}
 }
 
-func TestSerializedSDKAPIDoesNotRetainRequestContext(t *testing.T) {
+func TestSDKAPIPassesRequestContextDirectly(t *testing.T) {
 	for _, test := range []struct {
 		name       string
 		repository *sdk.Repository
@@ -167,19 +184,16 @@ func TestSerializedSDKAPIDoesNotRetainRequestContext(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			client := &recordingSDKRepositoryClient{repository: test.repository, err: test.err}
-			getter := newSerializedSDKAPI(client)
+			getter := &sdkAPI{client: client}
 			requestContext := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer secret"))
 
 			_, _ = getter.GetRepo(requestContext, "Owner", "Repo")
 
-			if len(client.contexts) != 2 {
-				t.Fatalf("SetContext calls = %d, want request and reset", len(client.contexts))
+			if len(client.contexts) != 1 {
+				t.Fatalf("SDK contexts = %d, want one direct request context", len(client.contexts))
 			}
 			if values := metadata.ValueFromIncomingContext(client.contexts[0], "authorization"); len(values) != 1 || values[0] != "Bearer secret" {
 				t.Fatalf("request authorization metadata = %q", values)
-			}
-			if values := metadata.ValueFromIncomingContext(client.contexts[1], "authorization"); len(values) != 0 {
-				t.Fatalf("reset context retained authorization metadata = %q", values)
 			}
 		})
 	}

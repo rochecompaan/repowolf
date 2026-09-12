@@ -4,9 +4,9 @@
 
 **Goal:** Let an authorized agent list one page of Gitea issues and inspect one issue, optionally with every comment within the documented bound, through the restricted `tea` client.
 
-**Architecture:** Extend the issue-#9 Gitea vertical slice additively: typed Protobuf branches feed a strict issue parser, the existing trusted provider-ID dispatcher, and one serialized SDK adapter. Keep parsing/rendering, SDK normalization/projection, comment pagination, and server lifecycle validation in focused units; reuse the established repository authorization, response limits, audit lifecycle, transport, and runtime composition.
+**Architecture:** Extend the issue-#9 Gitea vertical slice additively: typed Protobuf branches feed a strict issue parser, the existing trusted provider-ID dispatcher, and one context-aware SDK adapter. Keep parsing/rendering, SDK normalization/projection, comment pagination, and server lifecycle validation in focused units; reuse the established repository authorization, response limits, audit lifecycle, transport, and runtime composition.
 
-**Tech Stack:** Go 1.26, Protocol Buffers/gRPC, `code.gitea.io/sdk/gitea` v0.25.1, `buf`, Docker, Nix, and the existing RepoWolf integration harness.
+**Tech Stack:** Go 1.26, Protocol Buffers/gRPC, `gitea.dev/sdk` revision `492bc71`, `buf`, Docker, Nix, and the existing RepoWolf integration harness.
 
 **Spec:** `docs/specs/2026-09-11-issue-10-gitea-roadmap-6-11-issue-read-operations-design.md`
 
@@ -55,7 +55,7 @@ Every planned automated test exercises production parsing/rendering, protocol pr
 - `internal/client/gitea/parse.go`, `parse_test.go`, `fuzz_test.go`: route repository and issue grammars while retaining global bounds.
 - `internal/client/gitea/render.go`, `render_test.go`: dispatch repository versus issue rendering and retain common sanitization/limit helpers.
 - `internal/client/gitea/client.go`, `client_test.go`: issue usage diagnostics and corrective kind-mismatch handling.
-- `internal/provider/gitea/adapter.go`, `adapter_test.go`: one serialized SDK seam and operation dispatch for repository/list/view.
+- `internal/provider/gitea/adapter.go`, `adapter_test.go`: one context-aware SDK seam and operation dispatch for repository/list/view.
 - `internal/provider/gitea/operation.go`: strict typed validation, `issues:read`, and canonical operation names.
 - `internal/server/gitea.go`, `gitea_test.go`, `gitea_response_limit_test.go`: issue lifecycle, anti-enumeration, status, audit, and final-size coverage.
 - `internal/rpcstatus/status.go`, `status_test.go`: sanitized not-found and issue-kind statuses.
@@ -384,7 +384,7 @@ git commit -m "feat(tea): render issue read output"
 
 **Interfaces:**
 - Consumes: SDK `ListRepoIssues(owner, repo string, sdk.ListIssueOption)` and the canonical `policy.ResolvedRepository`.
-- Produces: one shared `giteaAPI` that serializes all uses of SDK `SetContext` and clears request context after every call.
+- Produces: one shared `giteaAPI` that passes each request context directly to the SDK without mutable client context.
 - Produces: `normalizeIssue(*sdk.Issue, owner, repo string) (*normalizedIssue, error)` and `projectIssue(*normalizedIssue, fields []GiteaIssueField) *GiteaIssueRecord`.
 
 - [ ] **Step 1: Write failing operation and list adapter tests**
@@ -418,7 +418,7 @@ go test ./internal/provider/gitea -run 'TestGiteaOperation|TestIssueList|TestNor
 
 Expected: FAIL because list dispatch, normalization, and SDK calls do not exist.
 
-- [ ] **Step 3: Serialize the expanded SDK seam**
+- [ ] **Step 3: Expand the context-aware SDK seam**
 
 Replace the repository-only getter seam with one adapter-owned API interface:
 
@@ -436,15 +436,14 @@ type giteaAPI interface {
 }
 
 type sdkClient interface {
-    SetContext(context.Context)
-    GetRepo(string, string) (*sdk.Repository, *sdk.Response, error)
-    ListRepoIssues(string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error)
-    GetIssue(string, string, int64) (*sdk.Issue, *sdk.Response, error)
-    ListIssueTimeline(string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error)
+    GetRepo(context.Context, string, string) (*sdk.Repository, *sdk.Response, error)
+    ListRepoIssues(context.Context, string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error)
+    GetIssue(context.Context, string, string, int64) (*sdk.Issue, *sdk.Response, error)
+    ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error)
 }
 ```
 
-Use one `serializedSDKAPI{client, slot}` per `RepositoryAdapter`; each method waits on the same cancellation-aware slot, sets the request context, invokes one SDK method, resets to `context.Background()` in `defer`, and releases the slot. Its custom `GetIssue` returns the trusted numeric `sdk.Response.StatusCode` separately from the redacted error so Task 5 can recognize 404 without inspecting error text or response bodies. Keep `NewRepositoryAdapter(*sdk.Client)` and repository-view behavior compatible.
+Use one `sdkAPI{client}` per `RepositoryAdapter` and pass each operation context directly to the SDK. Its custom `GetIssue` returns the trusted numeric `sdk.Response.StatusCode` separately from the redacted error so Task 5 can recognize 404 without inspecting error text or response bodies. The selected SDK revision must decode current Gitea timeline label events before filtering non-comment entries. Keep `NewRepositoryAdapter(*sdk.Client)` and repository-view behavior compatible.
 
 - [ ] **Step 4: Implement complete normalization before projection**
 

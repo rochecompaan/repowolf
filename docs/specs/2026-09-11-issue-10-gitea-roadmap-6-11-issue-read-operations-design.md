@@ -221,7 +221,7 @@ Accepted audit operations are `gitea.issue_list` and `gitea.issue_view`. Audit r
 
 - Repository-view behavior from issue #9 and all GitHub and Git behavior remain unchanged.
 - `GiteaService` remains conditionally registered only for complete Gitea runtimes; no new adapter registry is introduced.
-- Existing secure authority, token injection, TLS roots, redirect rejection, two-minute deadline, 8 MiB provider-body budget, final Protobuf budget, concurrency, and audit contracts remain unchanged.
+- Existing secure authority, token injection, TLS roots, redirect rejection, two-minute deadline, 8 MiB provider-body budget, final Protobuf budget, concurrency, and audit contracts remain unchanged. The Gitea SDK revision must accept current single-object timeline label events so non-comment entries can be safely filtered after decoding.
 - Repository selectors remain case-insensitive against configured Gitea slugs; provider calls use canonical configured casing.
 - The command surface remains a documented subset of `tea 0.15.1`; unsupported output formats, `--kind`, comment-list commands, inference, login state, and interactivity remain rejected.
 - Protocol and JSON changes are additive within `v1`. No production artifact contains upstream `tea`.

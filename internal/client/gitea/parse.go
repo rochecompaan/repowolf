@@ -300,7 +300,6 @@ func requestFor(owner, name string, operation any) *repowolfv1.GiteaRequest {
 }
 
 func parseIssueFields(value string) ([]repowolfv1.GiteaIssueField, error) {
-	lookup := map[string]repowolfv1.GiteaIssueField{"index": 1, "state": 2, "author": 3, "author-id": 4, "url": 5, "title": 6, "body": 7, "created": 8, "updated": 9, "deadline": 10, "assignees": 11, "milestone": 12, "labels": 13, "comments": 14, "repo": 15, "owner": 16, "kind": 17}
 	parts := strings.Split(value, ",")
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("invalid fields")
@@ -308,7 +307,7 @@ func parseIssueFields(value string) ([]repowolfv1.GiteaIssueField, error) {
 	out := make([]repowolfv1.GiteaIssueField, 0, len(parts))
 	seen := map[repowolfv1.GiteaIssueField]bool{}
 	for _, part := range parts {
-		field, ok := lookup[part]
+		field, ok := issueFieldByName[part]
 		if !ok || seen[field] {
 			return nil, fmt.Errorf("invalid fields")
 		}
