@@ -91,6 +91,19 @@ func newRestrictedGiteaFixture(t *testing.T, address, subnet string) *restricted
 	return &restrictedGiteaFixture{work: work, address: address, baseURL: baseURL, container: container, certificate: certificate, client: client, token: tokenResponse.SHA1}
 }
 
+func (fixture *restrictedGiteaFixture) requestCount(t *testing.T, method, requestPath string) int {
+	t.Helper()
+	logs := dockerOutput(t, "logs", fixture.container)
+	needle := method + " " + requestPath
+	count := 0
+	for _, line := range strings.Split(logs, "\n") {
+		if strings.Contains(line, needle) {
+			count++
+		}
+	}
+	return count
+}
+
 func (fixture *restrictedGiteaFixture) startBroker(t *testing.T) restrictedGiteaBroker {
 	t.Helper()
 	agentToken, err := auth.Generate(rand.Reader)

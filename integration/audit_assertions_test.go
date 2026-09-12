@@ -22,6 +22,7 @@ type auditExpectation struct {
 	required, optional                                          []string
 	refs                                                        []string
 	updateCount                                                 int
+	transitioned                                                *bool
 	inputPositive, outputPositive                               bool
 }
 
@@ -29,7 +30,7 @@ var auditFields = map[string]bool{
 	"timestamp": true, "request_id": true, "principal": true, "provider": true,
 	"repository": true, "operation": true, "outcome": true, "reason": true,
 	"duration_ms": true, "input_bytes": true, "output_bytes": true,
-	"refs": true, "update_count": true,
+	"refs": true, "update_count": true, "transitioned": true,
 }
 
 func parseAuditRecords(contents []byte, forbidden []string) ([]auditRecord, error) {
@@ -114,7 +115,7 @@ func assertAuditInvocations(t *testing.T, contents string, expected [][]auditExp
 			got := auditExpectation{
 				operation: record.event.Operation, outcome: string(record.event.Outcome), principal: record.event.Principal,
 				provider: record.event.Provider, repository: record.event.Repository, reason: record.event.Reason,
-				refs: record.event.Refs, updateCount: record.event.UpdateCount,
+				refs: record.event.Refs, updateCount: record.event.UpdateCount, transitioned: record.event.Transitioned,
 				inputPositive: record.event.InputBytes > 0, outputPositive: record.event.OutputBytes > 0,
 			}
 			comparison := want

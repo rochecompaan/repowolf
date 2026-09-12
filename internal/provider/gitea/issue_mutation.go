@@ -2,6 +2,11 @@ package gitea
 
 import (
 	"context"
+	"fmt"
+	"net/url"
+	"path"
+	"strconv"
+	"strings"
 
 	sdk "gitea.dev/sdk"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
@@ -51,6 +56,26 @@ func (a *RepositoryAdapter) issuePreflight(ctx context.Context, repository polic
 	return normalized, nil
 }
 
+func commentURLMatches(rawURL, owner, repo string, index int64, apiURL bool) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.RawQuery != "" {
+		return false
+	}
+	want := path.Join(owner, repo, "issues", strconv.FormatInt(index, 10))
+	got := strings.TrimPrefix(path.Clean(parsed.EscapedPath()), "/")
+	if !apiURL {
+		return got == want
+	}
+	return got == want || got == path.Join("api", "v1", "repos", want)
+}
+
+func normalizeIssueMutationComment(comment *sdk.Comment, owner, repo string, index int64) (*repowolfv1.GiteaCommentRecord, error) {
+	if comment == nil || comment.PRURL != "" || comment.IssueURL != "" && !commentURLMatches(comment.IssueURL, owner, repo, index, true) || !commentURLMatches(comment.HTMLURL, owner, repo, index, false) {
+		return nil, fmt.Errorf("invalid issue comment association")
+	}
+	return normalizeComment(comment)
+}
+
 func (a *RepositoryAdapter) issueComment(ctx context.Context, repository policy.ResolvedRepository, request *repowolfv1.GiteaIssueCommentRequest) (*repowolfv1.GiteaResponse, error) {
 	if _, err := a.issuePreflight(ctx, repository, request.Index); err != nil {
 		return nil, err
@@ -64,7 +89,7 @@ func (a *RepositoryAdapter) issueComment(ctx context.Context, repository policy.
 	_, err = invokeWrite(ctx, func() (*sdk.Comment, error) {
 		return api.CreateIssueComment(ctx, owner, name, request.Index, sdk.CreateIssueCommentOption{Body: request.Body})
 	}, func(comment *sdk.Comment) error {
-		record, e := normalizeComment(comment)
+		record, e := normalizeIssueMutationComment(comment, owner, name, request.Index)
 		if e != nil {
 			return e
 		}

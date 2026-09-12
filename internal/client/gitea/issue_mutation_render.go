@@ -44,7 +44,7 @@ func renderIssueMutation(format outputFormat, issue *repowolfv1.GiteaIssueRecord
 	if format != outputSimple {
 		return nil, fmt.Errorf("invalid output")
 	}
-	return []byte(fmt.Sprintf("index: %d\ntitle: %s\nstate: %s\nurl: %s\n", value.Index, value.Title, value.State, value.URL)), nil
+	return []byte(fmt.Sprintf("index: %d\ntitle: %s\nstate: %s\nurl: %s\n", value.Index, cell(value.Title), value.State, cell(value.URL))), nil
 }
 
 func renderCommentMutation(format outputFormat, comment *repowolfv1.GiteaCommentRecord) ([]byte, error) {
@@ -66,6 +66,6 @@ func renderCommentMutation(format outputFormat, comment *repowolfv1.GiteaComment
 		return nil, fmt.Errorf("invalid output")
 	}
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "id: %d\nurl: %s\nbody: %s\n", value.ID, value.URL, value.Body)
+	fmt.Fprintf(&b, "id: %d\nurl: %s\nbody: %s\n", value.ID, cell(value.URL), value.Body)
 	return b.Bytes(), nil
 }

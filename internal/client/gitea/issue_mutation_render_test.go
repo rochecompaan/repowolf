@@ -35,6 +35,28 @@ func TestRenderCommentMutation(t *testing.T) {
 		t.Fatalf("out=%q err=%v", out, err)
 	}
 }
+func TestMutationSimpleOutputSanitizesProviderControlledFields(t *testing.T) {
+	issue := issueFixture()
+	issue.Title = "safe\n\x1b[31munsafe"
+	issue.Url = "https://g.example/issues/7\rspoofed"
+	out, err := renderIssueMutation(outputSimple, issue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsAny(string(out), "\r\x1b") || strings.Contains(string(out), "title: safe\n") {
+		t.Fatalf("unsafe issue output %q", out)
+	}
+
+	comment := &repowolfv1.GiteaCommentRecord{Id: 9, AuthorId: 2, Author: "alice", Url: "https://g/c/9\nspoofed", Body: "literal\nbody", Created: timestamppb.New(time.Unix(1, 0)), Updated: timestamppb.New(time.Unix(2, 0))}
+	out, err = renderCommentMutation(outputSimple, comment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "url: https://g/c/9\n") || !strings.Contains(string(out), "body: literal\nbody\n") {
+		t.Fatalf("unexpected comment output %q", out)
+	}
+}
+
 func TestMutationRenderRejectsIncompleteRecord(t *testing.T) {
 	issue := issueFixture()
 	issue.Title = ""

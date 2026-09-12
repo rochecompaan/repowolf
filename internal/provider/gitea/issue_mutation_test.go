@@ -14,8 +14,10 @@ import (
 type mutationWriteAPI struct {
 	fakeIssueAPI
 	comment                 *sdk.Comment
+	commentErr              error
 	commentCalls, editCalls int
 	editResult              *sdk.Issue
+	editErr                 error
 	editOption              sdk.EditIssueOption
 }
 
@@ -27,16 +29,16 @@ func (f *mutationWriteAPI) CreateIssue(context.Context, string, string, sdk.Crea
 }
 func (f *mutationWriteAPI) CreateIssueComment(_ context.Context, _, _ string, _ int64, _ sdk.CreateIssueCommentOption) (*sdk.Comment, error) {
 	f.commentCalls++
-	return f.comment, nil
+	return f.comment, f.commentErr
 }
 func (f *mutationWriteAPI) EditIssue(_ context.Context, _, _ string, _ int64, o sdk.EditIssueOption) (*sdk.Issue, error) {
 	f.editCalls++
 	f.editOption = o
-	return f.editResult, nil
+	return f.editResult, f.editErr
 }
 func mutationComment() *sdk.Comment {
 	now := time.Unix(1, 0)
-	return &sdk.Comment{ID: 9, Poster: &sdk.User{ID: 2, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7#issuecomment-9", Body: "body", Created: now, Updated: now.Add(time.Second)}
+	return &sdk.Comment{ID: 9, Poster: &sdk.User{ID: 2, UserName: "alice"}, HTMLURL: "https://g/Owner/Repo/issues/7#issuecomment-9", IssueURL: "https://g/api/v1/repos/Owner/Repo/issues/7", Body: "body", Created: now, Updated: now.Add(time.Second)}
 }
 
 func TestIssueCommentUsesKindPreflightAndOneWrite(t *testing.T) {
@@ -50,6 +52,31 @@ func TestIssueCommentUsesKindPreflightAndOneWrite(t *testing.T) {
 		t.Fatalf("calls=%d/%d response=%#v", api.getCalls, api.commentCalls, response)
 	}
 }
+func TestIssueCommentRejectsWrongAssociationAsUnknown(t *testing.T) {
+	for _, mutate := range []struct {
+		name string
+		fn   func(*sdk.Comment)
+	}{
+		{"wrong repository", func(comment *sdk.Comment) {
+			comment.IssueURL = "https://g/api/v1/repos/Other/Repo/issues/7"
+			comment.HTMLURL = "https://g/Other/Repo/issues/7#issuecomment-9"
+		}},
+		{"wrong index", func(comment *sdk.Comment) { comment.HTMLURL = "https://g/Owner/Repo/issues/8#issuecomment-9" }},
+		{"pull request", func(comment *sdk.Comment) { comment.PRURL = "https://g/api/v1/repos/Owner/Repo/pulls/7" }},
+	} {
+		t.Run(mutate.name, func(t *testing.T) {
+			comment := mutationComment()
+			mutate.fn(comment)
+			api := &mutationWriteAPI{fakeIssueAPI: fakeIssueAPI{issue: sdkIssue()}, comment: comment}
+			adapter, _ := newRepositoryAdapter(api)
+			_, err := adapter.issueComment(context.Background(), issueResolved(), &repowolfv1.GiteaIssueCommentRequest{Index: 7, Body: "body"})
+			if !errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) || api.commentCalls != 1 {
+				t.Fatalf("err=%v calls=%d", err, api.commentCalls)
+			}
+		})
+	}
+}
+
 func TestIssueKindPreflightPreventsWrite(t *testing.T) {
 	issue := sdkIssue()
 	issue.PullRequest = &sdk.PullRequestMeta{}
