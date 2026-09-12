@@ -25,6 +25,13 @@ type giteaAPI interface {
 	ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) (issueCommentPage, error)
 }
 
+type giteaWriteAPI interface {
+	ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, error)
+	CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, error)
+	CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, error)
+	EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, error)
+}
+
 type repositorySDKClient interface {
 	GetRepo(context.Context, string, string) (*sdk.Repository, *sdk.Response, error)
 }
@@ -57,6 +64,47 @@ func (a *sdkAPI) GetIssue(ctx context.Context, owner, repo string, index int64) 
 		status = response.StatusCode
 	}
 	return value, status, err
+}
+
+func (a *sdkAPI) ListRepoLabels(ctx context.Context, owner, repo string, options sdk.ListLabelsOptions) ([]*sdk.Label, error) {
+	client, ok := a.repositories.(interface {
+		ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, *sdk.Response, error)
+	})
+	if !ok {
+		return nil, rpcstatus.ErrServiceUnavailable
+	}
+	values, _, err := client.ListRepoLabels(ctx, owner, repo, options)
+	return values, err
+}
+func (a *sdkAPI) CreateIssue(ctx context.Context, owner, repo string, options sdk.CreateIssueOption) (*sdk.Issue, error) {
+	client, ok := a.issues.(interface {
+		CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, *sdk.Response, error)
+	})
+	if !ok {
+		return nil, rpcstatus.ErrServiceUnavailable
+	}
+	value, _, err := client.CreateIssue(ctx, owner, repo, options)
+	return value, err
+}
+func (a *sdkAPI) CreateIssueComment(ctx context.Context, owner, repo string, index int64, options sdk.CreateIssueCommentOption) (*sdk.Comment, error) {
+	client, ok := a.issues.(interface {
+		CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, *sdk.Response, error)
+	})
+	if !ok {
+		return nil, rpcstatus.ErrServiceUnavailable
+	}
+	value, _, err := client.CreateIssueComment(ctx, owner, repo, index, options)
+	return value, err
+}
+func (a *sdkAPI) EditIssue(ctx context.Context, owner, repo string, index int64, options sdk.EditIssueOption) (*sdk.Issue, error) {
+	client, ok := a.issues.(interface {
+		EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, *sdk.Response, error)
+	})
+	if !ok {
+		return nil, rpcstatus.ErrServiceUnavailable
+	}
+	value, _, err := client.EditIssue(ctx, owner, repo, index, options)
+	return value, err
 }
 
 func (a *sdkAPI) ListIssueTimeline(ctx context.Context, owner, repo string, index int64, options sdk.ListIssueCommentOptions) (issueCommentPage, error) {
@@ -114,6 +162,14 @@ func (a *RepositoryAdapter) Execute(ctx context.Context, repo policy.ResolvedRep
 		return a.issueList(ctx, repo, request.GetIssueList())
 	case request.GetIssueView() != nil:
 		return a.issueView(ctx, repo, request.GetIssueView())
+	case request.GetIssueCreate() != nil:
+		return a.issueCreate(ctx, repo, request.GetIssueCreate())
+	case request.GetIssueComment() != nil:
+		return a.issueComment(ctx, repo, request.GetIssueComment())
+	case request.GetIssueClose() != nil:
+		return a.issueState(ctx, repo, request.GetIssueClose().Index, sdk.StateClosed, true)
+	case request.GetIssueReopen() != nil:
+		return a.issueState(ctx, repo, request.GetIssueReopen().Index, sdk.StateOpen, false)
 	}
 	return nil, ErrInvalidRequest
 }
