@@ -55,6 +55,14 @@ func render(parsed command, response *repowolfv1.GiteaResponse) ([]byte, error) 
 		output, err = renderIssueList(parsed, response.GetIssueList())
 	case parsed.request.GetIssueView() != nil && response.GetIssueView() != nil:
 		output, err = renderIssueView(parsed, response.GetIssueView())
+	case parsed.request.GetIssueCreate() != nil && response.GetIssueCreate() != nil:
+		output, err = renderIssueMutation(parsed.format, response.GetIssueCreate().GetIssue())
+	case parsed.request.GetIssueComment() != nil && response.GetIssueComment() != nil:
+		output, err = renderCommentMutation(parsed.format, response.GetIssueComment().GetComment())
+	case parsed.request.GetIssueClose() != nil && response.GetIssueClose() != nil:
+		output, err = renderIssueMutation(parsed.format, response.GetIssueClose().GetIssue())
+	case parsed.request.GetIssueReopen() != nil && response.GetIssueReopen() != nil:
+		output, err = renderIssueMutation(parsed.format, response.GetIssueReopen().GetIssue())
 	default:
 		return nil, fmt.Errorf("invalid response branch")
 	}
