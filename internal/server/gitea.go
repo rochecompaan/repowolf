@@ -47,7 +47,12 @@ func (service *giteaService) Execute(ctx context.Context, request *repowolfv1.Gi
 	if err != nil {
 		return nil, err
 	}
-	response, err := service.executor.Execute(ctx, repository, request)
+	executionContext, mutationMetadata := providergitea.WithMutationMetadata(ctx)
+	response, err := service.executor.Execute(executionContext, repository, request)
+	if metadata := providerMetadataFrom(ctx); metadata != nil && mutationMetadata.Transitioned != nil {
+		value := *mutationMetadata.Transitioned
+		metadata.transitioned = &value
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -3,11 +3,12 @@ package server
 import "context"
 
 type providerMetadata struct {
-	operation   string
-	provider    string
-	repository  string
-	inputBytes  int64
-	outputBytes int64
+	operation    string
+	provider     string
+	repository   string
+	inputBytes   int64
+	outputBytes  int64
+	transitioned *bool
 }
 type providerMetadataKey struct{}
 
