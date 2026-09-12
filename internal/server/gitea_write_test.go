@@ -37,6 +37,19 @@ func TestGiteaWriteAuditTransitionMetadata(t *testing.T) {
 		t.Fatalf("events=%#v", sink.events)
 	}
 }
+func TestGiteaCompletedWriteAuditSurvivesDeliveryLimit(t *testing.T) {
+	ctx := withProviderMetadata(context.Background(), "gitea.issue_create", 1)
+	providerMetadataFrom(ctx).providerCompleted = true
+	sink := &eventSink{}
+	service := &Server{audit: sink}
+	if err := service.writeTerminal(ctx, "ignored", time.Now(), rpcstatus.ErrResourceExhausted); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.events) != 1 || sink.events[0].Outcome != audit.OutcomeCompleted {
+		t.Fatalf("events=%#v", sink.events)
+	}
+}
+
 func TestAuditUnknownCanonicalStatus(t *testing.T) {
 	mapped := rpcstatus.Error(rpcstatus.ErrWriteOutcomeUnknown)
 	if status.Code(mapped) != codes.Unavailable || !rpcstatus.IsGiteaWriteOutcomeUnknown(mapped) {

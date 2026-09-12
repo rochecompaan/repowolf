@@ -8,6 +8,7 @@ import (
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/policy"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
+	"google.golang.org/protobuf/proto"
 )
 
 func (a *RepositoryAdapter) writeAPI() (giteaWriteAPI, error) {
@@ -87,21 +88,23 @@ func (a *RepositoryAdapter) issueCreate(ctx context.Context, repository policy.R
 		return nil, err
 	}
 	option := sdk.CreateIssueOption{Title: request.Title, Body: request.GetDescription(), Assignees: append([]string(nil), request.Assignees...), Labels: append([]int64(nil), labels...)}
-	var normalized *normalizedIssue
-	issue, err := invokeWrite(ctx, func() (*sdk.Issue, error) { return api.CreateIssue(ctx, owner, name, option) }, func(issue *sdk.Issue) error {
-		var e error
-		normalized, e = normalizeIssue(issue, owner, name)
+	var response *repowolfv1.GiteaResponse
+	_, err = invokeWrite(ctx, func() (*sdk.Issue, error) { return api.CreateIssue(ctx, owner, name, option) }, func(issue *sdk.Issue) error {
+		normalized, e := normalizeIssue(issue, owner, name)
 		if e != nil {
 			return e
 		}
+		response = &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueCreate{IssueCreate: &repowolfv1.GiteaIssueCreateResult{Issue: projectIssue(normalized, allIssueFields)}}}
+		if proto.Size(response) > 8<<20 {
+			return rpcstatus.ErrResourceExhausted
+		}
 		return nil
 	})
-	_ = issue
 	if err != nil {
 		return nil, err
 	}
-	if normalized == nil {
+	if response == nil {
 		return nil, fmt.Errorf("unreachable")
 	}
-	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueCreate{IssueCreate: &repowolfv1.GiteaIssueCreateResult{Issue: projectIssue(normalized, allIssueFields)}}}, nil
+	return response, nil
 }

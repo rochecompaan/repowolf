@@ -7,6 +7,7 @@ import (
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/policy"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
+	"google.golang.org/protobuf/proto"
 )
 
 type mutationMetadataKey struct{}
@@ -59,14 +60,31 @@ func (a *RepositoryAdapter) issueComment(ctx context.Context, repository policy.
 		return nil, err
 	}
 	owner, name := repository.Repository.Owner, repository.Repository.Name
-	var record *repowolfv1.GiteaCommentRecord
+	var response *repowolfv1.GiteaResponse
 	_, err = invokeWrite(ctx, func() (*sdk.Comment, error) {
 		return api.CreateIssueComment(ctx, owner, name, request.Index, sdk.CreateIssueCommentOption{Body: request.Body})
-	}, func(comment *sdk.Comment) error { var e error; record, e = normalizeComment(comment); return e })
+	}, func(comment *sdk.Comment) error {
+		record, e := normalizeComment(comment)
+		if e != nil {
+			return e
+		}
+		response = &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueComment{IssueComment: &repowolfv1.GiteaIssueCommentResult{Comment: record}}}
+		if proto.Size(response) > 8<<20 {
+			return rpcstatus.ErrResourceExhausted
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueComment{IssueComment: &repowolfv1.GiteaIssueCommentResult{Comment: record}}}, nil
+	return response, nil
+}
+
+func issueStateResponse(closing bool, record *repowolfv1.GiteaIssueRecord) *repowolfv1.GiteaResponse {
+	if closing {
+		return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueClose{IssueClose: &repowolfv1.GiteaIssueCloseResult{Issue: record}}}
+	}
+	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueReopen{IssueReopen: &repowolfv1.GiteaIssueReopenResult{Issue: record}}}
 }
 
 func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.ResolvedRepository, index int64, target sdk.StateType, closing bool) (*repowolfv1.GiteaResponse, error) {
@@ -78,9 +96,12 @@ func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.Re
 	if target == sdk.StateClosed {
 		targetState = repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_CLOSED
 	}
-	var record *repowolfv1.GiteaIssueRecord
+	var response *repowolfv1.GiteaResponse
 	if current.state == targetState {
-		record = projectIssue(current, allIssueFields)
+		response = issueStateResponse(closing, projectIssue(current, allIssueFields))
+		if proto.Size(response) > 8<<20 {
+			return nil, rpcstatus.ErrProviderFailure
+		}
 		recordTransition(ctx, false)
 	} else {
 		api, e := a.writeAPI()
@@ -95,7 +116,10 @@ func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.Re
 			if e != nil || normalized.index != index || normalized.state != targetState {
 				return rpcstatus.ErrProviderFailure
 			}
-			record = projectIssue(normalized, allIssueFields)
+			response = issueStateResponse(closing, projectIssue(normalized, allIssueFields))
+			if proto.Size(response) > 8<<20 {
+				return rpcstatus.ErrResourceExhausted
+			}
 			return nil
 		})
 		if err != nil {
@@ -103,8 +127,5 @@ func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.Re
 		}
 		recordTransition(ctx, true)
 	}
-	if closing {
-		return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueClose{IssueClose: &repowolfv1.GiteaIssueCloseResult{Issue: record}}}, nil
-	}
-	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueReopen{IssueReopen: &repowolfv1.GiteaIssueReopenResult{Issue: record}}}, nil
+	return response, nil
 }

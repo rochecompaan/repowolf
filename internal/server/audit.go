@@ -66,6 +66,9 @@ func (service *Server) writeTerminal(ctx context.Context, operation string, star
 		DurationMS: time.Since(started).Milliseconds(),
 	}
 	if metadata := providerMetadataFrom(ctx); metadata != nil {
+		if metadata.providerCompleted {
+			event.Outcome = audit.OutcomeCompleted
+		}
 		event.Operation = metadata.operation
 		event.Provider = metadata.provider
 		event.Repository = metadata.repository
