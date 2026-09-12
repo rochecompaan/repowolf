@@ -184,10 +184,10 @@ func TestAuthenticatedAdmissionAndPrincipalCapacityRejectionsWriteSafeTerminalAu
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := stream.SendMsg(&wrapperspb.BytesValue{Value: []byte("secret rejected payload")}); err != nil {
-					t.Fatal(err)
+				callErr = stream.SendMsg(&wrapperspb.BytesValue{Value: []byte("secret rejected payload")})
+				if callErr == nil || errors.Is(callErr, io.EOF) {
+					callErr = stream.RecvMsg(&wrapperspb.BytesValue{})
 				}
-				callErr = stream.RecvMsg(&wrapperspb.BytesValue{})
 			} else {
 				callErr = connection.Invoke(authenticated, echoMethod, &wrapperspb.BytesValue{Value: []byte("secret rejected payload")}, &wrapperspb.BytesValue{})
 			}
