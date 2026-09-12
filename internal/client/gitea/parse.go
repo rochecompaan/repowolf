@@ -38,9 +38,10 @@ var defaultIssueFields = []repowolfv1.GiteaIssueField{
 }
 
 type command struct {
-	request *repowolfv1.GiteaRequest
-	format  outputFormat
-	fields  []repowolfv1.GiteaIssueField
+	request  *repowolfv1.GiteaRequest
+	format   outputFormat
+	fields   []repowolfv1.GiteaIssueField
+	mutation bool
 }
 
 // Parse converts one bounded supported native tea argv into a typed request.
@@ -53,6 +54,8 @@ func Parse(args []string) (command, error) {
 		return parseRepository(args)
 	case "issues", "issue", "i":
 		return parseIssues(args)
+	case "comments", "comment", "c":
+		return parseIssueComment(args)
 	default:
 		return command{}, fmt.Errorf("unsupported command")
 	}
@@ -125,6 +128,16 @@ func parseRepository(args []string) (command, error) {
 }
 
 func parseIssues(args []string) (command, error) {
+	if len(args) > 1 {
+		switch args[1] {
+		case "create", "c":
+			return parseIssueCreate(args[2:])
+		case "close":
+			return parseIssueState(args[2:], false)
+		case "reopen", "open":
+			return parseIssueState(args[2:], true)
+		}
+	}
 	start := 1
 	if len(args) > 1 && (args[1] == "list" || args[1] == "ls") {
 		start = 2
@@ -286,6 +299,194 @@ func parseIssueView(args []string, index int64) (command, error) {
 	return command{request: requestFor(owner, name, &repowolfv1.GiteaRequest_IssueView{IssueView: req}), format: format}, nil
 }
 
+func parseIssueCreate(args []string) (command, error) {
+	req := &repowolfv1.GiteaIssueCreateRequest{}
+	format := outputSimple
+	seen := map[string]bool{}
+	var repo string
+	aliases := map[string]string{"-r": "repo", "--repo": "repo", "-o": "output", "--output": "output", "-t": "title", "--title": "title", "-d": "description", "--description": "description", "-a": "assignees", "--assignees": "assignees", "-L": "labels", "--labels": "labels"}
+	for i := 0; i < len(args); i += 2 {
+		if i+1 >= len(args) || strings.Contains(args[i], "=") {
+			return command{}, fmt.Errorf("invalid flag")
+		}
+		key, ok := aliases[args[i]]
+		if !ok || seen[key] {
+			return command{}, fmt.Errorf("unsupported or duplicate flag")
+		}
+		seen[key] = true
+		value := args[i+1]
+		switch key {
+		case "repo":
+			repo = value
+		case "output":
+			var err error
+			format, err = parseOutput(value, outputSimple)
+			if err != nil {
+				return command{}, err
+			}
+		case "title":
+			if validateMutationText(value, false, 0, 255) != nil {
+				return command{}, fmt.Errorf("invalid title")
+			}
+			req.Title = value
+		case "description":
+			if validateMutationText(value, true, 64<<10, 0) != nil {
+				return command{}, fmt.Errorf("invalid description")
+			}
+			v := value
+			req.Description = &v
+		case "assignees":
+			values, err := parseUniqueCSV(value)
+			if err != nil {
+				return command{}, err
+			}
+			req.Assignees = values
+		case "labels":
+			values, err := parseUniqueCSV(value)
+			if err != nil {
+				return command{}, err
+			}
+			req.Labels = values
+		}
+	}
+	if !seen["repo"] || !seen["title"] {
+		return command{}, fmt.Errorf("missing required flag")
+	}
+	owner, name, ok := parseSlug(repo)
+	if !ok {
+		return command{}, fmt.Errorf("invalid repository")
+	}
+	return command{request: requestFor(owner, name, &repowolfv1.GiteaRequest_IssueCreate{IssueCreate: req}), format: format, mutation: true}, nil
+}
+
+func parseIssueComment(args []string) (command, error) {
+	if len(args) == 0 {
+		return command{}, fmt.Errorf("missing issue index")
+	}
+	start := 1
+	if args[0] == "comments" && len(args) > 1 && (args[1] == "add" || args[1] == "a") {
+		start = 2
+	}
+	if len(args) <= start {
+		return command{}, fmt.Errorf("missing issue index")
+	}
+	index, err := parsePositive(args[start], int64(^uint64(0)>>1))
+	if err != nil {
+		return command{}, fmt.Errorf("invalid issue index")
+	}
+	format := outputSimple
+	seen := map[string]bool{}
+	var repo, body string
+	bodySet := false
+	for i := start + 1; i < len(args); {
+		if !strings.HasPrefix(args[i], "-") {
+			if bodySet {
+				return command{}, fmt.Errorf("extra positional")
+			}
+			body, bodySet = args[i], true
+			i++
+			continue
+		}
+		if strings.Contains(args[i], "=") || i+1 >= len(args) {
+			return command{}, fmt.Errorf("invalid flag")
+		}
+		key := map[string]string{"-r": "repo", "--repo": "repo", "-o": "output", "--output": "output", "-d": "description", "--description": "description"}[args[i]]
+		if key == "" || seen[key] {
+			return command{}, fmt.Errorf("unsupported or duplicate flag")
+		}
+		seen[key] = true
+		value := args[i+1]
+		switch key {
+		case "repo":
+			repo = value
+		case "output":
+			format, err = parseOutput(value, outputSimple)
+			if err != nil {
+				return command{}, err
+			}
+		case "description":
+			if bodySet {
+				return command{}, fmt.Errorf("duplicate body")
+			}
+			body, bodySet = value, true
+		}
+		i += 2
+	}
+	if !seen["repo"] || !bodySet || validateMutationText(body, false, 64<<10, 0) != nil {
+		return command{}, fmt.Errorf("missing or invalid comment body")
+	}
+	owner, name, ok := parseSlug(repo)
+	if !ok {
+		return command{}, fmt.Errorf("invalid repository")
+	}
+	req := &repowolfv1.GiteaIssueCommentRequest{Index: index, Body: body}
+	return command{request: requestFor(owner, name, &repowolfv1.GiteaRequest_IssueComment{IssueComment: req}), format: format, mutation: true}, nil
+}
+
+func parseIssueState(args []string, reopen bool) (command, error) {
+	if len(args) == 0 {
+		return command{}, fmt.Errorf("missing issue index")
+	}
+	index, err := parsePositive(args[0], int64(^uint64(0)>>1))
+	if err != nil {
+		return command{}, fmt.Errorf("invalid issue index")
+	}
+	format := outputSimple
+	seen := map[string]bool{}
+	var repo string
+	for i := 1; i < len(args); i += 2 {
+		if i+1 >= len(args) || strings.Contains(args[i], "=") {
+			return command{}, fmt.Errorf("invalid flag")
+		}
+		key := map[string]string{"-r": "repo", "--repo": "repo", "-o": "output", "--output": "output"}[args[i]]
+		if key == "" || seen[key] {
+			return command{}, fmt.Errorf("unsupported or duplicate flag")
+		}
+		seen[key] = true
+		if key == "repo" {
+			repo = args[i+1]
+		} else {
+			format, err = parseOutput(args[i+1], outputSimple)
+			if err != nil {
+				return command{}, err
+			}
+		}
+	}
+	if !seen["repo"] {
+		return command{}, fmt.Errorf("missing repository")
+	}
+	owner, name, ok := parseSlug(repo)
+	if !ok {
+		return command{}, fmt.Errorf("invalid repository")
+	}
+	var op any = &repowolfv1.GiteaRequest_IssueClose{IssueClose: &repowolfv1.GiteaIssueCloseRequest{Index: index}}
+	if reopen {
+		op = &repowolfv1.GiteaRequest_IssueReopen{IssueReopen: &repowolfv1.GiteaIssueReopenRequest{Index: index}}
+	}
+	return command{request: requestFor(owner, name, op), format: format, mutation: true}, nil
+}
+
+func parseUniqueCSV(value string) ([]string, error) {
+	parts := strings.Split(value, ",")
+	if len(parts) > 25 {
+		return nil, fmt.Errorf("too many values")
+	}
+	seen := map[string]bool{}
+	for _, part := range parts {
+		if validateMutationText(part, false, 0, 255) != nil || seen[part] {
+			return nil, fmt.Errorf("invalid list")
+		}
+		seen[part] = true
+	}
+	return parts, nil
+}
+func validateMutationText(value string, allowEmpty bool, maximumBytes, maximumRunes int) error {
+	if !allowEmpty && value == "" || !utf8.ValidString(value) || strings.ContainsRune(value, 0) || maximumBytes > 0 && len(value) > maximumBytes || maximumRunes > 0 && utf8.RuneCountInString(value) > maximumRunes {
+		return fmt.Errorf("invalid text")
+	}
+	return nil
+}
+
 func requestFor(owner, name string, operation any) *repowolfv1.GiteaRequest {
 	r := &repowolfv1.GiteaRequest{Context: &repowolfv1.RequestContext{Repository: &repowolfv1.RepositorySelector{Owner: owner, Name: name}}}
 	switch value := operation.(type) {
@@ -294,6 +495,14 @@ func requestFor(owner, name string, operation any) *repowolfv1.GiteaRequest {
 	case *repowolfv1.GiteaRequest_IssueList:
 		r.Operation = value
 	case *repowolfv1.GiteaRequest_IssueView:
+		r.Operation = value
+	case *repowolfv1.GiteaRequest_IssueCreate:
+		r.Operation = value
+	case *repowolfv1.GiteaRequest_IssueComment:
+		r.Operation = value
+	case *repowolfv1.GiteaRequest_IssueClose:
+		r.Operation = value
+	case *repowolfv1.GiteaRequest_IssueReopen:
 		r.Operation = value
 	}
 	return r

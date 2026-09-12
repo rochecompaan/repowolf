@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	providergitea "github.com/rochecompaan/repowolf/internal/provider/gitea"
 )
 
 func FuzzParse(f *testing.F) {
@@ -14,6 +15,10 @@ func FuzzParse(f *testing.F) {
 		"issues\x00--repo\x00o/r",
 		"issues\x00list\x00--repo\x00o/r\x00--fields\x00title,index\x00--limit\x0050",
 		"issue\x007\x00--repo\x00o/r\x00--comments",
+		"issues\x00create\x00-r\x00o/r\x00-t\x00title\x00-d\x00body\x00-a\x00alice,bob\x00-L\x00bug",
+		"comments\x00add\x007\x00body\x00-r\x00o/r",
+		"issues\x00close\x007\x00-r\x00o/r",
+		"issues\x00reopen\x007\x00-r\x00o/r",
 		"login",
 	} {
 		f.Add(seed)
@@ -26,6 +31,9 @@ func FuzzParse(f *testing.F) {
 		parsed, err := Parse(args)
 		if err != nil {
 			return
+		}
+		if err := providergitea.ValidateRequest(parsed.request); err != nil {
+			t.Fatalf("successful parse failed provider validation: %v", err)
 		}
 		selector := parsed.request.GetContext().GetRepository()
 		if selector == nil || selector.Host != "" || selector.SshPort != 0 || parsed.format > outputJSON {
@@ -44,6 +52,10 @@ func FuzzParse(f *testing.F) {
 		case parsed.request.GetIssueView() != nil:
 			if parsed.request.GetIssueView().GetIndex() <= 0 || len(parsed.fields) != 0 {
 				t.Fatalf("invalid successful issue view: %#v", parsed)
+			}
+		case parsed.request.GetIssueCreate() != nil, parsed.request.GetIssueComment() != nil, parsed.request.GetIssueClose() != nil, parsed.request.GetIssueReopen() != nil:
+			if !parsed.mutation || len(parsed.fields) != 0 {
+				t.Fatalf("invalid successful mutation: %#v", parsed)
 			}
 		default:
 			t.Fatalf("unexpected successful operation: %#v", parsed)
