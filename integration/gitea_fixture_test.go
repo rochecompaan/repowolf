@@ -4,8 +4,14 @@ package integration_test
 
 import (
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,19 +25,23 @@ import (
 const giteaImage = "docker.gitea.com/gitea:1.27.2@sha256:d20286ca2b2e170fdf628e7231b8a31a3220ade39ff462b55041d43d1fc757dd"
 
 type restrictedGiteaFixture struct {
-	work        string
-	address     string
-	baseURL     string
-	container   string
-	certificate testutil.Certificate
-	client      *http.Client
-	token       string
+	work         string
+	network      string
+	address      string
+	proxyAddress string
+	baseURL      string
+	container    string
+	certificate  testutil.Certificate
+	client       *http.Client
+	token        string
+	binaries     testutil.Binaries
 }
 
 type restrictedGiteaBroker struct {
 	binaries    testutil.Binaries
 	server      *testutil.Server
 	environment []string
+	agentToken  string
 }
 
 func newRestrictedGiteaFixture(t *testing.T, address, subnet string) *restrictedGiteaFixture {
@@ -43,7 +53,8 @@ func newRestrictedGiteaFixture(t *testing.T, address, subnet string) *restricted
 	network := "repowolf-gitea-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
 	dockerOutput(t, "network", "create", "--subnet", subnet, network)
 	t.Cleanup(func() { _ = exec.Command("docker", "network", "rm", network).Run() })
-	certificate := testutil.GenerateCertificateForIPs(t, filepath.Join(work, "gitea-cert"), []net.IP{net.ParseIP(address)})
+	proxyAddress := nextIPv4Address(t, address)
+	certificate := testutil.GenerateCertificateForIPs(t, filepath.Join(work, "gitea-cert"), []net.IP{net.ParseIP(address), net.ParseIP(proxyAddress)})
 	if err := os.Chmod(filepath.Dir(certificate.CertificateFile), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +99,17 @@ func newRestrictedGiteaFixture(t *testing.T, address, subnet string) *restricted
 	giteaJSON(t, client, http.MethodPost, baseURL+"/api/v1/user/repos", tokenResponse.SHA1, map[string]any{
 		"name": "CanonicalRepo", "description": "repository view integration", "private": true, "auto_init": true, "default_branch": "main",
 	}, nil, "", "")
-	return &restrictedGiteaFixture{work: work, address: address, baseURL: baseURL, container: container, certificate: certificate, client: client, token: tokenResponse.SHA1}
+	return &restrictedGiteaFixture{work: work, network: network, address: address, proxyAddress: proxyAddress, baseURL: baseURL, container: container, certificate: certificate, client: client, token: tokenResponse.SHA1}
+}
+
+func nextIPv4Address(t *testing.T, address string) string {
+	t.Helper()
+	value := net.ParseIP(address).To4()
+	if value == nil || value[3] == 255 {
+		t.Fatalf("cannot derive proxy address from %q", address)
+	}
+	value[3]++
+	return value.String()
 }
 
 func (fixture *restrictedGiteaFixture) requestCount(t *testing.T, method, requestPath string) int {
@@ -106,21 +127,88 @@ func (fixture *restrictedGiteaFixture) requestCount(t *testing.T, method, reques
 
 func (fixture *restrictedGiteaFixture) startBroker(t *testing.T) restrictedGiteaBroker {
 	t.Helper()
+	return fixture.startBrokerAt(t, fixture.address)
+}
+
+func (fixture *restrictedGiteaFixture) startBrokerAt(t *testing.T, apiHost string) restrictedGiteaBroker {
+	t.Helper()
 	agentToken, err := auth.Generate(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	binaries := testutil.BuildBinaries(t, filepath.Join(fixture.work, "bin"))
-	brokerCertificate := testutil.GenerateCertificate(t, filepath.Join(fixture.work, "broker-cert"))
+	if fixture.binaries.Service == "" {
+		fixture.binaries = testutil.BuildBinaries(t, filepath.Join(fixture.work, "bin"))
+	}
+	binaries := fixture.binaries
+	brokerCertificate := testutil.GenerateCertificate(t, t.TempDir())
 	sshPath, err := exec.LookPath("ssh")
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := testutil.StartServer(t, testutil.ServerOptions{
 		Binary: binaries.Service, PolicyPath: filepath.Join("testdata", "gitea-policy.yaml"), Certificate: brokerCertificate,
-		SSHPath: sshPath, GiteaAPIHost: fixture.address, GiteaCAFile: fixture.certificate.CAFile,
+		SSHPath: sshPath, GiteaAPIHost: apiHost, GiteaCAFile: fixture.certificate.CAFile,
 		Environment: []string{"REPOWOLF_TOKEN_AGENT=" + agentToken, "REPOWOLF_TOKEN_GITEA=" + fixture.token},
 	})
 	environment := testutil.Environment(os.Environ(), "REPOWOLF_ENDPOINT="+server.Endpoint, "REPOWOLF_TOKEN="+agentToken, "REPOWOLF_CA_FILE="+server.Certificate.CAFile, "REPOWOLF_SERVER_NAME="+server.Certificate.ServerName)
-	return restrictedGiteaBroker{binaries: binaries, server: server, environment: environment}
+	return restrictedGiteaBroker{binaries: binaries, server: server, environment: environment, agentToken: agentToken}
+}
+
+func (fixture *restrictedGiteaFixture) startCorruptingWriteProxy(t *testing.T) string {
+	t.Helper()
+	helper := filepath.Join(fixture.work, "gitea-failure-proxy.test")
+	command := exec.Command("go", "test", "-c", "-tags", "gitea_integration", "-o", helper, ".")
+	command.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("build Gitea failure proxy: %v: %s", err, output)
+	}
+	certificateDirectory := filepath.Dir(fixture.certificate.CertificateFile)
+	container := dockerOutput(t, "run", "--detach", "--rm", "--network", fixture.network, "--ip", fixture.proxyAddress,
+		"--volume", helper+":/helper:ro",
+		"--volume", certificateDirectory+":/certs:ro",
+		"--env", "REPOWOLF_GITEA_FAILURE_PROXY=1",
+		"--env", "REPOWOLF_GITEA_FAILURE_PROXY_TARGET="+fixture.baseURL,
+		"--env", "REPOWOLF_GITEA_FAILURE_PROXY_CERT=/certs/"+filepath.Base(fixture.certificate.CertificateFile),
+		"--env", "REPOWOLF_GITEA_FAILURE_PROXY_KEY=/certs/"+filepath.Base(fixture.certificate.KeyFile),
+		"--env", "REPOWOLF_GITEA_FAILURE_PROXY_CA=/certs/"+filepath.Base(fixture.certificate.CAFile),
+		"--entrypoint", "/helper", giteaImage, "-test.run=^TestGiteaFailureProxyProcess$",
+	)
+	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", container).Run() })
+	proxyURL := "https://" + fixture.proxyAddress
+	waitGitea(t, fixture.client, proxyURL, container)
+	return fixture.proxyAddress
+}
+
+func TestGiteaFailureProxyProcess(t *testing.T) {
+	if os.Getenv("REPOWOLF_GITEA_FAILURE_PROXY") != "1" {
+		t.Skip("helper process")
+	}
+	target, err := url.Parse(os.Getenv("REPOWOLF_GITEA_FAILURE_PROXY_TARGET"))
+	if err != nil || target.Scheme != "https" || target.Host == "" {
+		t.Fatalf("invalid proxy target")
+	}
+	roots := x509.NewCertPool()
+	ca, err := os.ReadFile(os.Getenv("REPOWOLF_GITEA_FAILURE_PROXY_CA"))
+	if err != nil || !roots.AppendCertsFromPEM(ca) {
+		t.Fatalf("load proxy CA: %v", err)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots}}
+	proxy.ModifyResponse = func(response *http.Response) error {
+		if response.Request.Method != http.MethodPost || response.Request.URL.Path != "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues" {
+			return nil
+		}
+		if response.Body != nil {
+			_, _ = io.Copy(io.Discard, response.Body)
+			_ = response.Body.Close()
+		}
+		response.Body = io.NopCloser(strings.NewReader("{"))
+		response.ContentLength = 1
+		response.Header.Set("Content-Length", "1")
+		return nil
+	}
+	server := &http.Server{Addr: ":443", Handler: proxy, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13}}
+	if err := server.ListenAndServeTLS(os.Getenv("REPOWOLF_GITEA_FAILURE_PROXY_CERT"), os.Getenv("REPOWOLF_GITEA_FAILURE_PROXY_KEY")); err != nil {
+		t.Fatal(fmt.Errorf("serve Gitea failure proxy: %w", err))
+	}
 }
