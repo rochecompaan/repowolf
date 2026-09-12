@@ -144,9 +144,9 @@ func (a *RepositoryAdapter) Execute(ctx context.Context, repo policy.ResolvedRep
 	case request.GetIssueComment() != nil:
 		return a.issueComment(ctx, repo, request.GetIssueComment())
 	case request.GetIssueClose() != nil:
-		return a.issueState(ctx, repo, request.GetIssueClose().Index, sdk.StateClosed)
+		return a.issueState(ctx, repo, request.GetIssueClose().Index, issueStateClose)
 	case request.GetIssueReopen() != nil:
-		return a.issueState(ctx, repo, request.GetIssueReopen().Index, sdk.StateOpen)
+		return a.issueState(ctx, repo, request.GetIssueReopen().Index, issueStateReopen)
 	}
 	return nil, ErrInvalidRequest
 }

@@ -101,25 +101,50 @@ func (a *RepositoryAdapter) issueComment(ctx context.Context, repository policy.
 	return response, nil
 }
 
-func issueStateResponse(target sdk.StateType, record *repowolfv1.GiteaIssueRecord) *repowolfv1.GiteaResponse {
-	if target == sdk.StateClosed {
-		return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueClose{IssueClose: &repowolfv1.GiteaIssueCloseResult{Issue: record}}}
+type issueStateOperation uint8
+
+const (
+	issueStateClose issueStateOperation = iota + 1
+	issueStateReopen
+)
+
+func (operation issueStateOperation) target() (sdk.StateType, repowolfv1.GiteaIssueState, error) {
+	switch operation {
+	case issueStateClose:
+		return sdk.StateClosed, repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_CLOSED, nil
+	case issueStateReopen:
+		return sdk.StateOpen, repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_OPEN, nil
+	default:
+		return "", repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_UNSPECIFIED, rpcstatus.ErrInvalidArgument
 	}
-	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueReopen{IssueReopen: &repowolfv1.GiteaIssueReopenResult{Issue: record}}}
 }
 
-func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.ResolvedRepository, index int64, target sdk.StateType) (*repowolfv1.GiteaResponse, error) {
+func issueStateResponse(operation issueStateOperation, record *repowolfv1.GiteaIssueRecord) (*repowolfv1.GiteaResponse, error) {
+	switch operation {
+	case issueStateClose:
+		return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueClose{IssueClose: &repowolfv1.GiteaIssueCloseResult{Issue: record}}}, nil
+	case issueStateReopen:
+		return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueReopen{IssueReopen: &repowolfv1.GiteaIssueReopenResult{Issue: record}}}, nil
+	default:
+		return nil, rpcstatus.ErrInvalidArgument
+	}
+}
+
+func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.ResolvedRepository, index int64, operation issueStateOperation) (*repowolfv1.GiteaResponse, error) {
+	target, targetState, err := operation.target()
+	if err != nil {
+		return nil, err
+	}
 	current, err := a.issuePreflight(ctx, repository, index)
 	if err != nil {
 		return nil, err
 	}
-	targetState := repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_OPEN
-	if target == sdk.StateClosed {
-		targetState = repowolfv1.GiteaIssueState_GITEA_ISSUE_STATE_CLOSED
-	}
 	var response *repowolfv1.GiteaResponse
 	if current.state == targetState {
-		response = issueStateResponse(target, projectIssue(current, allIssueFields))
+		response, err = issueStateResponse(operation, projectIssue(current, allIssueFields))
+		if err != nil {
+			return nil, err
+		}
 		if proto.Size(response) > 8<<20 {
 			return nil, rpcstatus.ErrProviderFailure
 		}
@@ -133,7 +158,10 @@ func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.Re
 			if e != nil || normalized.index != index || normalized.state != targetState {
 				return rpcstatus.ErrProviderFailure
 			}
-			response = issueStateResponse(target, projectIssue(normalized, allIssueFields))
+			response, e = issueStateResponse(operation, projectIssue(normalized, allIssueFields))
+			if e != nil {
+				return e
+			}
 			if proto.Size(response) > 8<<20 {
 				return rpcstatus.ErrResourceExhausted
 			}

@@ -89,11 +89,13 @@ func TestIssueKindPreflightPreventsWrite(t *testing.T) {
 }
 func TestIssueStateEnsureTransition(t *testing.T) {
 	for _, test := range []struct {
-		name            string
-		initial, target sdk.StateType
-		writes          int
-		transitioned    bool
-	}{{"close open", sdk.StateOpen, sdk.StateClosed, 1, true}, {"close closed", sdk.StateClosed, sdk.StateClosed, 0, false}, {"reopen closed", sdk.StateClosed, sdk.StateOpen, 1, true}, {"reopen open", sdk.StateOpen, sdk.StateOpen, 0, false}} {
+		name         string
+		initial      sdk.StateType
+		operation    issueStateOperation
+		target       sdk.StateType
+		writes       int
+		transitioned bool
+	}{{"close open", sdk.StateOpen, issueStateClose, sdk.StateClosed, 1, true}, {"close closed", sdk.StateClosed, issueStateClose, sdk.StateClosed, 0, false}, {"reopen closed", sdk.StateClosed, issueStateReopen, sdk.StateOpen, 1, true}, {"reopen open", sdk.StateOpen, issueStateReopen, sdk.StateOpen, 0, false}} {
 		t.Run(test.name, func(t *testing.T) {
 			current := sdkIssue()
 			current.State = test.initial
@@ -102,7 +104,7 @@ func TestIssueStateEnsureTransition(t *testing.T) {
 			api := &mutationWriteAPI{fakeIssueAPI: fakeIssueAPI{issue: current}, editResult: result}
 			adapter, _ := newRepositoryAdapter(api)
 			ctx, metadata := WithMutationMetadata(context.Background())
-			_, err := adapter.issueState(ctx, issueResolved(), 7, test.target)
+			_, err := adapter.issueState(ctx, issueResolved(), 7, test.operation)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -113,5 +115,16 @@ func TestIssueStateEnsureTransition(t *testing.T) {
 				t.Fatalf("option=%#v", api.editOption)
 			}
 		})
+	}
+}
+
+func TestIssueStateRejectsInvalidOperationBeforePreflight(t *testing.T) {
+	api := &mutationWriteAPI{}
+	adapter, _ := newRepositoryAdapter(api)
+
+	response, err := adapter.issueState(context.Background(), issueResolved(), 7, issueStateOperation(255))
+
+	if response != nil || !errors.Is(err, rpcstatus.ErrInvalidArgument) || api.getCalls != 0 || api.editCalls != 0 {
+		t.Fatalf("issueState() = %#v, %v; reads=%d writes=%d", response, err, api.getCalls, api.editCalls)
 	}
 }

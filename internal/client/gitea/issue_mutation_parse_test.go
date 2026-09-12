@@ -16,6 +16,7 @@ func TestParseIssueMutation(t *testing.T) {
 		{"create alias", []string{"issues", "c", "-r", "Owner/Repo", "-t", "title", "-d", "", "-a", "alice,bob", "-L", "bug,urgent", "-o", "json"}, "create", outputJSON},
 		{"comment", []string{"comments", "add", "7", "body", "--repo", "Owner/Repo"}, "comment", outputSimple},
 		{"comment description", []string{"comments", "a", "7", "--description", "body", "-r", "Owner/Repo"}, "comment", outputSimple},
+		{"comment direct plural", []string{"comments", "7", "body", "-r", "Owner/Repo"}, "comment", outputSimple},
 		{"comment singular", []string{"comment", "7", "body", "-r", "Owner/Repo"}, "comment", outputSimple},
 		{"comment c", []string{"c", "7", "body", "-r", "Owner/Repo"}, "comment", outputSimple},
 		{"close", []string{"issues", "close", "7", "-r", "Owner/Repo", "-o", "table"}, "close", outputTable},
@@ -49,6 +50,34 @@ func TestParseIssueMutation(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestIssueMutationRejectsSingularIssueWriteAliases(t *testing.T) {
+	for _, prefix := range []string{"issue", "i"} {
+		for _, operation := range []string{"create", "c", "close", "reopen", "open"} {
+			args := []string{prefix, operation, "7", "-r", "Owner/Repo"}
+			if operation == "create" || operation == "c" {
+				args = []string{prefix, operation, "-r", "Owner/Repo", "-t", "title"}
+			}
+			if _, err := Parse(args); err == nil {
+				t.Fatalf("accepted undocumented mutation alias %q", args)
+			}
+		}
+	}
+}
+
+func TestIssueCommentRejectsUndocumentedAliases(t *testing.T) {
+	for _, args := range [][]string{
+		{"comment", "add", "7", "body", "-r", "Owner/Repo"},
+		{"comment", "a", "7", "body", "-r", "Owner/Repo"},
+		{"c", "add", "7", "body", "-r", "Owner/Repo"},
+		{"c", "a", "7", "body", "-r", "Owner/Repo"},
+		{"comments", "comment", "7", "body", "-r", "Owner/Repo"},
+	} {
+		if _, err := Parse(args); err == nil {
+			t.Fatalf("accepted undocumented comment alias %q", args)
+		}
 	}
 }
 

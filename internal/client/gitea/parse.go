@@ -52,8 +52,10 @@ func Parse(args []string) (command, error) {
 	switch args[0] {
 	case "repos", "repo":
 		return parseRepository(args)
-	case "issues", "issue", "i":
-		return parseIssues(args)
+	case "issues":
+		return parseIssues(args, true)
+	case "issue", "i":
+		return parseIssues(args, false)
 	case "comments", "comment", "c":
 		return parseIssueComment(args)
 	default:
@@ -129,14 +131,23 @@ func parseRepository(args []string) (command, error) {
 	return command{request: request, format: format}, nil
 }
 
-func parseIssues(args []string) (command, error) {
+func parseIssues(args []string, allowMutations bool) (command, error) {
 	if len(args) > 1 {
 		switch args[1] {
 		case "create", "c":
+			if !allowMutations {
+				return command{}, fmt.Errorf("unsupported issue command")
+			}
 			return parseIssueCreate(args[2:])
 		case "close":
+			if !allowMutations {
+				return command{}, fmt.Errorf("unsupported issue command")
+			}
 			return parseIssueState(args[2:], false)
 		case "reopen", "open":
+			if !allowMutations {
+				return command{}, fmt.Errorf("unsupported issue command")
+			}
 			return parseIssueState(args[2:], true)
 		}
 	}
