@@ -8,10 +8,11 @@ import (
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/clientconfig"
+	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 )
 
 const operationTimeout = 2 * time.Minute
-const usage = "tea: expected repos OWNER/REPO --repo OWNER/REPO [--output table|simple|json]\n"
+const usage = "tea: expected repos OWNER/REPO --repo OWNER/REPO or issues [list|INDEX] --repo OWNER/REPO [approved flags]\n"
 
 // Run parses, executes, and renders one restricted tea command.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -40,7 +41,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if errors.Is(operationContext.Err(), context.Canceled) {
 			return interrupted(operationContext, stderr)
 		}
-		writeDiagnostic(stderr, "tea: Gitea operation failed\n")
+		if rpcstatus.IsIssueKindStatus(err) {
+			writeDiagnostic(stderr, "tea: index is a pull request; use tea pulls\n")
+		} else {
+			writeDiagnostic(stderr, "tea: Gitea operation failed\n")
+		}
 		return 1
 	}
 	return 0

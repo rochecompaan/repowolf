@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	sdk "code.gitea.io/sdk/gitea"
+	sdk "gitea.dev/sdk"
 	"github.com/rochecompaan/repowolf/internal/config"
 	"github.com/rochecompaan/repowolf/internal/providerhttp"
 )

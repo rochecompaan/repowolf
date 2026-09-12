@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 
 	"github.com/rochecompaan/repowolf/internal/auth"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
@@ -88,7 +89,10 @@ func (service *Server) deadlineUnaryInterceptor() grpc.UnaryServerInterceptor {
 		ctx, cancel := context.WithTimeout(ctx, service.timeout)
 		defer cancel()
 		response, err := handler(ctx, request)
-		return response, rpcstatus.Error(err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return response, rpcstatus.Error(err)
+		}
+		return response, err
 	}
 }
 
@@ -96,7 +100,11 @@ func (service *Server) deadlineStreamInterceptor() grpc.StreamServerInterceptor 
 	return func(implementation any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx, cancel := context.WithTimeout(stream.Context(), service.timeout)
 		defer cancel()
-		return rpcstatus.Error(handler(implementation, &serverStreamContext{ServerStream: stream, ctx: ctx}))
+		err := handler(implementation, &serverStreamContext{ServerStream: stream, ctx: ctx})
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return rpcstatus.Error(err)
+		}
+		return err
 	}
 }
 

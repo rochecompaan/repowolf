@@ -14,7 +14,7 @@ pkgs.buildGo126Module {
   version = "dev";
 
   src = pkgs.lib.cleanSource ../.;
-  vendorHash = "sha256-Hi2HJappaY+TJ2PyT7VjxICn7chQunPdxgGmFD1nAi0=";
+  vendorHash = "sha256-18UEqoSNhmeuRWY/Ac4hflusyPlT70PmtzL0FMtweVU=";
 
   nativeCheckInputs = [
     pkgs.bubblewrap

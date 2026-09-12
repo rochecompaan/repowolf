@@ -9,6 +9,7 @@ import (
 	"github.com/rochecompaan/repowolf/internal/policy"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 	"github.com/rochecompaan/repowolf/internal/runner"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -25,6 +26,8 @@ func TestErrorMapsDomainFailuresToStableStatuses(t *testing.T) {
 		{"invalid", policy.ErrRefPolicy, codes.InvalidArgument, "invalid request"},
 		{"unsupported", rpcstatus.ErrUnsupported, codes.Unimplemented, "unsupported operation"},
 		{"repository", rpcstatus.ErrRepositoryUnavailable, codes.Unavailable, "repository unavailable"},
+		{"not found", rpcstatus.ErrNotFound, codes.NotFound, "not found"},
+		{"issue kind", rpcstatus.ErrIssueKind, codes.FailedPrecondition, "index is a pull request; use tea pulls"},
 		{"provider", runner.ErrCommandFailed, codes.Unavailable, "provider failure"},
 		{"provider sentinel", rpcstatus.ErrProviderFailure, codes.Unavailable, "provider failure"},
 		{"deadline", context.DeadlineExceeded, codes.DeadlineExceeded, "deadline exceeded"},
@@ -46,9 +49,35 @@ func TestErrorMapsDomainFailuresToStableStatuses(t *testing.T) {
 	}
 }
 
+func TestIssueKindStatusUsesStableStructuredIdentifier(t *testing.T) {
+	trusted := rpcstatus.Error(rpcstatus.ErrIssueKind)
+	if !rpcstatus.IsIssueKindStatus(trusted) {
+		t.Fatalf("trusted issue-kind status not recognized: %v", trusted)
+	}
+	messageOnly := status.Error(codes.FailedPrecondition, "index is a pull request; use tea pulls")
+	if rpcstatus.IsIssueKindStatus(messageOnly) {
+		t.Fatal("message-only status recognized as trusted issue-kind status")
+	}
+	spoofed, err := status.New(codes.FailedPrecondition, "unsafe provider detail").WithDetails(&errdetails.ErrorInfo{
+		Reason: "GITEA_ISSUE_KIND_PULL_REQUEST",
+		Domain: "repowolf.dev/gitea",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sanitized := rpcstatus.Error(spoofed.Err()); rpcstatus.IsIssueKindStatus(sanitized) || status.Convert(sanitized).Message() != "operation precondition failed" {
+		t.Fatalf("untrusted structured status was not sanitized: %v", sanitized)
+	}
+}
+
 func TestErrorSanitizesExistingGRPCStatus(t *testing.T) {
-	err := rpcstatus.Error(status.Error(codes.PermissionDenied, "repository secret-repo exists"))
-	if status.Code(err) != codes.PermissionDenied || status.Convert(err).Message() != "permission denied" {
-		t.Fatalf("Error() = %v", err)
+	for _, test := range []struct {
+		code codes.Code
+		want string
+	}{{codes.PermissionDenied, "permission denied"}, {codes.NotFound, "not found"}, {codes.FailedPrecondition, "operation precondition failed"}} {
+		err := rpcstatus.Error(status.Error(test.code, "repository secret-repo exists"))
+		if status.Code(err) != test.code || status.Convert(err).Message() != test.want {
+			t.Fatalf("Error() = %v", err)
+		}
 	}
 }

@@ -12,7 +12,6 @@ require (
 require (
 	github.com/42wim/httpsig v1.2.4 // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
-	github.com/go-fed/httpsig v1.1.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
 )
 
@@ -32,9 +31,9 @@ require (
 	buf.build/go/spdx v0.2.0 // indirect
 	buf.build/go/standard v0.1.1-0.20260325175353-2b287e071df5 // indirect
 	cel.dev/expr v0.25.2 // indirect
-	code.gitea.io/sdk/gitea v0.25.1
 	connectrpc.com/connect v1.20.0 // indirect
 	connectrpc.com/otelconnect v0.9.0 // indirect
+	gitea.dev/sdk v1.1.1-0.20260620195616-492bc71e2f1d
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bufbuild/buf v1.72.0 // indirect
@@ -101,7 +100,7 @@ require (
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260715232425-e75dac1f907d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260715232425-e75dac1f907d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260715232425-e75dac1f907d
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.6.2 // indirect
 	mvdan.cc/xurls/v2 v2.6.0 // indirect
 	pluginrpc.com/pluginrpc v0.5.0 // indirect
