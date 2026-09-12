@@ -45,6 +45,18 @@ func (client *recordingSDKRepositoryClient) ListIssueTimeline(ctx context.Contex
 	client.contexts = append(client.contexts, ctx)
 	return client.timeline, nil, client.err
 }
+func (client *recordingSDKRepositoryClient) ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, *sdk.Response, error) {
+	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, *sdk.Response, error) {
+	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, *sdk.Response, error) {
+	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, *sdk.Response, error) {
+	return nil, nil, nil
+}
 
 func (f *fakeRepositoryGetter) GetRepo(_ context.Context, owner, name string) (*sdk.Repository, error) {
 	f.calls++

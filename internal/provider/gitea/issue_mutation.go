@@ -80,14 +80,10 @@ func (a *RepositoryAdapter) issueComment(ctx context.Context, repository policy.
 	if _, err := a.issuePreflight(ctx, repository, request.Index); err != nil {
 		return nil, err
 	}
-	api, err := a.writeAPI()
-	if err != nil {
-		return nil, err
-	}
 	owner, name := repository.Repository.Owner, repository.Repository.Name
 	var response *repowolfv1.GiteaResponse
-	_, err = invokeWrite(ctx, func() (*sdk.Comment, error) {
-		return api.CreateIssueComment(ctx, owner, name, request.Index, sdk.CreateIssueCommentOption{Body: request.Body})
+	_, err := invokeWrite(ctx, func() (*sdk.Comment, error) {
+		return a.api.CreateIssueComment(ctx, owner, name, request.Index, sdk.CreateIssueCommentOption{Body: request.Body})
 	}, func(comment *sdk.Comment) error {
 		record, e := normalizeIssueMutationComment(comment, owner, name, request.Index)
 		if e != nil {
@@ -105,14 +101,14 @@ func (a *RepositoryAdapter) issueComment(ctx context.Context, repository policy.
 	return response, nil
 }
 
-func issueStateResponse(closing bool, record *repowolfv1.GiteaIssueRecord) *repowolfv1.GiteaResponse {
-	if closing {
+func issueStateResponse(target sdk.StateType, record *repowolfv1.GiteaIssueRecord) *repowolfv1.GiteaResponse {
+	if target == sdk.StateClosed {
 		return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueClose{IssueClose: &repowolfv1.GiteaIssueCloseResult{Issue: record}}}
 	}
 	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_IssueReopen{IssueReopen: &repowolfv1.GiteaIssueReopenResult{Issue: record}}}
 }
 
-func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.ResolvedRepository, index int64, target sdk.StateType, closing bool) (*repowolfv1.GiteaResponse, error) {
+func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.ResolvedRepository, index int64, target sdk.StateType) (*repowolfv1.GiteaResponse, error) {
 	current, err := a.issuePreflight(ctx, repository, index)
 	if err != nil {
 		return nil, err
@@ -123,25 +119,21 @@ func (a *RepositoryAdapter) issueState(ctx context.Context, repository policy.Re
 	}
 	var response *repowolfv1.GiteaResponse
 	if current.state == targetState {
-		response = issueStateResponse(closing, projectIssue(current, allIssueFields))
+		response = issueStateResponse(target, projectIssue(current, allIssueFields))
 		if proto.Size(response) > 8<<20 {
 			return nil, rpcstatus.ErrProviderFailure
 		}
 		recordTransition(ctx, false)
 	} else {
-		api, e := a.writeAPI()
-		if e != nil {
-			return nil, e
-		}
 		owner, name := repository.Repository.Owner, repository.Repository.Name
 		_, err = invokeWrite(ctx, func() (*sdk.Issue, error) {
-			return api.EditIssue(ctx, owner, name, index, sdk.EditIssueOption{State: &target})
+			return a.api.EditIssue(ctx, owner, name, index, sdk.EditIssueOption{State: &target})
 		}, func(issue *sdk.Issue) error {
 			normalized, e := normalizeIssue(issue, owner, name)
 			if e != nil || normalized.index != index || normalized.state != targetState {
 				return rpcstatus.ErrProviderFailure
 			}
-			response = issueStateResponse(closing, projectIssue(normalized, allIssueFields))
+			response = issueStateResponse(target, projectIssue(normalized, allIssueFields))
 			if proto.Size(response) > 8<<20 {
 				return rpcstatus.ErrResourceExhausted
 			}

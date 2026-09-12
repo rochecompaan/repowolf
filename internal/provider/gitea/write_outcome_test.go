@@ -37,7 +37,7 @@ func TestWriteOutcomeUnknownAcrossWriteOperations(t *testing.T) {
 	t.Run("state call error", func(t *testing.T) {
 		api := &mutationWriteAPI{fakeIssueAPI: fakeIssueAPI{issue: sdkIssue()}, editErr: marker}
 		adapter, _ := newRepositoryAdapter(api)
-		_, err := adapter.issueState(context.Background(), issueResolved(), 7, sdk.StateClosed, true)
+		_, err := adapter.issueState(context.Background(), issueResolved(), 7, sdk.StateClosed)
 		if !errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) || api.editCalls != 1 || strings.Contains(err.Error(), marker.Error()) {
 			t.Fatalf("err=%v calls=%d", err, api.editCalls)
 		}
@@ -55,7 +55,7 @@ func TestWriteOutcomeUnknownAcrossWriteOperations(t *testing.T) {
 		result.Index = 8
 		api := &mutationWriteAPI{fakeIssueAPI: fakeIssueAPI{issue: sdkIssue()}, editResult: result}
 		adapter, _ := newRepositoryAdapter(api)
-		_, err := adapter.issueState(context.Background(), issueResolved(), 7, sdk.StateClosed, true)
+		_, err := adapter.issueState(context.Background(), issueResolved(), 7, sdk.StateClosed)
 		if !errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) || api.editCalls != 1 {
 			t.Fatalf("err=%v calls=%d", err, api.editCalls)
 		}

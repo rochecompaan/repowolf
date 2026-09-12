@@ -124,7 +124,9 @@ func parseRepository(args []string) (command, error) {
 	if _, _, ok := parseSlug(explicit); !ok || !strings.EqualFold(positional, explicit) {
 		return command{}, fmt.Errorf("repository selectors disagree")
 	}
-	return command{request: requestFor(owner, name, &repowolfv1.GiteaRequest_RepositoryView{RepositoryView: &repowolfv1.GiteaRepositoryViewRequest{}}), format: format}, nil
+	request := requestFor(owner, name)
+	request.Operation = &repowolfv1.GiteaRequest_RepositoryView{RepositoryView: &repowolfv1.GiteaRepositoryViewRequest{}}
+	return command{request: request, format: format}, nil
 }
 
 func parseIssues(args []string) (command, error) {
@@ -245,7 +247,9 @@ func parseIssueList(args []string, start int) (command, error) {
 	if req.From != nil && req.Until != nil && req.From.AsTime().After(req.Until.AsTime()) {
 		return command{}, fmt.Errorf("invalid time range")
 	}
-	return command{request: requestFor(owner, name, &repowolfv1.GiteaRequest_IssueList{IssueList: req}), format: format, fields: append([]repowolfv1.GiteaIssueField(nil), req.Fields...)}, nil
+	request := requestFor(owner, name)
+	request.Operation = &repowolfv1.GiteaRequest_IssueList{IssueList: req}
+	return command{request: request, format: format, fields: append([]repowolfv1.GiteaIssueField(nil), req.Fields...)}, nil
 }
 
 func parseIssueView(args []string, index int64) (command, error) {
@@ -296,7 +300,9 @@ func parseIssueView(args []string, index int64) (command, error) {
 	if !ok {
 		return command{}, fmt.Errorf("invalid repository")
 	}
-	return command{request: requestFor(owner, name, &repowolfv1.GiteaRequest_IssueView{IssueView: req}), format: format}, nil
+	request := requestFor(owner, name)
+	request.Operation = &repowolfv1.GiteaRequest_IssueView{IssueView: req}
+	return command{request: request, format: format}, nil
 }
 
 func parseIssueCreate(args []string) (command, error) {
@@ -356,7 +362,9 @@ func parseIssueCreate(args []string) (command, error) {
 	if !ok {
 		return command{}, fmt.Errorf("invalid repository")
 	}
-	return command{request: requestFor(owner, name, &repowolfv1.GiteaRequest_IssueCreate{IssueCreate: req}), format: format, mutation: true}, nil
+	request := requestFor(owner, name)
+	request.Operation = &repowolfv1.GiteaRequest_IssueCreate{IssueCreate: req}
+	return command{request: request, format: format, mutation: true}, nil
 }
 
 func parseIssueComment(args []string) (command, error) {
@@ -420,7 +428,9 @@ func parseIssueComment(args []string) (command, error) {
 		return command{}, fmt.Errorf("invalid repository")
 	}
 	req := &repowolfv1.GiteaIssueCommentRequest{Index: index, Body: body}
-	return command{request: requestFor(owner, name, &repowolfv1.GiteaRequest_IssueComment{IssueComment: req}), format: format, mutation: true}, nil
+	request := requestFor(owner, name)
+	request.Operation = &repowolfv1.GiteaRequest_IssueComment{IssueComment: req}
+	return command{request: request, format: format, mutation: true}, nil
 }
 
 func parseIssueState(args []string, reopen bool) (command, error) {
@@ -459,11 +469,13 @@ func parseIssueState(args []string, reopen bool) (command, error) {
 	if !ok {
 		return command{}, fmt.Errorf("invalid repository")
 	}
-	var op any = &repowolfv1.GiteaRequest_IssueClose{IssueClose: &repowolfv1.GiteaIssueCloseRequest{Index: index}}
+	request := requestFor(owner, name)
 	if reopen {
-		op = &repowolfv1.GiteaRequest_IssueReopen{IssueReopen: &repowolfv1.GiteaIssueReopenRequest{Index: index}}
+		request.Operation = &repowolfv1.GiteaRequest_IssueReopen{IssueReopen: &repowolfv1.GiteaIssueReopenRequest{Index: index}}
+	} else {
+		request.Operation = &repowolfv1.GiteaRequest_IssueClose{IssueClose: &repowolfv1.GiteaIssueCloseRequest{Index: index}}
 	}
-	return command{request: requestFor(owner, name, op), format: format, mutation: true}, nil
+	return command{request: request, format: format, mutation: true}, nil
 }
 
 func parseUniqueCSV(value string) ([]string, error) {
@@ -487,25 +499,8 @@ func validateMutationText(value string, allowEmpty bool, maximumBytes, maximumRu
 	return nil
 }
 
-func requestFor(owner, name string, operation any) *repowolfv1.GiteaRequest {
-	r := &repowolfv1.GiteaRequest{Context: &repowolfv1.RequestContext{Repository: &repowolfv1.RepositorySelector{Owner: owner, Name: name}}}
-	switch value := operation.(type) {
-	case *repowolfv1.GiteaRequest_RepositoryView:
-		r.Operation = value
-	case *repowolfv1.GiteaRequest_IssueList:
-		r.Operation = value
-	case *repowolfv1.GiteaRequest_IssueView:
-		r.Operation = value
-	case *repowolfv1.GiteaRequest_IssueCreate:
-		r.Operation = value
-	case *repowolfv1.GiteaRequest_IssueComment:
-		r.Operation = value
-	case *repowolfv1.GiteaRequest_IssueClose:
-		r.Operation = value
-	case *repowolfv1.GiteaRequest_IssueReopen:
-		r.Operation = value
-	}
-	return r
+func requestFor(owner, name string) *repowolfv1.GiteaRequest {
+	return &repowolfv1.GiteaRequest{Context: &repowolfv1.RequestContext{Repository: &repowolfv1.RepositorySelector{Owner: owner, Name: name}}}
 }
 
 func parseIssueFields(value string) ([]repowolfv1.GiteaIssueField, error) {

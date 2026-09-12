@@ -23,9 +23,6 @@ type giteaAPI interface {
 	ListRepoIssues(context.Context, string, string, sdk.ListIssueOption) ([]*sdk.Issue, error)
 	GetIssue(context.Context, string, string, int64) (*sdk.Issue, int, error)
 	ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) (issueCommentPage, error)
-}
-
-type giteaWriteAPI interface {
 	ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, error)
 	CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, error)
 	CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, error)
@@ -34,12 +31,16 @@ type giteaWriteAPI interface {
 
 type repositorySDKClient interface {
 	GetRepo(context.Context, string, string) (*sdk.Repository, *sdk.Response, error)
+	ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, *sdk.Response, error)
 }
 
 type issueSDKClient interface {
 	ListRepoIssues(context.Context, string, string, sdk.ListIssueOption) ([]*sdk.Issue, *sdk.Response, error)
 	GetIssue(context.Context, string, string, int64) (*sdk.Issue, *sdk.Response, error)
 	ListIssueTimeline(context.Context, string, string, int64, sdk.ListIssueCommentOptions) ([]*sdk.TimelineComment, *sdk.Response, error)
+	CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, *sdk.Response, error)
+	CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, *sdk.Response, error)
+	EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, *sdk.Response, error)
 }
 
 type sdkAPI struct {
@@ -67,43 +68,19 @@ func (a *sdkAPI) GetIssue(ctx context.Context, owner, repo string, index int64) 
 }
 
 func (a *sdkAPI) ListRepoLabels(ctx context.Context, owner, repo string, options sdk.ListLabelsOptions) ([]*sdk.Label, error) {
-	client, ok := a.repositories.(interface {
-		ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, *sdk.Response, error)
-	})
-	if !ok {
-		return nil, rpcstatus.ErrServiceUnavailable
-	}
-	values, _, err := client.ListRepoLabels(ctx, owner, repo, options)
+	values, _, err := a.repositories.ListRepoLabels(ctx, owner, repo, options)
 	return values, err
 }
 func (a *sdkAPI) CreateIssue(ctx context.Context, owner, repo string, options sdk.CreateIssueOption) (*sdk.Issue, error) {
-	client, ok := a.issues.(interface {
-		CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, *sdk.Response, error)
-	})
-	if !ok {
-		return nil, rpcstatus.ErrServiceUnavailable
-	}
-	value, _, err := client.CreateIssue(ctx, owner, repo, options)
+	value, _, err := a.issues.CreateIssue(ctx, owner, repo, options)
 	return value, err
 }
 func (a *sdkAPI) CreateIssueComment(ctx context.Context, owner, repo string, index int64, options sdk.CreateIssueCommentOption) (*sdk.Comment, error) {
-	client, ok := a.issues.(interface {
-		CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, *sdk.Response, error)
-	})
-	if !ok {
-		return nil, rpcstatus.ErrServiceUnavailable
-	}
-	value, _, err := client.CreateIssueComment(ctx, owner, repo, index, options)
+	value, _, err := a.issues.CreateIssueComment(ctx, owner, repo, index, options)
 	return value, err
 }
 func (a *sdkAPI) EditIssue(ctx context.Context, owner, repo string, index int64, options sdk.EditIssueOption) (*sdk.Issue, error) {
-	client, ok := a.issues.(interface {
-		EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, *sdk.Response, error)
-	})
-	if !ok {
-		return nil, rpcstatus.ErrServiceUnavailable
-	}
-	value, _, err := client.EditIssue(ctx, owner, repo, index, options)
+	value, _, err := a.issues.EditIssue(ctx, owner, repo, index, options)
 	return value, err
 }
 
@@ -167,9 +144,9 @@ func (a *RepositoryAdapter) Execute(ctx context.Context, repo policy.ResolvedRep
 	case request.GetIssueComment() != nil:
 		return a.issueComment(ctx, repo, request.GetIssueComment())
 	case request.GetIssueClose() != nil:
-		return a.issueState(ctx, repo, request.GetIssueClose().Index, sdk.StateClosed, true)
+		return a.issueState(ctx, repo, request.GetIssueClose().Index, sdk.StateClosed)
 	case request.GetIssueReopen() != nil:
-		return a.issueState(ctx, repo, request.GetIssueReopen().Index, sdk.StateOpen, false)
+		return a.issueState(ctx, repo, request.GetIssueReopen().Index, sdk.StateOpen)
 	}
 	return nil, ErrInvalidRequest
 }

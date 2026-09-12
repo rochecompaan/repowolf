@@ -56,7 +56,7 @@ func (service *giteaService) Execute(ctx context.Context, request *repowolfv1.Gi
 	if err != nil {
 		return nil, err
 	}
-	if metadata := providerMetadataFrom(ctx); metadata != nil && (request.GetIssueCreate() != nil || request.GetIssueComment() != nil || request.GetIssueClose() != nil || request.GetIssueReopen() != nil) {
+	if metadata := providerMetadataFrom(ctx); metadata != nil && capability == config.IssuesWrite {
 		metadata.providerCompleted = true
 	}
 	if err := service.lifecycle.Complete(ctx, response, func(meta *repowolfv1.ResponseMeta) { response.Meta = meta }); err != nil {

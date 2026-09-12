@@ -102,7 +102,7 @@ func TestIssueStateEnsureTransition(t *testing.T) {
 			api := &mutationWriteAPI{fakeIssueAPI: fakeIssueAPI{issue: current}, editResult: result}
 			adapter, _ := newRepositoryAdapter(api)
 			ctx, metadata := WithMutationMetadata(context.Background())
-			_, err := adapter.issueState(ctx, issueResolved(), 7, test.target, test.target == sdk.StateClosed)
+			_, err := adapter.issueState(ctx, issueResolved(), 7, test.target)
 			if err != nil {
 				t.Fatal(err)
 			}

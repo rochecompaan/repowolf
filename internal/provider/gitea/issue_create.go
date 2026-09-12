@@ -11,21 +11,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (a *RepositoryAdapter) writeAPI() (giteaWriteAPI, error) {
-	api, ok := a.api.(giteaWriteAPI)
-	if !ok {
-		return nil, rpcstatus.ErrServiceUnavailable
-	}
-	return api, nil
-}
-
 func (a *RepositoryAdapter) resolveLabelIDs(ctx context.Context, owner, repo string, requested []string) ([]int64, error) {
 	if len(requested) == 0 {
 		return []int64{}, nil
-	}
-	api, err := a.writeAPI()
-	if err != nil {
-		return nil, err
 	}
 	byName := map[string]int64{}
 	ids := map[int64]bool{}
@@ -34,7 +22,7 @@ func (a *RepositoryAdapter) resolveLabelIDs(ctx context.Context, owner, repo str
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		labels, callErr := api.ListRepoLabels(ctx, owner, repo, sdk.ListLabelsOptions{ListOptions: sdk.ListOptions{Page: page, PageSize: 50}})
+		labels, callErr := a.api.ListRepoLabels(ctx, owner, repo, sdk.ListLabelsOptions{ListOptions: sdk.ListOptions{Page: page, PageSize: 50}})
 		if callErr != nil {
 			return nil, classifyProviderError(ctx, callErr)
 		}
@@ -83,13 +71,9 @@ func (a *RepositoryAdapter) issueCreate(ctx context.Context, repository policy.R
 	if err != nil {
 		return nil, err
 	}
-	api, err := a.writeAPI()
-	if err != nil {
-		return nil, err
-	}
 	option := sdk.CreateIssueOption{Title: request.Title, Body: request.GetDescription(), Assignees: append([]string(nil), request.Assignees...), Labels: append([]int64(nil), labels...)}
 	var response *repowolfv1.GiteaResponse
-	_, err = invokeWrite(ctx, func() (*sdk.Issue, error) { return api.CreateIssue(ctx, owner, name, option) }, func(issue *sdk.Issue) error {
+	_, err = invokeWrite(ctx, func() (*sdk.Issue, error) { return a.api.CreateIssue(ctx, owner, name, option) }, func(issue *sdk.Issue) error {
 		normalized, e := normalizeIssue(issue, owner, name)
 		if e != nil {
 			return e
