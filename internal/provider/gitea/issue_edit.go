@@ -82,7 +82,7 @@ func (a *RepositoryAdapter) resolveIssueEditFailure(ctx context.Context, reposit
 
 func classifyEditKnownFailure(facts editExecution, err error) error {
 	if facts.confirmed {
-		return rpcstatus.ErrFailedPrecondition
+		return rpcstatus.ErrEditPartial
 	}
 	return err
 }

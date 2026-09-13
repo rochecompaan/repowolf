@@ -86,6 +86,9 @@ func auditOutcome(err error) audit.Outcome {
 	if errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) {
 		return audit.OutcomeUnknown
 	}
+	if errors.Is(err, rpcstatus.ErrEditPartial) {
+		return audit.OutcomePartial
+	}
 	switch status.Code(rpcstatus.Error(err)) {
 	case codes.OK:
 		return audit.OutcomeCompleted

@@ -42,6 +42,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err := executeCommand(operationContext, repowolfv1.NewGiteaServiceClient(connection), parsed, stdout); err != nil {
 		if rpcstatus.IsIssueKindStatus(err) {
 			writeDiagnostic(stderr, "tea: index is a pull request; use tea pulls\n")
+		} else if parsed.request.GetIssueEdit() != nil && rpcstatus.IsGiteaEditPartial(err) {
+			writeDiagnostic(stderr, "tea: issue edit partially applied; inspect issue state before retrying\n")
 		} else if parsed.mutation && mutationOutcomeUnknown(err) {
 			writeDiagnostic(stderr, "tea: write outcome unknown; inspect repository state before retrying\n")
 		} else if errors.Is(operationContext.Err(), context.Canceled) {

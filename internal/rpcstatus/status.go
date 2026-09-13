@@ -17,6 +17,8 @@ const (
 	issueKindDomain                = "repowolf.dev/gitea"
 	giteaWriteOutcomeUnknownReason = "GITEA_WRITE_OUTCOME_UNKNOWN"
 	giteaWriteOutcomeUnknownDomain = "repowolf.dev/gitea"
+	giteaEditPartialReason         = "GITEA_EDIT_PARTIAL"
+	giteaEditPartialDomain         = "repowolf.dev/gitea"
 )
 
 var (
@@ -29,6 +31,7 @@ var (
 	ErrIssueKind             = errors.New("issue kind mismatch")
 	ErrFailedPrecondition    = errors.New("operation precondition failed")
 	ErrWriteOutcomeUnknown   = errors.New("write outcome unknown")
+	ErrEditPartial           = errors.New("issue edit partially applied")
 	ErrResourceExhausted     = errors.New("resource exhausted")
 	ErrServiceUnavailable    = errors.New("service unavailable")
 )
@@ -67,6 +70,8 @@ func mapDomainError(err error) error {
 		return status.Error(codes.FailedPrecondition, "operation precondition failed")
 	case errors.Is(err, ErrWriteOutcomeUnknown):
 		return writeOutcomeUnknownError()
+	case errors.Is(err, ErrEditPartial):
+		return editPartialError()
 	case errors.Is(err, context.DeadlineExceeded):
 		return status.Error(codes.DeadlineExceeded, "deadline exceeded")
 	case errors.Is(err, context.Canceled):
@@ -107,6 +112,30 @@ func writeOutcomeUnknownError() error {
 		return status.Error(codes.Internal, "internal failure")
 	}
 	return trustedWriteOutcomeUnknown{status: value}
+}
+
+type trustedEditPartial struct{ status *status.Status }
+
+func (e trustedEditPartial) Error() string              { return e.status.Err().Error() }
+func (e trustedEditPartial) GRPCStatus() *status.Status { return e.status }
+func (trustedEditPartial) Is(target error) bool         { return target == ErrEditPartial }
+
+func editPartialError() error {
+	value, err := status.New(codes.FailedPrecondition, "issue edit partially applied").WithDetails(&errdetails.ErrorInfo{Reason: giteaEditPartialReason, Domain: giteaEditPartialDomain})
+	if err != nil {
+		return status.Error(codes.Internal, "internal failure")
+	}
+	return trustedEditPartial{status: value}
+}
+
+// IsGiteaEditPartial recognizes only the exact safe status tuple.
+func IsGiteaEditPartial(err error) bool {
+	value, ok := status.FromError(err)
+	if !ok || value.Code() != codes.FailedPrecondition || value.Message() != "issue edit partially applied" || len(value.Details()) != 1 {
+		return false
+	}
+	info, ok := value.Details()[0].(*errdetails.ErrorInfo)
+	return ok && info.Reason == giteaEditPartialReason && info.Domain == giteaEditPartialDomain
 }
 
 // IsGiteaWriteOutcomeUnknown recognizes only the exact safe status tuple.
