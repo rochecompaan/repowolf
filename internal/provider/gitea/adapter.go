@@ -177,6 +177,8 @@ func (a *RepositoryAdapter) Execute(ctx context.Context, repo policy.ResolvedRep
 		return a.issueState(ctx, repo, request.GetIssueClose().Index, issueStateClose)
 	case request.GetIssueReopen() != nil:
 		return a.issueState(ctx, repo, request.GetIssueReopen().Index, issueStateReopen)
+	case request.GetIssueEdit() != nil:
+		return a.issueEdit(ctx, repo, request.GetIssueEdit())
 	}
 	return nil, ErrInvalidRequest
 }
