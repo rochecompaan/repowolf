@@ -27,11 +27,17 @@ type giteaAPI interface {
 	CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, error)
 	CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, error)
 	EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, error)
+	GetAssignees(context.Context, string, string) ([]*sdk.User, error)
+	AddIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, error)
+	DeleteIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, error)
+	AddIssueLabels(context.Context, string, string, int64, sdk.IssueLabelsOption) ([]*sdk.Label, error)
+	DeleteIssueLabel(context.Context, string, string, int64, int64) error
 }
 
 type repositorySDKClient interface {
 	GetRepo(context.Context, string, string) (*sdk.Repository, *sdk.Response, error)
 	ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, *sdk.Response, error)
+	GetAssignees(context.Context, string, string) ([]*sdk.User, *sdk.Response, error)
 }
 
 type issueSDKClient interface {
@@ -41,6 +47,10 @@ type issueSDKClient interface {
 	CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, *sdk.Response, error)
 	CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, *sdk.Response, error)
 	EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, *sdk.Response, error)
+	AddIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, *sdk.Response, error)
+	DeleteIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, *sdk.Response, error)
+	AddIssueLabels(context.Context, string, string, int64, sdk.IssueLabelsOption) ([]*sdk.Label, *sdk.Response, error)
+	DeleteIssueLabel(context.Context, string, string, int64, int64) (*sdk.Response, error)
 }
 
 type sdkAPI struct {
@@ -82,6 +92,26 @@ func (a *sdkAPI) CreateIssueComment(ctx context.Context, owner, repo string, ind
 func (a *sdkAPI) EditIssue(ctx context.Context, owner, repo string, index int64, options sdk.EditIssueOption) (*sdk.Issue, error) {
 	value, _, err := a.issues.EditIssue(ctx, owner, repo, index, options)
 	return value, err
+}
+func (a *sdkAPI) GetAssignees(ctx context.Context, owner, repo string) ([]*sdk.User, error) {
+	values, _, err := a.repositories.GetAssignees(ctx, owner, repo)
+	return values, err
+}
+func (a *sdkAPI) AddIssueAssignees(ctx context.Context, owner, repo string, index int64, options sdk.IssueAssigneesOption) (*sdk.Issue, error) {
+	value, _, err := a.issues.AddIssueAssignees(ctx, owner, repo, index, options)
+	return value, err
+}
+func (a *sdkAPI) DeleteIssueAssignees(ctx context.Context, owner, repo string, index int64, options sdk.IssueAssigneesOption) (*sdk.Issue, error) {
+	value, _, err := a.issues.DeleteIssueAssignees(ctx, owner, repo, index, options)
+	return value, err
+}
+func (a *sdkAPI) AddIssueLabels(ctx context.Context, owner, repo string, index int64, options sdk.IssueLabelsOption) ([]*sdk.Label, error) {
+	values, _, err := a.issues.AddIssueLabels(ctx, owner, repo, index, options)
+	return values, err
+}
+func (a *sdkAPI) DeleteIssueLabel(ctx context.Context, owner, repo string, index, label int64) error {
+	_, err := a.issues.DeleteIssueLabel(ctx, owner, repo, index, label)
+	return err
 }
 
 func (a *sdkAPI) ListIssueTimeline(ctx context.Context, owner, repo string, index int64, options sdk.ListIssueCommentOptions) (issueCommentPage, error) {
