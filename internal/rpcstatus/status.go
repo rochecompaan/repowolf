@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	issueKindReason = "GITEA_ISSUE_KIND_PULL_REQUEST"
-	issueKindDomain = "repowolf.dev/gitea"
+	issueKindReason                = "GITEA_ISSUE_KIND_PULL_REQUEST"
+	issueKindDomain                = "repowolf.dev/gitea"
+	giteaWriteOutcomeUnknownReason = "GITEA_WRITE_OUTCOME_UNKNOWN"
+	giteaWriteOutcomeUnknownDomain = "repowolf.dev/gitea"
 )
 
 var (
@@ -25,6 +27,8 @@ var (
 	ErrProviderFailure       = errors.New("provider failure")
 	ErrNotFound              = errors.New("not found")
 	ErrIssueKind             = errors.New("issue kind mismatch")
+	ErrFailedPrecondition    = errors.New("operation precondition failed")
+	ErrWriteOutcomeUnknown   = errors.New("write outcome unknown")
 	ErrResourceExhausted     = errors.New("resource exhausted")
 	ErrServiceUnavailable    = errors.New("service unavailable")
 )
@@ -59,6 +63,10 @@ func mapDomainError(err error) error {
 		return status.Error(codes.NotFound, "not found")
 	case errors.Is(err, ErrIssueKind):
 		return issueKindError()
+	case errors.Is(err, ErrFailedPrecondition):
+		return status.Error(codes.FailedPrecondition, "operation precondition failed")
+	case errors.Is(err, ErrWriteOutcomeUnknown):
+		return writeOutcomeUnknownError()
 	case errors.Is(err, context.DeadlineExceeded):
 		return status.Error(codes.DeadlineExceeded, "deadline exceeded")
 	case errors.Is(err, context.Canceled):
@@ -85,6 +93,30 @@ func issueKindError() error {
 		return status.Error(codes.Internal, "internal failure")
 	}
 	return value.Err()
+}
+
+type trustedWriteOutcomeUnknown struct{ status *status.Status }
+
+func (e trustedWriteOutcomeUnknown) Error() string              { return e.status.Err().Error() }
+func (e trustedWriteOutcomeUnknown) GRPCStatus() *status.Status { return e.status }
+func (trustedWriteOutcomeUnknown) Is(target error) bool         { return target == ErrWriteOutcomeUnknown }
+
+func writeOutcomeUnknownError() error {
+	value, err := status.New(codes.Unavailable, "write outcome unknown").WithDetails(&errdetails.ErrorInfo{Reason: giteaWriteOutcomeUnknownReason, Domain: giteaWriteOutcomeUnknownDomain})
+	if err != nil {
+		return status.Error(codes.Internal, "internal failure")
+	}
+	return trustedWriteOutcomeUnknown{status: value}
+}
+
+// IsGiteaWriteOutcomeUnknown recognizes only the exact safe status tuple.
+func IsGiteaWriteOutcomeUnknown(err error) bool {
+	value, ok := status.FromError(err)
+	if !ok || value.Code() != codes.Unavailable || value.Message() != "write outcome unknown" || len(value.Details()) != 1 {
+		return false
+	}
+	info, ok := value.Details()[0].(*errdetails.ErrorInfo)
+	return ok && info.Reason == giteaWriteOutcomeUnknownReason && info.Domain == giteaWriteOutcomeUnknownDomain
 }
 
 // IsIssueKindStatus recognizes only the trusted structured issue-kind status.

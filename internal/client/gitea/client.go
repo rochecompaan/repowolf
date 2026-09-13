@@ -9,6 +9,8 @@ import (
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/clientconfig"
 	"github.com/rochecompaan/repowolf/internal/rpcstatus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const operationTimeout = 2 * time.Minute
@@ -38,17 +40,34 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	operationContext, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
 	if err := executeCommand(operationContext, repowolfv1.NewGiteaServiceClient(connection), parsed, stdout); err != nil {
-		if errors.Is(operationContext.Err(), context.Canceled) {
-			return interrupted(operationContext, stderr)
-		}
 		if rpcstatus.IsIssueKindStatus(err) {
 			writeDiagnostic(stderr, "tea: index is a pull request; use tea pulls\n")
+		} else if parsed.mutation && mutationOutcomeUnknown(err) {
+			writeDiagnostic(stderr, "tea: write outcome unknown; inspect repository state before retrying\n")
+		} else if errors.Is(operationContext.Err(), context.Canceled) {
+			return interrupted(operationContext, stderr)
 		} else {
 			writeDiagnostic(stderr, "tea: Gitea operation failed\n")
 		}
 		return 1
 	}
 	return 0
+}
+
+func mutationOutcomeUnknown(err error) bool {
+	if rpcstatus.IsGiteaWriteOutcomeUnknown(err) {
+		return true
+	}
+	value, ok := status.FromError(err)
+	if !ok {
+		return true
+	}
+	switch value.Code() {
+	case codes.Unavailable, codes.Canceled, codes.DeadlineExceeded, codes.Internal, codes.ResourceExhausted:
+		return true
+	default:
+		return false
+	}
 }
 
 func executeCommand(ctx context.Context, client repowolfv1.GiteaServiceClient, parsed command, stdout io.Writer) error {

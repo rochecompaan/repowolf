@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/rochecompaan/repowolf/internal/audit"
@@ -61,21 +62,31 @@ func (service *Server) writeTerminal(ctx context.Context, operation string, star
 	mapped := rpcstatus.Error(err)
 	event := audit.Event{
 		RequestID: requestID, Principal: principal, Operation: operation,
-		Outcome: auditOutcome(mapped), Reason: status.Code(mapped).String(),
+		Outcome: auditOutcome(err), Reason: status.Code(mapped).String(),
 		DurationMS: time.Since(started).Milliseconds(),
 	}
 	if metadata := providerMetadataFrom(ctx); metadata != nil {
+		if metadata.providerCompleted {
+			event.Outcome = audit.OutcomeCompleted
+		}
 		event.Operation = metadata.operation
 		event.Provider = metadata.provider
 		event.Repository = metadata.repository
 		event.InputBytes = metadata.inputBytes
 		event.OutputBytes = metadata.outputBytes
+		if metadata.transitioned != nil {
+			value := *metadata.transitioned
+			event.Transitioned = &value
+		}
 	}
 	return service.audit.Write(event)
 }
 
 func auditOutcome(err error) audit.Outcome {
-	switch status.Code(err) {
+	if errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) {
+		return audit.OutcomeUnknown
+	}
+	switch status.Code(rpcstatus.Error(err)) {
 	case codes.OK:
 		return audit.OutcomeCompleted
 	case codes.PermissionDenied:

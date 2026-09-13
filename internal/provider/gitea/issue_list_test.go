@@ -56,6 +56,18 @@ func (f *fakeIssueAPI) ListIssueTimeline(_ context.Context, _, _ string, _ int64
 	}
 	return issueCommentPage{entryCount: entryCount, comments: values}, f.commentErrors[o.Page]
 }
+func (*fakeIssueAPI) ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, error) {
+	panic("unexpected label lookup")
+}
+func (*fakeIssueAPI) CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, error) {
+	panic("unexpected issue create")
+}
+func (*fakeIssueAPI) CreateIssueComment(context.Context, string, string, int64, sdk.CreateIssueCommentOption) (*sdk.Comment, error) {
+	panic("unexpected issue comment")
+}
+func (*fakeIssueAPI) EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, error) {
+	panic("unexpected issue edit")
+}
 func sdkIssue() *sdk.Issue {
 	return &sdk.Issue{Index: 7, Poster: &sdk.User{ID: 2, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7", Title: "title", State: sdk.StateOpen, Created: time.Unix(1, 0), Updated: time.Unix(2, 0), Repository: &sdk.RepositoryMeta{Owner: "Owner", Name: "Repo", FullName: "Owner/Repo"}}
 }

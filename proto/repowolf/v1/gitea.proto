@@ -68,12 +68,26 @@ message GiteaIssueViewRequest {
   bool include_comments = 2;
 }
 
+message GiteaIssueCreateRequest {
+  string title = 1;
+  optional string description = 2;
+  repeated string assignees = 3;
+  repeated string labels = 4;
+}
+message GiteaIssueCommentRequest { int64 index = 1; string body = 2; }
+message GiteaIssueCloseRequest { int64 index = 1; }
+message GiteaIssueReopenRequest { int64 index = 1; }
+
 message GiteaRequest {
   RequestContext context = 1;
   oneof operation {
     GiteaRepositoryViewRequest repository_view = 10;
     GiteaIssueListRequest issue_list = 11;
     GiteaIssueViewRequest issue_view = 12;
+    GiteaIssueCreateRequest issue_create = 13;
+    GiteaIssueCommentRequest issue_comment = 14;
+    GiteaIssueCloseRequest issue_close = 15;
+    GiteaIssueReopenRequest issue_reopen = 16;
   }
 }
 
@@ -133,6 +147,10 @@ message GiteaIssueRecord {
 
 message GiteaIssueListResult { repeated GiteaIssueRecord issues = 1; }
 message GiteaIssueViewResult { GiteaIssueRecord issue = 1; }
+message GiteaIssueCreateResult { GiteaIssueRecord issue = 1; }
+message GiteaIssueCommentResult { GiteaCommentRecord comment = 1; }
+message GiteaIssueCloseResult { GiteaIssueRecord issue = 1; }
+message GiteaIssueReopenResult { GiteaIssueRecord issue = 1; }
 
 message GiteaResponse {
   ResponseMeta meta = 1;
@@ -140,5 +158,9 @@ message GiteaResponse {
     GiteaRepositoryViewResult repository_view = 10;
     GiteaIssueListResult issue_list = 11;
     GiteaIssueViewResult issue_view = 12;
+    GiteaIssueCreateResult issue_create = 13;
+    GiteaIssueCommentResult issue_comment = 14;
+    GiteaIssueCloseResult issue_close = 15;
+    GiteaIssueReopenResult issue_reopen = 16;
   }
 }
