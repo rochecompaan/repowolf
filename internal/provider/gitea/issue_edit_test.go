@@ -2,29 +2,37 @@ package gitea
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
 	sdk "gitea.dev/sdk"
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
+	"github.com/rochecompaan/repowolf/internal/rpcstatus"
 )
 
 type issueEditAPI struct {
 	fakeIssueAPI
 	reads                                               []*sdk.Issue
+	readErrors                                          []error
 	read                                                int
 	calls                                               []string
 	users                                               []*sdk.User
 	labels                                              []*sdk.Label
 	editResult, deleteAssigneeResult, addAssigneeResult *sdk.Issue
+	editErr                                             error
 	addLabelResult                                      []*sdk.Label
 }
 
 func (f *issueEditAPI) GetIssue(context.Context, string, string, int64) (*sdk.Issue, int, error) {
 	value := f.reads[f.read]
+	var err error
+	if f.read < len(f.readErrors) {
+		err = f.readErrors[f.read]
+	}
 	f.read++
 	f.calls = append(f.calls, "get")
-	return value, 200, nil
+	return value, 200, err
 }
 func (f *issueEditAPI) GetAssignees(context.Context, string, string) ([]*sdk.User, error) {
 	f.calls = append(f.calls, "users")
@@ -36,7 +44,7 @@ func (f *issueEditAPI) ListRepoLabels(context.Context, string, string, sdk.ListL
 }
 func (f *issueEditAPI) EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, error) {
 	f.calls = append(f.calls, "text")
-	return f.editResult, nil
+	return f.editResult, f.editErr
 }
 func (f *issueEditAPI) DeleteIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, error) {
 	f.calls = append(f.calls, "remove-assignees")
@@ -76,6 +84,50 @@ func TestIssueEditNoOp(t *testing.T) {
 	if err != nil || response.GetIssueEdit().GetIssue().Title != "title" || !reflect.DeepEqual(api.calls, []string{"get"}) {
 		t.Fatalf("calls=%v err=%v response=%#v", api.calls, err, response)
 	}
+}
+
+func TestIssueEditReconcilesOnce(t *testing.T) {
+	old := editSDKIssue("old", "body", nil, nil)
+	updated := editSDKIssue("new", "body", nil, nil)
+	api := &issueEditAPI{reads: []*sdk.Issue{old, old, updated}, editResult: updated}
+	adapter, _ := newRepositoryAdapter(api)
+	title := "new"
+	_, err := adapter.issueEdit(context.Background(), issueResolved(), &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title})
+	want := []string{"get", "text", "get", "text", "get"}
+	if err != nil || !reflect.DeepEqual(api.calls, want) {
+		t.Fatalf("calls=%v err=%v", api.calls, err)
+	}
+}
+
+func TestIssueEditClassifiesPartialAndUnknown(t *testing.T) {
+	old := editSDKIssue("old", "body", nil, nil)
+	updated := editSDKIssue("new", "body", nil, nil)
+	title := "new"
+	request := &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title}
+	t.Run("confirmed then final read failure is partial", func(t *testing.T) {
+		api := &issueEditAPI{reads: []*sdk.Issue{old, nil}, readErrors: []error{nil, errors.New("read")}, editResult: updated}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+		if !errors.Is(err, rpcstatus.ErrEditPartial) {
+			t.Fatalf("err=%v", err)
+		}
+	})
+	t.Run("uncertain call remains unknown when recovery is unsatisfied", func(t *testing.T) {
+		api := &issueEditAPI{reads: []*sdk.Issue{old, old}, editErr: errors.New("write")}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+		if !errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) || !reflect.DeepEqual(api.calls, []string{"get", "text", "get"}) {
+			t.Fatalf("calls=%v err=%v", api.calls, err)
+		}
+	})
+	t.Run("recovery read may prove success", func(t *testing.T) {
+		api := &issueEditAPI{reads: []*sdk.Issue{old, updated}, editErr: errors.New("write")}
+		adapter, _ := newRepositoryAdapter(api)
+		response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+		if err != nil || response.GetIssueEdit().GetIssue().Title != "new" {
+			t.Fatalf("response=%#v err=%v", response, err)
+		}
+	})
 }
 
 func TestIssueEditExecutionOrder(t *testing.T) {
