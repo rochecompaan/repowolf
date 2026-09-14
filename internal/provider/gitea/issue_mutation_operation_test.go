@@ -1,11 +1,13 @@
 package gitea
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	repowolfv1 "github.com/rochecompaan/repowolf/gen/repowolf/v1"
 	"github.com/rochecompaan/repowolf/internal/config"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -73,5 +75,104 @@ func TestValidateMutationAndOperation(t *testing.T) {
 		if ValidateRequest(r) == nil {
 			t.Fatalf("accepted invalid request %#v", r)
 		}
+	}
+}
+
+func TestValidateIssueEditAndOperation(t *testing.T) {
+	request := func(edit *repowolfv1.GiteaIssueEditRequest) *repowolfv1.GiteaRequest {
+		return &repowolfv1.GiteaRequest{Operation: &repowolfv1.GiteaRequest_IssueEdit{IssueEdit: edit}}
+	}
+
+	valid := []struct {
+		name string
+		edit *repowolfv1.GiteaIssueEditRequest
+	}{
+		{
+			name: "empty set remains an explicit mutation",
+			edit: &repowolfv1.GiteaIssueEditRequest{
+				Index: 7,
+				AssigneeAction: &repowolfv1.GiteaIssueEditRequest_SetAssignees{
+					SetAssignees: &repowolfv1.GiteaStringList{},
+				},
+			},
+		},
+		{name: "empty description", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, Description: proto.String("")}},
+		{
+			name: "exact text bounds",
+			edit: &repowolfv1.GiteaIssueEditRequest{
+				Index:       7,
+				Title:       proto.String(strings.Repeat("界", 255)),
+				Description: proto.String(strings.Repeat("x", maximumMutationBodyBytes)),
+			},
+		},
+	}
+	for _, test := range valid {
+		t.Run("valid "+test.name, func(t *testing.T) {
+			r := request(test.edit)
+			if err := ValidateRequest(r); err != nil {
+				t.Fatalf("ValidateRequest() error = %v", err)
+			}
+			if capability, err := Capability(r); err != nil || capability != config.IssuesWrite {
+				t.Fatalf("Capability() = %q, %v", capability, err)
+			}
+			if operation, err := OperationName(r); err != nil || operation != "gitea.issue_edit" {
+				t.Fatalf("OperationName() = %q, %v", operation, err)
+			}
+		})
+	}
+
+	tooMany := make([]string, 26)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("name-%02d", i)
+	}
+	var nilSetAction *repowolfv1.GiteaIssueEditRequest_SetAssignees
+	var nilLabelAction *repowolfv1.GiteaIssueEditRequest_AddLabels
+	invalidUTF8 := string([]byte{0xff})
+	invalid := []struct {
+		name string
+		edit *repowolfv1.GiteaIssueEditRequest
+	}{
+		{name: "nil edit", edit: nil},
+		{name: "zero index", edit: &repowolfv1.GiteaIssueEditRequest{Index: 0, Title: proto.String("title")}},
+		{name: "negative index", edit: &repowolfv1.GiteaIssueEditRequest{Index: -1, Title: proto.String("title")}},
+		{name: "no mutation", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7}},
+		{name: "empty title", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: proto.String("")}},
+		{name: "title over rune limit", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: proto.String(strings.Repeat("界", 256))}},
+		{name: "description over byte limit", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, Description: proto.String(strings.Repeat("x", maximumMutationBodyBytes+1))}},
+		{name: "invalid UTF-8 title", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: proto.String(invalidUTF8)}},
+		{name: "invalid UTF-8 description", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, Description: proto.String(invalidUTF8)}},
+		{name: "NUL title", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: proto.String("bad\x00title")}},
+		{name: "NUL description", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, Description: proto.String("bad\x00body")}},
+		{name: "nil set wrapper", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_SetAssignees{}}},
+		{name: "nil add assignee wrapper", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_AddAssignees{}}},
+		{name: "nil remove assignee wrapper", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_RemoveAssignees{}}},
+		{name: "nil add label wrapper", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_AddLabels{}}},
+		{name: "nil remove label wrapper", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{}}},
+		{name: "typed nil assignee action", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: nilSetAction}},
+		{name: "typed nil label action", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: nilLabelAction}},
+		{name: "empty add assignees", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_AddAssignees{AddAssignees: &repowolfv1.GiteaStringList{}}}},
+		{name: "empty remove assignees", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_RemoveAssignees{RemoveAssignees: &repowolfv1.GiteaStringList{}}}},
+		{name: "empty add labels", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_AddLabels{AddLabels: &repowolfv1.GiteaStringList{}}}},
+		{name: "empty remove labels", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{}}}},
+		{name: "empty list member", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_SetAssignees{SetAssignees: &repowolfv1.GiteaStringList{Values: []string{""}}}}},
+		{name: "duplicate list member", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_AddLabels{AddLabels: &repowolfv1.GiteaStringList{Values: []string{"bug", "bug"}}}}},
+		{name: "too many list members", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_AddAssignees{AddAssignees: &repowolfv1.GiteaStringList{Values: tooMany}}}},
+		{name: "list member over rune limit", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: []string{strings.Repeat("界", 256)}}}}},
+		{name: "invalid UTF-8 list member", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_RemoveAssignees{RemoveAssignees: &repowolfv1.GiteaStringList{Values: []string{invalidUTF8}}}}},
+		{name: "NUL list member", edit: &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_AddLabels{AddLabels: &repowolfv1.GiteaStringList{Values: []string{"bad\x00label"}}}}},
+	}
+	for _, test := range invalid {
+		t.Run("invalid "+test.name, func(t *testing.T) {
+			r := request(test.edit)
+			if err := ValidateRequest(r); err == nil {
+				t.Fatal("ValidateRequest() accepted invalid issue edit")
+			}
+			if capability, err := Capability(r); err == nil || capability != "" {
+				t.Fatalf("Capability() = %q, %v", capability, err)
+			}
+			if operation, err := OperationName(r); err == nil || operation != "" {
+				t.Fatalf("OperationName() = %q, %v", operation, err)
+			}
+		})
 	}
 }

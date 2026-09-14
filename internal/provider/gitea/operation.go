@@ -73,11 +73,17 @@ func validateIssueEdit(r *repowolfv1.GiteaIssueEditRequest) error {
 	switch action := r.AssigneeAction.(type) {
 	case nil:
 	case *repowolfv1.GiteaIssueEditRequest_SetAssignees:
-		assignees, allowEmpty = action.SetAssignees, true
+		if action != nil {
+			assignees, allowEmpty = action.SetAssignees, true
+		}
 	case *repowolfv1.GiteaIssueEditRequest_AddAssignees:
-		assignees = action.AddAssignees
+		if action != nil {
+			assignees = action.AddAssignees
+		}
 	case *repowolfv1.GiteaIssueEditRequest_RemoveAssignees:
-		assignees = action.RemoveAssignees
+		if action != nil {
+			assignees = action.RemoveAssignees
+		}
 	default:
 		return ErrInvalidRequest
 	}
@@ -88,9 +94,13 @@ func validateIssueEdit(r *repowolfv1.GiteaIssueEditRequest) error {
 	switch action := r.LabelAction.(type) {
 	case nil:
 	case *repowolfv1.GiteaIssueEditRequest_AddLabels:
-		labels = action.AddLabels
+		if action != nil {
+			labels = action.AddLabels
+		}
 	case *repowolfv1.GiteaIssueEditRequest_RemoveLabels:
-		labels = action.RemoveLabels
+		if action != nil {
+			labels = action.RemoveLabels
+		}
 	default:
 		return ErrInvalidRequest
 	}
