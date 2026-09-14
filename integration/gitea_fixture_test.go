@@ -117,15 +117,33 @@ func nextIPv4Address(t *testing.T, address string) string {
 
 func (fixture *restrictedGiteaFixture) requestCount(t *testing.T, method, requestPath string) int {
 	t.Helper()
+	return fixture.requestCountPrefix(t, method, requestPath, true)
+}
+
+func (fixture *restrictedGiteaFixture) requestCountPrefix(t *testing.T, method, requestPath string, exact bool) int {
+	t.Helper()
 	logs := dockerOutput(t, "logs", fixture.container)
 	needle := method + " " + requestPath
 	count := 0
 	for _, line := range strings.Split(logs, "\n") {
-		if strings.Contains(line, needle) {
-			count++
+		if !strings.Contains(line, needle) {
+			continue
 		}
+		if exact {
+			suffix := strings.SplitN(line, needle, 2)[1]
+			if suffix != "" && suffix[0] != ' ' && suffix[0] != '?' {
+				continue
+			}
+		}
+		count++
 	}
 	return count
+}
+
+func (fixture *restrictedGiteaFixture) createAssignableUser(t *testing.T, username string) {
+	t.Helper()
+	dockerOutput(t, "exec", "--user", "git", fixture.container, "gitea", "admin", "user", "create", "--username", username, "--password", "correct-horse-battery-staple", "--email", strings.ToLower(username)+"@example.invalid", "--must-change-password=false")
+	giteaJSON(t, fixture.client, http.MethodPut, fixture.baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/collaborators/"+username, fixture.token, map[string]any{"permission": "write"}, nil, "", "")
 }
 
 func (fixture *restrictedGiteaFixture) startBroker(t *testing.T) restrictedGiteaBroker {
@@ -212,7 +230,7 @@ func TestGiteaFailureProxyProcess(t *testing.T) {
 	proxy.Transport = transport
 	mode := os.Getenv("REPOWOLF_GITEA_PROXY_MODE")
 	issuePath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + os.Getenv("REPOWOLF_GITEA_PROXY_ISSUE")
-	var textWritten, concurrentMutation atomic.Bool
+	var textWritten, concurrentMutation, textRejected atomic.Bool
 	proxy.ModifyResponse = func(response *http.Response) error {
 		if mode == "corrupt-create" && response.Request.Method == http.MethodPost && response.Request.URL.Path == "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues" {
 			if response.Body != nil {
@@ -228,9 +246,14 @@ func TestGiteaFailureProxyProcess(t *testing.T) {
 			return nil
 		}
 		textWritten.Store(true)
-		if mode == "concurrent-label" && concurrentMutation.CompareAndSwap(false, true) {
-			mutationURL := target.ResolveReference(&url.URL{Path: issuePath + "/labels"})
+		if (mode == "concurrent-label" || mode == "concurrent-assignee") && concurrentMutation.CompareAndSwap(false, true) {
+			mutationPath := issuePath + "/labels"
 			body := []byte(`{"labels":[` + os.Getenv("REPOWOLF_GITEA_PROXY_LABEL") + `]}`)
+			if mode == "concurrent-assignee" {
+				mutationPath = issuePath + "/assignees"
+				body = []byte(`{"assignees":["SecondAssignee"]}`)
+			}
+			mutationURL := target.ResolveReference(&url.URL{Path: mutationPath})
 			request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, mutationURL.String(), bytes.NewReader(body))
 			if err != nil {
 				return err
@@ -250,9 +273,13 @@ func TestGiteaFailureProxyProcess(t *testing.T) {
 		return nil
 	}
 	handler := http.Handler(proxy)
-	if mode == "fail-read-after-text" {
+	if mode == "fail-read-after-text" || mode == "fail-first-text-before-upstream" {
 		handler = http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if textWritten.Load() && request.Method == http.MethodGet && request.URL.Path == issuePath {
+			if mode == "fail-read-after-text" && textWritten.Load() && request.Method == http.MethodGet && request.URL.Path == issuePath {
+				http.Error(writer, "failed", http.StatusInternalServerError)
+				return
+			}
+			if mode == "fail-first-text-before-upstream" && request.Method == http.MethodPatch && request.URL.Path == issuePath && textRejected.CompareAndSwap(false, true) {
 				http.Error(writer, "failed", http.StatusInternalServerError)
 				return
 			}

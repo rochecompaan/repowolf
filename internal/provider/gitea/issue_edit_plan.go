@@ -192,7 +192,7 @@ func planIssueEdit(intent editIntent, issue *normalizedIssue, catalogs editCatal
 		plan.addLabelIDs = append(plan.addLabelIDs, id)
 	}
 	for _, name := range removeNames {
-		id := catalogs.labels[name]
+		id := issue.labelIDs[name]
 		if id <= 0 {
 			return issueEditPlan{}, fmt.Errorf("missing label")
 		}

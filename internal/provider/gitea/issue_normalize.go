@@ -17,6 +17,7 @@ type normalizedIssue struct {
 	created, updated                      time.Time
 	deadline                              *time.Time
 	assignees, labels                     []string
+	labelIDs                              map[string]int64
 	milestone                             *string
 }
 
@@ -67,12 +68,13 @@ func normalizeIssue(v *sdk.Issue, owner, repo string) (*normalizedIssue, error) 
 		n.assignees[i] = a.UserName
 	}
 	n.labels = make([]string, len(v.Labels))
-	labelIDs, labelNames := map[int64]bool{}, map[string]bool{}
+	n.labelIDs = make(map[string]int64, len(v.Labels))
+	seenLabelIDs := map[int64]bool{}
 	for i, l := range v.Labels {
-		if l == nil || l.ID <= 0 || l.Name == "" || !validProviderString(l.Name) || labelIDs[l.ID] || labelNames[l.Name] {
+		if l == nil || l.ID <= 0 || l.Name == "" || !validProviderString(l.Name) || seenLabelIDs[l.ID] || n.labelIDs[l.Name] != 0 {
 			return nil, fmt.Errorf("invalid label")
 		}
-		labelIDs[l.ID], labelNames[l.Name] = true, true
+		seenLabelIDs[l.ID], n.labelIDs[l.Name] = true, l.ID
 		n.labels[i] = l.Name
 	}
 	return n, nil

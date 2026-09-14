@@ -21,8 +21,8 @@ func TestEditSatisfied(t *testing.T) {
 func TestPlanIssueEdit(t *testing.T) {
 	body := "body"
 	intent := editIntent{body: &body, assigneeMode: editSet, assignees: []string{"bob", "carol"}, labelMode: editRemove, labels: []string{"stale"}}
-	issue := &normalizedIssue{title: "title", body: "old", assignees: []string{"dave", "bob", "alice"}, labels: []string{"stale", "keep"}}
-	plan, err := planIssueEdit(intent, issue, editCatalogs{labels: map[string]int64{"stale": 9}})
+	issue := &normalizedIssue{title: "title", body: "old", assignees: []string{"dave", "bob", "alice"}, labels: []string{"stale", "keep"}, labelIDs: map[string]int64{"stale": 9, "keep": 10}}
+	plan, err := planIssueEdit(intent, issue, editCatalogs{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -32,6 +32,14 @@ func (a *RepositoryAdapter) collectEditCatalogs(ctx context.Context, owner, repo
 			}
 		}
 	}
+	if intent.labelMode == editAdd {
+		requested := nameSet(intent.labels)
+		for _, name := range issue.labels {
+			if requested[name] {
+				catalogs.labels[name] = issue.labelIDs[name]
+			}
+		}
+	}
 	neededLabels := neededLabelNames(intent, issue)
 	if len(neededLabels) > 0 {
 		ids, err := a.resolveLabelIDs(ctx, owner, repo, neededLabels)
@@ -46,22 +54,13 @@ func (a *RepositoryAdapter) collectEditCatalogs(ctx context.Context, owner, repo
 }
 
 func neededLabelNames(intent editIntent, issue *normalizedIssue) []string {
-	current := nameSet(issue.labels)
-	if intent.labelMode == editRemove {
-		withoutLabels := intent
-		withoutLabels.labelMode, withoutLabels.labels = editNone, nil
-		mayReconcile := !editSatisfied(withoutLabels, issue)
-		for _, name := range intent.labels {
-			mayReconcile = mayReconcile || current[name]
-		}
-		if mayReconcile {
-			return append([]string(nil), intent.labels...)
-		}
+	if intent.labelMode != editAdd {
 		return nil
 	}
+	current := nameSet(issue.labels)
 	out := make([]string, 0, len(intent.labels))
 	for _, name := range intent.labels {
-		if intent.labelMode == editAdd && !current[name] {
+		if !current[name] {
 			out = append(out, name)
 		}
 	}

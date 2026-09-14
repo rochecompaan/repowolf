@@ -40,21 +40,32 @@ func TestCollectEditCatalogsOnlyWhenNeeded(t *testing.T) {
 	}
 }
 
-func TestCollectEditCatalogsRetainsRemoveLabelForReconciliation(t *testing.T) {
+func TestCollectEditCatalogsRetainsAllAddLabelsForReconciliation(t *testing.T) {
 	title := "new"
-	api := &editCatalogAPI{labels: map[int][]*sdk.Label{1: {{ID: 9, Name: "stale"}}}}
+	api := &editCatalogAPI{labels: map[int][]*sdk.Label{1: {{ID: 9, Name: "present"}, {ID: 10, Name: "missing"}}}}
 	adapter, _ := newRepositoryAdapter(api)
-	catalogs, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{title: &title, labelMode: editRemove, labels: []string{"stale"}}, &normalizedIssue{title: "old"})
-	if err != nil || catalogs.labels["stale"] != 9 || api.labelCalls != 1 {
+	catalogs, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{title: &title, labelMode: editAdd, labels: []string{"present", "missing"}}, &normalizedIssue{title: "old", labels: []string{"present"}, labelIDs: map[string]int64{"present": 9}})
+	if err != nil || catalogs.labels["present"] != 9 || catalogs.labels["missing"] != 10 || api.labelCalls != 1 {
 		t.Fatalf("catalogs=%#v calls=%d err=%v", catalogs, api.labelCalls, err)
 	}
 }
 
-func TestCollectEditCatalogsRetainsAllRemoveLabelsWhenOneMayWrite(t *testing.T) {
-	api := &editCatalogAPI{labels: map[int][]*sdk.Label{1: {{ID: 9, Name: "present"}, {ID: 10, Name: "absent"}}}}
+func TestCollectEditCatalogsRetainsPresentAddLabelWithoutRead(t *testing.T) {
+	title := "new"
+	api := &editCatalogAPI{}
 	adapter, _ := newRepositoryAdapter(api)
-	catalogs, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{labelMode: editRemove, labels: []string{"present", "absent"}}, &normalizedIssue{labels: []string{"present"}})
-	if err != nil || catalogs.labels["present"] != 9 || catalogs.labels["absent"] != 10 || api.labelCalls != 1 {
+	catalogs, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{title: &title, labelMode: editAdd, labels: []string{"present"}}, &normalizedIssue{title: "old", labels: []string{"present"}, labelIDs: map[string]int64{"present": 9}})
+	if err != nil || catalogs.labels["present"] != 9 || api.labelCalls != 0 {
+		t.Fatalf("catalogs=%#v calls=%d err=%v", catalogs, api.labelCalls, err)
+	}
+}
+
+func TestCollectEditCatalogsSkipsRemoveLabels(t *testing.T) {
+	title := "new"
+	api := &editCatalogAPI{}
+	adapter, _ := newRepositoryAdapter(api)
+	catalogs, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{title: &title, labelMode: editRemove, labels: []string{"present", "absent"}}, &normalizedIssue{title: "old", labels: []string{"present"}, labelIDs: map[string]int64{"present": 9}})
+	if err != nil || len(catalogs.labels) != 0 || api.labelCalls != 0 {
 		t.Fatalf("catalogs=%#v calls=%d err=%v", catalogs, api.labelCalls, err)
 	}
 }
