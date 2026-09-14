@@ -176,6 +176,27 @@ func TestIssueEditReconcilesConcurrentLabelRemoval(t *testing.T) {
 	}
 }
 
+func TestIssueEditReconciliationUsesFreshLabelIdentity(t *testing.T) {
+	initial := editSDKIssue("old", "body", nil, []string{"stale"})
+	textEdited := editSDKIssue("new", "body", nil, []string{"stale"})
+	concurrent := editSDKIssue("new", "body", nil, []string{"stale"})
+	concurrent.Labels[0].ID = 42
+	final := editSDKIssue("new", "body", nil, nil)
+	api := &issueEditAPI{
+		reads:      []*sdk.Issue{initial, concurrent, final},
+		labels:     []*sdk.Label{{ID: 20, Name: "stale"}},
+		editResult: textEdited,
+	}
+	adapter, _ := newRepositoryAdapter(api)
+	title := "new"
+	request := &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: []string{"stale"}}}}
+	response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+	wantCalls := []string{"get", "labels", "text", "remove-label", "get", "remove-label", "get"}
+	if err != nil || !reflect.DeepEqual(api.calls, wantCalls) || !reflect.DeepEqual(api.deletedLabelIDs, []int64{20, 42}) || len(response.GetIssueEdit().GetIssue().Labels) != 0 {
+		t.Fatalf("calls=%v deleted=%v response=%#v err=%v", api.calls, api.deletedLabelIDs, response, err)
+	}
+}
+
 func TestIssueEditReconcilesConcurrentRemovalOfRequestedAddLabel(t *testing.T) {
 	initial := editSDKIssue("old", "body", nil, []string{"bug"})
 	textEdited := editSDKIssue("new", "body", nil, []string{"bug"})
