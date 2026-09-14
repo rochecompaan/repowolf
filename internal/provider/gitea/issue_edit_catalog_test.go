@@ -13,16 +13,17 @@ type editCatalogAPI struct {
 	fakeIssueAPI
 	users                 []*sdk.User
 	labels                map[int][]*sdk.Label
+	userErr, labelErr     error
 	userCalls, labelCalls int
 }
 
 func (f *editCatalogAPI) GetAssignees(context.Context, string, string) ([]*sdk.User, error) {
 	f.userCalls++
-	return f.users, nil
+	return f.users, f.userErr
 }
 func (f *editCatalogAPI) ListRepoLabels(_ context.Context, _, _ string, option sdk.ListLabelsOptions) ([]*sdk.Label, error) {
 	f.labelCalls++
-	return f.labels[option.Page], nil
+	return f.labels[option.Page], f.labelErr
 }
 
 func TestCollectEditCatalogsOnlyWhenNeeded(t *testing.T) {
@@ -95,4 +96,57 @@ func TestCollectEditCatalogsRejectsMissingTarget(t *testing.T) {
 	if !errors.Is(err, rpcstatus.ErrFailedPrecondition) {
 		t.Fatalf("err=%v", err)
 	}
+}
+
+func TestEditAssigneeCatalogRejectsMalformedCollections(t *testing.T) {
+	tests := []struct {
+		name  string
+		users []*sdk.User
+	}{
+		{name: "nil user", users: []*sdk.User{nil}},
+		{name: "non-positive id", users: []*sdk.User{{ID: 0, UserName: "alice"}}},
+		{name: "empty username", users: []*sdk.User{{ID: 1}}},
+		{name: "invalid username", users: []*sdk.User{{ID: 1, UserName: "alice\x00secret"}}},
+		{name: "duplicate id", users: []*sdk.User{{ID: 1, UserName: "alice"}, {ID: 1, UserName: "bob"}}},
+		{name: "duplicate username", users: []*sdk.User{{ID: 1, UserName: "alice"}, {ID: 2, UserName: "alice"}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			api := &editCatalogAPI{users: test.users}
+			adapter, _ := newRepositoryAdapter(api)
+			catalogs, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{assigneeMode: editAdd, assignees: []string{"alice"}}, &normalizedIssue{})
+			if len(catalogs.assignees) != 0 || !errors.Is(err, rpcstatus.ErrProviderFailure) || api.userCalls != 1 || api.labelCalls != 0 {
+				t.Fatalf("catalogs=%#v calls=%d/%d err=%v", catalogs, api.userCalls, api.labelCalls, err)
+			}
+		})
+	}
+}
+
+func TestEditCatalogProviderFailuresAndCancellation(t *testing.T) {
+	t.Run("assignee provider failure", func(t *testing.T) {
+		api := &editCatalogAPI{userErr: errors.New("provider secret")}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{assigneeMode: editAdd, assignees: []string{"alice"}}, &normalizedIssue{})
+		if !errors.Is(err, rpcstatus.ErrProviderFailure) || api.userCalls != 1 || api.labelCalls != 0 {
+			t.Fatalf("calls=%d/%d err=%v", api.userCalls, api.labelCalls, err)
+		}
+	})
+	t.Run("label provider failure", func(t *testing.T) {
+		api := &editCatalogAPI{labelErr: errors.New("provider secret"), labels: map[int][]*sdk.Label{}}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{labelMode: editAdd, labels: []string{"bug"}}, &normalizedIssue{})
+		if !errors.Is(err, rpcstatus.ErrProviderFailure) || api.userCalls != 0 || api.labelCalls != 1 {
+			t.Fatalf("calls=%d/%d err=%v", api.userCalls, api.labelCalls, err)
+		}
+	})
+	t.Run("cancelled before collection", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		api := &editCatalogAPI{users: []*sdk.User{{ID: 1, UserName: "alice"}}}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.collectEditCatalogs(ctx, "Owner", "Repo", editIntent{assigneeMode: editAdd, assignees: []string{"alice"}}, &normalizedIssue{})
+		if !errors.Is(err, context.Canceled) || api.userCalls != 0 || api.labelCalls != 0 {
+			t.Fatalf("calls=%d/%d err=%v", api.userCalls, api.labelCalls, err)
+		}
+	})
 }

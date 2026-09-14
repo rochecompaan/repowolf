@@ -19,12 +19,14 @@ type issueEditAPI struct {
 	read                                                int
 	calls                                               []string
 	users                                               []*sdk.User
+	usersErr                                            error
 	labels                                              []*sdk.Label
 	labelPages                                          map[int][]*sdk.Label
 	editResult, deleteAssigneeResult, addAssigneeResult *sdk.Issue
-	deleteAssigneeResults                               []*sdk.Issue
-	deleteAssigneeCalls                                 int
+	editResults, deleteAssigneeResults                  []*sdk.Issue
+	deleteAssigneeCalls, editCalls                      int
 	editErr, deleteAssigneeErr, addAssigneeErr          error
+	editErrors                                          []error
 	editHook                                            func()
 	addLabelResult                                      []*sdk.Label
 	addLabelErr, deleteLabelErr                         error
@@ -45,7 +47,7 @@ func (f *issueEditAPI) GetIssue(context.Context, string, string, int64) (*sdk.Is
 }
 func (f *issueEditAPI) GetAssignees(context.Context, string, string) ([]*sdk.User, error) {
 	f.calls = append(f.calls, "users")
-	return f.users, nil
+	return f.users, f.usersErr
 }
 func (f *issueEditAPI) ListRepoLabels(_ context.Context, _, _ string, option sdk.ListLabelsOptions) ([]*sdk.Label, error) {
 	f.calls = append(f.calls, "labels")
@@ -59,7 +61,15 @@ func (f *issueEditAPI) EditIssue(context.Context, string, string, int64, sdk.Edi
 	if f.editHook != nil {
 		f.editHook()
 	}
-	return f.editResult, f.editErr
+	result, err := f.editResult, f.editErr
+	if f.editCalls < len(f.editResults) {
+		result = f.editResults[f.editCalls]
+	}
+	if f.editCalls < len(f.editErrors) {
+		err = f.editErrors[f.editCalls]
+	}
+	f.editCalls++
+	return result, err
 }
 func (f *issueEditAPI) DeleteIssueAssignees(_ context.Context, _, _ string, _ int64, option sdk.IssueAssigneesOption) (*sdk.Issue, error) {
 	f.calls = append(f.calls, "remove-assignees")
@@ -382,6 +392,152 @@ func TestIssueEditFailureBoundaries(t *testing.T) {
 			t.Fatalf("calls=%v err=%v", api.calls, err)
 		}
 	})
+}
+
+func TestIssueEditWriteFailureMatrix(t *testing.T) {
+	tests := []struct {
+		name        string
+		request     *repowolfv1.GiteaIssueEditRequest
+		api         *issueEditAPI
+		wantCalls   []string
+		wantUnknown bool
+	}{
+		{
+			name:      "assignee removal provider error",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_SetAssignees{SetAssignees: &repowolfv1.GiteaStringList{}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("title", "body", []string{"old"}, nil), editSDKIssue("title", "body", []string{"old"}, nil)}, deleteAssigneeErr: errors.New("secret")},
+			wantCalls: []string{"get", "remove-assignees", "get"}, wantUnknown: true,
+		},
+		{
+			name:      "assignee removal invalid response",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_SetAssignees{SetAssignees: &repowolfv1.GiteaStringList{}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("title", "body", []string{"old"}, nil), editSDKIssue("title", "body", []string{"old"}, nil)}},
+			wantCalls: []string{"get", "remove-assignees", "get"}, wantUnknown: true,
+		},
+		{
+			name:      "assignee addition provider error",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_AddAssignees{AddAssignees: &repowolfv1.GiteaStringList{Values: []string{"alice"}}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("title", "body", nil, nil), editSDKIssue("title", "body", nil, nil)}, users: []*sdk.User{{ID: 1, UserName: "alice"}}, addAssigneeErr: errors.New("secret")},
+			wantCalls: []string{"get", "users", "add-assignees", "get"}, wantUnknown: true,
+		},
+		{
+			name:      "assignee addition invalid response",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_AddAssignees{AddAssignees: &repowolfv1.GiteaStringList{Values: []string{"alice"}}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("title", "body", nil, nil), editSDKIssue("title", "body", nil, nil)}, users: []*sdk.User{{ID: 1, UserName: "alice"}}},
+			wantCalls: []string{"get", "users", "add-assignees", "get"}, wantUnknown: true,
+		},
+		{
+			name:      "label addition invalid response",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_AddLabels{AddLabels: &repowolfv1.GiteaStringList{Values: []string{"bug"}}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("title", "body", nil, nil), editSDKIssue("title", "body", nil, nil)}, labels: []*sdk.Label{{ID: 20, Name: "bug"}}},
+			wantCalls: []string{"get", "labels", "add-labels", "get"}, wantUnknown: true,
+		},
+		{
+			name:      "label removal provider error",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: []string{"stale"}}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("title", "body", nil, []string{"stale"}), editSDKIssue("title", "body", nil, []string{"stale"})}, labels: []*sdk.Label{{ID: 20, Name: "stale"}}, deleteLabelErr: errors.New("secret")},
+			wantCalls: []string{"get", "labels", "remove-label", "get"}, wantUnknown: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			adapter, _ := newRepositoryAdapter(test.api)
+			response, err := adapter.issueEdit(context.Background(), issueResolved(), test.request)
+			if response != nil || test.wantUnknown && !errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) || !reflect.DeepEqual(test.api.calls, test.wantCalls) {
+				t.Fatalf("calls=%v response=%#v err=%v", test.api.calls, response, err)
+			}
+		})
+	}
+}
+
+func TestIssueEditCorrectivePassFailureMatrix(t *testing.T) {
+	old := editSDKIssue("old", "body", nil, nil)
+	updated := editSDKIssue("new", "body", nil, nil)
+	title := "new"
+	request := &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title}
+	tests := []struct {
+		name      string
+		api       *issueEditAPI
+		wantError error
+	}{
+		{name: "second final read failure is partial", api: &issueEditAPI{reads: []*sdk.Issue{old, old, nil}, readErrors: []error{nil, nil, errors.New("secret")}, editResult: updated}, wantError: rpcstatus.ErrEditPartial},
+		{name: "corrective provider error remains unknown", api: &issueEditAPI{reads: []*sdk.Issue{old, old, old}, editResult: updated, editErrors: []error{nil, errors.New("secret")}}, wantError: rpcstatus.ErrWriteOutcomeUnknown},
+		{name: "corrective invalid response remains unknown", api: &issueEditAPI{reads: []*sdk.Issue{old, old, old}, editResults: []*sdk.Issue{updated, nil}}, wantError: rpcstatus.ErrWriteOutcomeUnknown},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			adapter, _ := newRepositoryAdapter(test.api)
+			response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+			wantCalls := []string{"get", "text", "get", "text", "get"}
+			if response != nil || !errors.Is(err, test.wantError) || !reflect.DeepEqual(test.api.calls, wantCalls) {
+				t.Fatalf("calls=%v response=%#v err=%v", test.api.calls, response, err)
+			}
+		})
+	}
+}
+
+func TestIssueEditCorrectiveCollectionStepFailuresRemainUnknown(t *testing.T) {
+	title := "new"
+	textOnlyResult := editSDKIssue("new", "body", nil, nil)
+	tests := []struct {
+		name      string
+		request   *repowolfv1.GiteaIssueEditRequest
+		api       *issueEditAPI
+		wantCalls []string
+	}{
+		{
+			name:      "assignee removal",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_SetAssignees{SetAssignees: &repowolfv1.GiteaStringList{}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("old", "body", nil, nil), editSDKIssue("new", "body", []string{"old"}, nil), editSDKIssue("new", "body", []string{"old"}, nil)}, editResult: textOnlyResult, deleteAssigneeErr: errors.New("secret")},
+			wantCalls: []string{"get", "text", "get", "remove-assignees", "get"},
+		},
+		{
+			name:      "assignee addition",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_AddAssignees{AddAssignees: &repowolfv1.GiteaStringList{Values: []string{"alice"}}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("old", "body", []string{"alice"}, nil), editSDKIssue("new", "body", nil, nil), editSDKIssue("new", "body", nil, nil)}, users: []*sdk.User{{ID: 1, UserName: "alice"}}, editResult: editSDKIssue("new", "body", []string{"alice"}, nil), addAssigneeErr: errors.New("secret")},
+			wantCalls: []string{"get", "users", "text", "get", "add-assignees", "get"},
+		},
+		{
+			name:      "label addition",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title, LabelAction: &repowolfv1.GiteaIssueEditRequest_AddLabels{AddLabels: &repowolfv1.GiteaStringList{Values: []string{"bug"}}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("old", "body", nil, []string{"bug"}), editSDKIssue("new", "body", nil, nil), editSDKIssue("new", "body", nil, nil)}, editResult: editSDKIssue("new", "body", nil, []string{"bug"}), addLabelErr: errors.New("secret")},
+			wantCalls: []string{"get", "text", "get", "add-labels", "get"},
+		},
+		{
+			name:      "label removal",
+			request:   &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: []string{"stale"}}}},
+			api:       &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("old", "body", nil, nil), editSDKIssue("new", "body", nil, []string{"stale"}), editSDKIssue("new", "body", nil, []string{"stale"})}, editResult: textOnlyResult, deleteLabelErr: errors.New("secret")},
+			wantCalls: []string{"get", "text", "get", "remove-label", "get"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			adapter, _ := newRepositoryAdapter(test.api)
+			response, err := adapter.issueEdit(context.Background(), issueResolved(), test.request)
+			if response != nil || !errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) || !reflect.DeepEqual(test.api.calls, test.wantCalls) {
+				t.Fatalf("calls=%v response=%#v err=%v", test.api.calls, response, err)
+			}
+		})
+	}
+}
+
+func TestIssueEditCatalogFailuresMakeZeroWrites(t *testing.T) {
+	request := &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_AddAssignees{AddAssignees: &repowolfv1.GiteaStringList{Values: []string{"alice"}}}}
+	for _, test := range []struct {
+		name string
+		api  *issueEditAPI
+	}{
+		{name: "malformed collection", api: &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("title", "body", nil, nil)}, users: []*sdk.User{{ID: 1, UserName: "alice"}, {ID: 1, UserName: "other"}}}},
+		{name: "provider failure", api: &issueEditAPI{reads: []*sdk.Issue{editSDKIssue("title", "body", nil, nil)}, usersErr: errors.New("secret")}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			adapter, _ := newRepositoryAdapter(test.api)
+			response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+			if response != nil || !errors.Is(err, rpcstatus.ErrProviderFailure) || !reflect.DeepEqual(test.api.calls, []string{"get", "users"}) {
+				t.Fatalf("calls=%v response=%#v err=%v", test.api.calls, response, err)
+			}
+		})
+	}
 }
 
 func TestIssueEditExecutionOrder(t *testing.T) {
