@@ -40,20 +40,25 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	operationContext, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
 	if err := executeCommand(operationContext, repowolfv1.NewGiteaServiceClient(connection), parsed, stdout); err != nil {
-		if rpcstatus.IsIssueKindStatus(err) {
-			writeDiagnostic(stderr, "tea: index is a pull request; use tea pulls\n")
-		} else if parsed.request.GetIssueEdit() != nil && rpcstatus.IsGiteaEditPartial(err) {
-			writeDiagnostic(stderr, "tea: issue edit partially applied; inspect issue state before retrying\n")
-		} else if parsed.mutation && mutationOutcomeUnknown(err) {
-			writeDiagnostic(stderr, "tea: write outcome unknown; inspect repository state before retrying\n")
-		} else if errors.Is(operationContext.Err(), context.Canceled) {
-			return interrupted(operationContext, stderr)
-		} else {
-			writeDiagnostic(stderr, "tea: Gitea operation failed\n")
-		}
-		return 1
+		return reportExecutionError(operationContext, parsed, err, stderr)
 	}
 	return 0
+}
+
+func reportExecutionError(ctx context.Context, parsed command, err error, stderr io.Writer) int {
+	switch {
+	case rpcstatus.IsIssueKindStatus(err):
+		writeDiagnostic(stderr, "tea: index is a pull request; use tea pulls\n")
+	case parsed.request.GetIssueEdit() != nil && rpcstatus.IsGiteaEditPartial(err):
+		writeDiagnostic(stderr, "tea: issue edit partially applied; inspect issue state before retrying\n")
+	case parsed.mutation && mutationOutcomeUnknown(err):
+		writeDiagnostic(stderr, "tea: write outcome unknown; inspect repository state before retrying\n")
+	case errors.Is(ctx.Err(), context.Canceled):
+		return interrupted(ctx, stderr)
+	default:
+		writeDiagnostic(stderr, "tea: Gitea operation failed\n")
+	}
+	return 1
 }
 
 func mutationOutcomeUnknown(err error) bool {

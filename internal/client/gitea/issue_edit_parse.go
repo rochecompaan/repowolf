@@ -22,7 +22,7 @@ func parseIssueEdit(args []string) (command, error) {
 	lists := map[string][]string{}
 	aliases := map[string]string{
 		"-r": "repo", "--repo": "repo", "-o": "output", "--output": "output",
-		"-t": "title", "--title": "title", "-d": "description", "--description": "description",
+		"--title": "title", "--description": "description",
 		"--set-assignees": "set-assignees", "-a": "add-assignees", "--add-assignees": "add-assignees", "--remove-assignees": "remove-assignees",
 		"-L": "add-labels", "--add-labels": "add-labels", "--remove-labels": "remove-labels",
 	}

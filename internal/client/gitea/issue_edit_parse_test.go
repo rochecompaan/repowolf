@@ -49,6 +49,8 @@ func TestParseIssueEditRejectsInvalid(t *testing.T) {
 		{"issues", "edit", "7", "-r", "Owner/Repo", "--add-labels", ""},
 		{"issues", "edit", "7", "-r", "Owner/Repo", "--title", ""},
 		{"issues", "edit", "7", "-r", "Owner/Repo", "--title=x"},
+		{"issues", "edit", "7", "-r", "Owner/Repo", "-t", "title"},
+		{"issues", "edit", "7", "-r", "Owner/Repo", "-d", "body"},
 	} {
 		if _, err := Parse(args); err == nil {
 			t.Fatalf("Parse(%q) succeeded", args)

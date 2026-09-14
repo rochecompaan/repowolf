@@ -3,6 +3,7 @@ package gitea
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -19,9 +20,17 @@ type issueEditAPI struct {
 	calls                                               []string
 	users                                               []*sdk.User
 	labels                                              []*sdk.Label
+	labelPages                                          map[int][]*sdk.Label
 	editResult, deleteAssigneeResult, addAssigneeResult *sdk.Issue
-	editErr                                             error
+	deleteAssigneeResults                               []*sdk.Issue
+	deleteAssigneeCalls                                 int
+	editErr, deleteAssigneeErr, addAssigneeErr          error
+	editHook                                            func()
 	addLabelResult                                      []*sdk.Label
+	addLabelErr, deleteLabelErr                         error
+	deletedAssignees                                    [][]string
+	addedAssignees                                      [][]string
+	deletedLabelIDs                                     []int64
 }
 
 func (f *issueEditAPI) GetIssue(context.Context, string, string, int64) (*sdk.Issue, int, error) {
@@ -38,29 +47,46 @@ func (f *issueEditAPI) GetAssignees(context.Context, string, string) ([]*sdk.Use
 	f.calls = append(f.calls, "users")
 	return f.users, nil
 }
-func (f *issueEditAPI) ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, error) {
+func (f *issueEditAPI) ListRepoLabels(_ context.Context, _, _ string, option sdk.ListLabelsOptions) ([]*sdk.Label, error) {
 	f.calls = append(f.calls, "labels")
+	if f.labelPages != nil {
+		return f.labelPages[option.Page], nil
+	}
 	return f.labels, nil
 }
 func (f *issueEditAPI) EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, error) {
 	f.calls = append(f.calls, "text")
+	if f.editHook != nil {
+		f.editHook()
+	}
 	return f.editResult, f.editErr
 }
-func (f *issueEditAPI) DeleteIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, error) {
+func (f *issueEditAPI) DeleteIssueAssignees(_ context.Context, _, _ string, _ int64, option sdk.IssueAssigneesOption) (*sdk.Issue, error) {
 	f.calls = append(f.calls, "remove-assignees")
+	f.deletedAssignees = append(f.deletedAssignees, append([]string(nil), option.Assignees...))
+	if f.deleteAssigneeErr != nil {
+		return nil, f.deleteAssigneeErr
+	}
+	if f.deleteAssigneeCalls < len(f.deleteAssigneeResults) {
+		result := f.deleteAssigneeResults[f.deleteAssigneeCalls]
+		f.deleteAssigneeCalls++
+		return result, nil
+	}
 	return f.deleteAssigneeResult, nil
 }
-func (f *issueEditAPI) AddIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, error) {
+func (f *issueEditAPI) AddIssueAssignees(_ context.Context, _, _ string, _ int64, option sdk.IssueAssigneesOption) (*sdk.Issue, error) {
 	f.calls = append(f.calls, "add-assignees")
-	return f.addAssigneeResult, nil
+	f.addedAssignees = append(f.addedAssignees, append([]string(nil), option.Assignees...))
+	return f.addAssigneeResult, f.addAssigneeErr
 }
 func (f *issueEditAPI) AddIssueLabels(context.Context, string, string, int64, sdk.IssueLabelsOption) ([]*sdk.Label, error) {
 	f.calls = append(f.calls, "add-labels")
-	return f.addLabelResult, nil
+	return f.addLabelResult, f.addLabelErr
 }
-func (f *issueEditAPI) DeleteIssueLabel(context.Context, string, string, int64, int64) error {
+func (f *issueEditAPI) DeleteIssueLabel(_ context.Context, _, _ string, _ int64, labelID int64) error {
 	f.calls = append(f.calls, "remove-label")
-	return nil
+	f.deletedLabelIDs = append(f.deletedLabelIDs, labelID)
+	return f.deleteLabelErr
 }
 
 func editSDKIssue(title, body string, assignees []string, labels []string) *sdk.Issue {
@@ -126,6 +152,154 @@ func TestIssueEditClassifiesPartialAndUnknown(t *testing.T) {
 		response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
 		if err != nil || response.GetIssueEdit().GetIssue().Title != "new" {
 			t.Fatalf("response=%#v err=%v", response, err)
+		}
+	})
+}
+
+func TestIssueEditReconcilesConcurrentLabelRemoval(t *testing.T) {
+	old := editSDKIssue("old", "body", nil, nil)
+	textEdited := editSDKIssue("new", "body", nil, nil)
+	concurrent := editSDKIssue("new", "body", nil, []string{"stale"})
+	final := editSDKIssue("new", "body", nil, nil)
+	api := &issueEditAPI{
+		reads:      []*sdk.Issue{old, concurrent, final},
+		labels:     []*sdk.Label{{ID: 20, Name: "stale"}},
+		editResult: textEdited,
+	}
+	adapter, _ := newRepositoryAdapter(api)
+	title := "new"
+	request := &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: []string{"stale"}}}}
+	response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+	want := []string{"get", "labels", "text", "get", "remove-label", "get"}
+	if err != nil || !reflect.DeepEqual(api.calls, want) || !reflect.DeepEqual(api.deletedLabelIDs, []int64{20}) || len(response.GetIssueEdit().GetIssue().Labels) != 0 {
+		t.Fatalf("calls=%v deleted=%v response=%#v err=%v", api.calls, api.deletedLabelIDs, response, err)
+	}
+}
+
+func TestIssueEditConcurrentCollectionSemantics(t *testing.T) {
+	t.Run("add assignee preserves unrelated", func(t *testing.T) {
+		initial := editSDKIssue("title", "body", []string{"alice"}, nil)
+		final := editSDKIssue("title", "body", []string{"alice", "bob"}, nil)
+		api := &issueEditAPI{reads: []*sdk.Issue{initial, final}, users: []*sdk.User{{ID: 1, UserName: "bob"}}, addAssigneeResult: final}
+		adapter, _ := newRepositoryAdapter(api)
+		request := &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_AddAssignees{AddAssignees: &repowolfv1.GiteaStringList{Values: []string{"bob"}}}}
+		response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+		got := response.GetIssueEdit().GetIssue().Assignees
+		if err != nil || len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
+			t.Fatalf("response=%#v err=%v", response, err)
+		}
+	})
+	t.Run("remove label preserves unrelated concurrent label", func(t *testing.T) {
+		initial := editSDKIssue("title", "body", nil, []string{"stale", "keep"})
+		final := editSDKIssue("title", "body", nil, []string{"keep", "concurrent"})
+		api := &issueEditAPI{reads: []*sdk.Issue{initial, final}, labels: []*sdk.Label{{ID: 20, Name: "stale"}, {ID: 21, Name: "keep"}, {ID: 22, Name: "concurrent"}}}
+		adapter, _ := newRepositoryAdapter(api)
+		request := &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: []string{"stale"}}}}
+		response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+		got := response.GetIssueEdit().GetIssue().Labels
+		if err != nil || len(got) != 2 || got[0] != "keep" || got[1] != "concurrent" {
+			t.Fatalf("response=%#v err=%v", response, err)
+		}
+	})
+	t.Run("set assignees removes concurrent member", func(t *testing.T) {
+		initial := editSDKIssue("title", "body", []string{"old"}, nil)
+		removed := editSDKIssue("title", "body", nil, nil)
+		added := editSDKIssue("title", "body", []string{"alice"}, nil)
+		concurrent := editSDKIssue("title", "body", []string{"alice", "carol"}, nil)
+		final := editSDKIssue("title", "body", []string{"alice"}, nil)
+		api := &issueEditAPI{
+			reads:                 []*sdk.Issue{initial, concurrent, final},
+			users:                 []*sdk.User{{ID: 1, UserName: "alice"}},
+			deleteAssigneeResults: []*sdk.Issue{removed, final},
+			addAssigneeResult:     added,
+		}
+		adapter, _ := newRepositoryAdapter(api)
+		request := &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_SetAssignees{SetAssignees: &repowolfv1.GiteaStringList{Values: []string{"alice"}}}}
+		response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+		got := response.GetIssueEdit().GetIssue().Assignees
+		if err != nil || !reflect.DeepEqual(api.deletedAssignees, [][]string{{"old"}, {"carol"}}) || len(got) != 1 || got[0] != "alice" {
+			t.Fatalf("removed=%v response=%#v err=%v", api.deletedAssignees, response, err)
+		}
+	})
+}
+
+func TestIssueEditRemovalBounds(t *testing.T) {
+	names := make([]string, 25)
+	catalogPages := make(map[int][]*sdk.Label, 21)
+	for page := 1; page <= 20; page++ {
+		values := make([]*sdk.Label, 50)
+		for offset := range values {
+			id := int64((page-1)*50 + offset + 1)
+			name := fmt.Sprintf("catalog-%04d", id)
+			if page == 1 && offset < len(names) {
+				name = fmt.Sprintf("remove-%02d", offset)
+				names[offset] = name
+			}
+			values[offset] = &sdk.Label{ID: id, Name: name}
+		}
+		catalogPages[page] = values
+	}
+	initial := editSDKIssue("title", "body", nil, names)
+	final := editSDKIssue("title", "body", nil, nil)
+	api := &issueEditAPI{reads: []*sdk.Issue{initial, initial, final}, labelPages: catalogPages}
+	adapter, _ := newRepositoryAdapter(api)
+	request := &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: names}}}
+	_, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+	counts := map[string]int{}
+	for _, call := range api.calls {
+		counts[call]++
+	}
+	if err != nil || counts["get"] != 3 || counts["labels"] != 21 || counts["remove-label"] != 50 || len(api.calls) != 74 {
+		t.Fatalf("counts=%v total=%d err=%v", counts, len(api.calls), err)
+	}
+}
+
+func TestIssueEditFailureBoundaries(t *testing.T) {
+	old := editSDKIssue("old", "body", nil, nil)
+	updated := editSDKIssue("new", "body", nil, nil)
+	title := "new"
+	t.Run("preflight failure performs no write", func(t *testing.T) {
+		api := &issueEditAPI{reads: []*sdk.Issue{nil}, readErrors: []error{errors.New("secret")}}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.issueEdit(context.Background(), issueResolved(), &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title})
+		if err == nil || !reflect.DeepEqual(api.calls, []string{"get"}) {
+			t.Fatalf("calls=%v err=%v", api.calls, err)
+		}
+	})
+	t.Run("invalid write response is unknown and not retried", func(t *testing.T) {
+		api := &issueEditAPI{reads: []*sdk.Issue{old, old}}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.issueEdit(context.Background(), issueResolved(), &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title})
+		if !errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) || !reflect.DeepEqual(api.calls, []string{"get", "text", "get"}) {
+			t.Fatalf("calls=%v err=%v", api.calls, err)
+		}
+	})
+	t.Run("later uncertain write takes precedence over confirmed effect", func(t *testing.T) {
+		api := &issueEditAPI{reads: []*sdk.Issue{old, old}, labels: []*sdk.Label{{ID: 20, Name: "bug"}}, editResult: updated, addLabelErr: errors.New("secret")}
+		adapter, _ := newRepositoryAdapter(api)
+		request := &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title, LabelAction: &repowolfv1.GiteaIssueEditRequest_AddLabels{AddLabels: &repowolfv1.GiteaStringList{Values: []string{"bug"}}}}
+		_, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+		want := []string{"get", "labels", "text", "add-labels", "get"}
+		if !errors.Is(err, rpcstatus.ErrWriteOutcomeUnknown) || !reflect.DeepEqual(api.calls, want) {
+			t.Fatalf("calls=%v err=%v", api.calls, err)
+		}
+	})
+	t.Run("cancellation after confirmed write is partial", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		api := &issueEditAPI{reads: []*sdk.Issue{old}, editResult: updated, editHook: cancel}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.issueEdit(ctx, issueResolved(), &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title})
+		if !errors.Is(err, rpcstatus.ErrEditPartial) || !reflect.DeepEqual(api.calls, []string{"get", "text"}) {
+			t.Fatalf("calls=%v err=%v", api.calls, err)
+		}
+	})
+	t.Run("persistent contention stops after second final read", func(t *testing.T) {
+		api := &issueEditAPI{reads: []*sdk.Issue{old, old, old}, editResult: updated}
+		adapter, _ := newRepositoryAdapter(api)
+		_, err := adapter.issueEdit(context.Background(), issueResolved(), &repowolfv1.GiteaIssueEditRequest{Index: 7, Title: &title})
+		want := []string{"get", "text", "get", "text", "get"}
+		if !errors.Is(err, rpcstatus.ErrEditPartial) || !reflect.DeepEqual(api.calls, want) {
+			t.Fatalf("calls=%v err=%v", api.calls, err)
 		}
 	})
 }
