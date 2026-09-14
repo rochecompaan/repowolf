@@ -12,6 +12,7 @@ const (
 	OutcomeCancelled Outcome = "cancelled"
 	OutcomeFailed    Outcome = "failed"
 	OutcomeUnknown   Outcome = "unknown"
+	OutcomePartial   Outcome = "partial"
 )
 
 // Event contains only metadata approved for the audit stream. Request bodies,
