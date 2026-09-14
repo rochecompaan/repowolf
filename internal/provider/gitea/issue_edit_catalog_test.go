@@ -60,13 +60,31 @@ func TestCollectEditCatalogsRetainsPresentAddLabelWithoutRead(t *testing.T) {
 	}
 }
 
-func TestCollectEditCatalogsSkipsRemoveLabels(t *testing.T) {
+func TestCollectEditCatalogsResolvesPresentRemoveLabels(t *testing.T) {
 	title := "new"
-	api := &editCatalogAPI{}
+	api := &editCatalogAPI{labels: map[int][]*sdk.Label{1: {{ID: 9, Name: "present"}}}}
 	adapter, _ := newRepositoryAdapter(api)
 	catalogs, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{title: &title, labelMode: editRemove, labels: []string{"present", "absent"}}, &normalizedIssue{title: "old", labels: []string{"present"}, labelIDs: map[string]int64{"present": 9}})
+	if err != nil || catalogs.labels["present"] != 9 || api.labelCalls != 1 {
+		t.Fatalf("catalogs=%#v calls=%d err=%v", catalogs, api.labelCalls, err)
+	}
+}
+
+func TestCollectEditCatalogsSkipsAbsentRemoveLabels(t *testing.T) {
+	api := &editCatalogAPI{}
+	adapter, _ := newRepositoryAdapter(api)
+	catalogs, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{labelMode: editRemove, labels: []string{"absent"}}, &normalizedIssue{})
 	if err != nil || len(catalogs.labels) != 0 || api.labelCalls != 0 {
 		t.Fatalf("catalogs=%#v calls=%d err=%v", catalogs, api.labelCalls, err)
+	}
+}
+
+func TestCollectEditCatalogsRejectsInconsistentRemoveLabelIdentity(t *testing.T) {
+	api := &editCatalogAPI{labels: map[int][]*sdk.Label{1: {{ID: 10, Name: "present"}}}}
+	adapter, _ := newRepositoryAdapter(api)
+	_, err := adapter.collectEditCatalogs(context.Background(), "Owner", "Repo", editIntent{labelMode: editRemove, labels: []string{"present"}}, &normalizedIssue{labels: []string{"present"}, labelIDs: map[string]int64{"present": 9}})
+	if !errors.Is(err, rpcstatus.ErrProviderFailure) || api.labelCalls != 1 {
+		t.Fatalf("calls=%d err=%v", api.labelCalls, err)
 	}
 }
 

@@ -47,6 +47,9 @@ func (a *RepositoryAdapter) collectEditCatalogs(ctx context.Context, owner, repo
 			return editCatalogs{}, err
 		}
 		for i, name := range neededLabels {
+			if intent.labelMode == editRemove && issue.labelIDs[name] != ids[i] {
+				return editCatalogs{}, rpcstatus.ErrProviderFailure
+			}
 			catalogs.labels[name] = ids[i]
 		}
 	}
@@ -54,13 +57,10 @@ func (a *RepositoryAdapter) collectEditCatalogs(ctx context.Context, owner, repo
 }
 
 func neededLabelNames(intent editIntent, issue *normalizedIssue) []string {
-	if intent.labelMode != editAdd {
-		return nil
-	}
 	current := nameSet(issue.labels)
 	out := make([]string, 0, len(intent.labels))
 	for _, name := range intent.labels {
-		if !current[name] {
+		if intent.labelMode == editAdd && !current[name] || intent.labelMode == editRemove && current[name] {
 			out = append(out, name)
 		}
 	}

@@ -230,8 +230,9 @@ func TestIssueEditConcurrentCollectionSemantics(t *testing.T) {
 		request := &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: []string{"stale"}}}}
 		response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
 		got := response.GetIssueEdit().GetIssue().Labels
-		if err != nil || len(got) != 2 || got[0] != "keep" || got[1] != "concurrent" {
-			t.Fatalf("response=%#v err=%v", response, err)
+		wantCalls := []string{"get", "labels", "remove-label", "get"}
+		if err != nil || !reflect.DeepEqual(api.calls, wantCalls) || len(got) != 2 || got[0] != "keep" || got[1] != "concurrent" {
+			t.Fatalf("calls=%v response=%#v err=%v", api.calls, response, err)
 		}
 	})
 	t.Run("set assignees removes concurrent member", func(t *testing.T) {
@@ -273,6 +274,9 @@ func TestIssueEditRemovalBounds(t *testing.T) {
 		catalogPages[page] = values
 	}
 	initial := editSDKIssue("title", "body", nil, names)
+	for i := range initial.Labels {
+		initial.Labels[i].ID = int64(i + 1)
+	}
 	final := editSDKIssue("title", "body", nil, nil)
 	api := &issueEditAPI{reads: []*sdk.Issue{initial, initial, final}, labelPages: catalogPages}
 	adapter, _ := newRepositoryAdapter(api)
@@ -282,8 +286,30 @@ func TestIssueEditRemovalBounds(t *testing.T) {
 	for _, call := range api.calls {
 		counts[call]++
 	}
-	if err != nil || counts["get"] != 3 || counts["labels"] != 0 || counts["remove-label"] != 50 || len(api.calls) != 53 {
+	if err != nil || counts["get"] != 3 || counts["labels"] != 21 || counts["remove-label"] != 50 || len(api.calls) != 74 {
 		t.Fatalf("counts=%v total=%d err=%v", counts, len(api.calls), err)
+	}
+}
+
+func TestIssueEditRemoveLabelCatalogFailuresMakeZeroWrites(t *testing.T) {
+	request := &repowolfv1.GiteaIssueEditRequest{Index: 7, LabelAction: &repowolfv1.GiteaIssueEditRequest_RemoveLabels{RemoveLabels: &repowolfv1.GiteaStringList{Values: []string{"stale"}}}}
+	tests := []struct {
+		name   string
+		labels []*sdk.Label
+	}{
+		{name: "malformed unrelated entry", labels: []*sdk.Label{{ID: 20, Name: "stale"}, {ID: 0, Name: "broken"}}},
+		{name: "catalog identity disagrees with issue", labels: []*sdk.Label{{ID: 21, Name: "stale"}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			initial := editSDKIssue("title", "body", nil, []string{"stale"})
+			api := &issueEditAPI{reads: []*sdk.Issue{initial}, labels: test.labels}
+			adapter, _ := newRepositoryAdapter(api)
+			response, err := adapter.issueEdit(context.Background(), issueResolved(), request)
+			if response != nil || !errors.Is(err, rpcstatus.ErrProviderFailure) || !reflect.DeepEqual(api.calls, []string{"get", "labels"}) || len(api.deletedLabelIDs) != 0 {
+				t.Fatalf("calls=%v deleted=%v response=%#v err=%v", api.calls, api.deletedLabelIDs, response, err)
+			}
+		})
 	}
 }
 

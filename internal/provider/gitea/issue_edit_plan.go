@@ -192,7 +192,13 @@ func planIssueEdit(intent editIntent, issue *normalizedIssue, catalogs editCatal
 		plan.addLabelIDs = append(plan.addLabelIDs, id)
 	}
 	for _, name := range removeNames {
-		id := issue.labelIDs[name]
+		id := catalogs.labels[name]
+		if id <= 0 {
+			// A requested label absent during preflight needs no catalog read. If
+			// it appears concurrently, the fresh normalized snapshot supplies the
+			// identity for the one reconciliation pass.
+			id = issue.labelIDs[name]
+		}
 		if id <= 0 {
 			return issueEditPlan{}, fmt.Errorf("missing label")
 		}

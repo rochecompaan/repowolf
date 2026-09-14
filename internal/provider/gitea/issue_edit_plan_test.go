@@ -34,6 +34,15 @@ func TestPlanIssueEdit(t *testing.T) {
 	}
 }
 
+func TestPlanIssueEditUsesCatalogIdentityForInitialLabelRemoval(t *testing.T) {
+	intent := editIntent{labelMode: editRemove, labels: []string{"stale"}}
+	issue := &normalizedIssue{labels: []string{"stale"}, labelIDs: map[string]int64{"stale": 9}}
+	plan, err := planIssueEdit(intent, issue, editCatalogs{labels: map[string]int64{"stale": 10}})
+	if err != nil || !reflect.DeepEqual(plan.removeLabelIDs, []int64{10}) {
+		t.Fatalf("plan=%#v err=%v", plan, err)
+	}
+}
+
 func TestPlanIssueEditNoOp(t *testing.T) {
 	title := "title"
 	plan, err := planIssueEdit(editIntent{title: &title}, &normalizedIssue{title: "title"}, editCatalogs{})
