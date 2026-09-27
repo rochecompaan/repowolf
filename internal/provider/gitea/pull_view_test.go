@@ -67,6 +67,19 @@ func TestPullViewUsesKindFirstHydrationOrder(t *testing.T) {
 	}
 }
 
+func TestPullViewRejectsMismatchedIssueIndexBeforeKindHandling(t *testing.T) {
+	for _, pullMarker := range []*sdk.PullRequestMeta{nil, {}} {
+		calls := []string{}
+		issueAPI := &orderedIssueAPI{fakeIssueAPI: &fakeIssueAPI{issue: &sdk.Issue{Index: 2, PullRequest: pullMarker}}, calls: &calls}
+		pullAPI := &orderedPullAPI{recordingPullAPI: &recordingPullAPI{}, callsRef: &calls}
+		adapter := &RepositoryAdapter{api: issueAPI, pulls: pullAPI}
+		response, err := adapter.Execute(context.Background(), resolved(), pullViewRequest(true))
+		if response != nil || !errors.Is(err, rpcstatus.ErrProviderFailure) || !reflect.DeepEqual(calls, []string{"issue"}) {
+			t.Fatalf("marker=%#v response=%#v err=%v calls=%v", pullMarker, response, err, calls)
+		}
+	}
+}
+
 func TestPullViewReturnsKindCorrectionBeforePullHydration(t *testing.T) {
 	calls := []string{}
 	issueAPI := &orderedIssueAPI{fakeIssueAPI: &fakeIssueAPI{issue: &sdk.Issue{Index: 1}}, calls: &calls}

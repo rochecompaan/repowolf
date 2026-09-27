@@ -15,6 +15,9 @@ func FuzzParse(f *testing.F) {
 		"issues\x00--repo\x00o/r",
 		"issues\x00list\x00--repo\x00o/r\x00--fields\x00title,index\x00--limit\x0050",
 		"issue\x007\x00--repo\x00o/r\x00--comments",
+		"pulls\x00--repo\x00o/r",
+		"pr\x00list\x00-r\x00o/r\x00--state\x00all\x00-p\x002\x00--lm\x0050\x00--fields\x00title,index,mergeable\x00-o\x00json",
+		"pull\x007\x00--repo\x00o/r\x00--comments",
 		"issues\x00create\x00-r\x00o/r\x00-t\x00title\x00-d\x00body\x00-a\x00alice,bob\x00-L\x00bug",
 		"comments\x00add\x007\x00body\x00-r\x00o/r",
 		"issues\x00close\x007\x00-r\x00o/r",
@@ -51,8 +54,14 @@ func FuzzParse(f *testing.F) {
 		case parsed.request.GetIssueList() != nil:
 			validateFuzzedIssueList(t, parsed)
 		case parsed.request.GetIssueView() != nil:
-			if parsed.request.GetIssueView().GetIndex() <= 0 || len(parsed.fields) != 0 {
+			if parsed.request.GetIssueView().GetIndex() <= 0 || len(parsed.fields) != 0 || len(parsed.pullFields) != 0 || parsed.mutation {
 				t.Fatalf("invalid successful issue view: %#v", parsed)
+			}
+		case parsed.request.GetPullList() != nil:
+			validateFuzzedPullList(t, parsed)
+		case parsed.request.GetPullView() != nil:
+			if parsed.request.GetPullView().GetIndex() <= 0 || len(parsed.fields) != 0 || len(parsed.pullFields) != 0 || parsed.mutation {
+				t.Fatalf("invalid successful pull view: %#v", parsed)
 			}
 		case parsed.request.GetIssueCreate() != nil, parsed.request.GetIssueComment() != nil, parsed.request.GetIssueClose() != nil, parsed.request.GetIssueReopen() != nil, parsed.request.GetIssueEdit() != nil:
 			if !parsed.mutation || len(parsed.fields) != 0 {
@@ -62,6 +71,24 @@ func FuzzParse(f *testing.F) {
 			t.Fatalf("unexpected successful operation: %#v", parsed)
 		}
 	})
+}
+
+func validateFuzzedPullList(t *testing.T, parsed command) {
+	t.Helper()
+	request := parsed.request.GetPullList()
+	if request.State != repowolfv1.GiteaPullState_GITEA_PULL_STATE_OPEN &&
+		request.State != repowolfv1.GiteaPullState_GITEA_PULL_STATE_CLOSED &&
+		request.State != repowolfv1.GiteaPullState_GITEA_PULL_STATE_ALL ||
+		request.Page <= 0 || request.Limit <= 0 || request.Limit > 50 || len(request.Fields) == 0 || len(parsed.pullFields) != len(request.Fields) || len(parsed.fields) != 0 || parsed.mutation {
+		t.Fatalf("invalid successful pull list: %#v", parsed)
+	}
+	seen := make(map[repowolfv1.GiteaPullField]bool, len(request.Fields))
+	for index, field := range request.Fields {
+		if field == repowolfv1.GiteaPullField_GITEA_PULL_FIELD_UNSPECIFIED || field > repowolfv1.GiteaPullField_GITEA_PULL_FIELD_COMMENTS || seen[field] || parsed.pullFields[index] != field {
+			t.Fatalf("invalid successful pull fields: %#v", parsed)
+		}
+		seen[field] = true
+	}
 }
 
 func validateFuzzedIssueList(t *testing.T, parsed command) {

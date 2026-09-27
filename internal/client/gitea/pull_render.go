@@ -84,11 +84,12 @@ func renderPullList(parsed command, result *repowolfv1.GiteaPullListResult) ([]b
 }
 
 func renderPullView(parsed command, result *repowolfv1.GiteaPullViewResult) ([]byte, error) {
-	if result == nil || result.Pull == nil || parsed.request.GetPullView() == nil {
+	request := parsed.request.GetPullView()
+	if result == nil || result.Pull == nil || request == nil || result.Pull.Index != request.Index {
 		return nil, fmt.Errorf("invalid pull view")
 	}
 	pull := result.Pull
-	includeComments := parsed.request.GetPullView().IncludeComments
+	includeComments := request.IncludeComments
 	if err := validatePullRecord(pull, includeComments); err != nil {
 		return nil, err
 	}

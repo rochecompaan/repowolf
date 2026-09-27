@@ -62,6 +62,15 @@ func TestRenderPullViewProducesExactTypedNestedJSON(t *testing.T) {
 	}
 }
 
+func TestRenderPullViewRejectsMismatchedRequestIndexAtomically(t *testing.T) {
+	pull := validProjectedPullRecord()
+	request := &repowolfv1.GiteaPullViewRequest{Index: pull.Index + 1}
+	output, err := renderPullView(command{request: &repowolfv1.GiteaRequest{Operation: &repowolfv1.GiteaRequest_PullView{PullView: request}}, format: outputJSON}, &repowolfv1.GiteaPullViewResult{Pull: pull})
+	if err == nil || output != nil {
+		t.Fatalf("output=%q err=%v", output, err)
+	}
+}
+
 func TestRenderPullRejectsMalformedHydrationAtomically(t *testing.T) {
 	for _, test := range []struct {
 		name   string

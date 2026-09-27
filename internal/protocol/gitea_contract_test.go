@@ -108,6 +108,159 @@ func TestGiteaIssueProtocolFieldShapesAndClosedSurface(t *testing.T) {
 	}
 }
 
+func TestGiteaPullProtocolBranchesEnumsAndFieldLayout(t *testing.T) {
+	assertBranches(t, (&repowolfv1.GiteaRequest{}).ProtoReflect().Descriptor(), map[protoreflect.Name]protoreflect.FieldNumber{"pull_list": 18, "pull_view": 19}, true)
+	assertBranches(t, (&repowolfv1.GiteaResponse{}).ProtoReflect().Descriptor(), map[protoreflect.Name]protoreflect.FieldNumber{"pull_list": 18, "pull_view": 19}, true)
+	assertEnum(t, repowolfv1.GiteaPullState(0).Descriptor(), []string{
+		"GITEA_PULL_STATE_UNSPECIFIED", "GITEA_PULL_STATE_OPEN", "GITEA_PULL_STATE_CLOSED", "GITEA_PULL_STATE_ALL",
+	})
+	assertEnum(t, repowolfv1.GiteaPullField(0).Descriptor(), []string{
+		"GITEA_PULL_FIELD_UNSPECIFIED", "GITEA_PULL_FIELD_INDEX", "GITEA_PULL_FIELD_STATE", "GITEA_PULL_FIELD_AUTHOR",
+		"GITEA_PULL_FIELD_AUTHOR_ID", "GITEA_PULL_FIELD_URL", "GITEA_PULL_FIELD_TITLE", "GITEA_PULL_FIELD_BODY",
+		"GITEA_PULL_FIELD_MERGEABLE", "GITEA_PULL_FIELD_BASE", "GITEA_PULL_FIELD_BASE_COMMIT", "GITEA_PULL_FIELD_HEAD",
+		"GITEA_PULL_FIELD_CREATED", "GITEA_PULL_FIELD_UPDATED", "GITEA_PULL_FIELD_DEADLINE", "GITEA_PULL_FIELD_ASSIGNEES",
+		"GITEA_PULL_FIELD_MILESTONE", "GITEA_PULL_FIELD_LABELS", "GITEA_PULL_FIELD_COMMENTS",
+	})
+	assertEnum(t, repowolfv1.GiteaPullReviewState(0).Descriptor(), []string{
+		"GITEA_PULL_REVIEW_STATE_UNSPECIFIED", "GITEA_PULL_REVIEW_STATE_APPROVED", "GITEA_PULL_REVIEW_STATE_PENDING",
+		"GITEA_PULL_REVIEW_STATE_COMMENT", "GITEA_PULL_REVIEW_STATE_REQUEST_CHANGES", "GITEA_PULL_REVIEW_STATE_REQUEST_REVIEW",
+	})
+	assertFieldLayout(t, (&repowolfv1.GiteaPullReviewRecord{}).ProtoReflect().Descriptor(), []string{
+		"id", "actor", "state", "body", "commit_id", "stale", "official", "dismissed", "code_comment_count", "submitted", "url",
+	})
+	assertFieldLayout(t, (&repowolfv1.GiteaPullRecord{}).ProtoReflect().Descriptor(), []string{
+		"index", "state", "author_id", "author", "url", "title", "body", "draft", "mergeable", "allow_maintainer_edit",
+		"base", "base_commit", "head", "created", "updated", "deadline", "assignees", "milestone", "labels", "comment_count",
+		"comments", "requested_reviewers", "reviews",
+	})
+}
+
+func TestGiteaPullProtocolPresenceOneofRepeatedAndClosedSurface(t *testing.T) {
+	pull := (&repowolfv1.GiteaPullRecord{}).ProtoReflect().Descriptor()
+	review := (&repowolfv1.GiteaPullReviewRecord{}).ProtoReflect().Descriptor()
+	actor := (&repowolfv1.GiteaReviewActor{}).ProtoReflect().Descriptor()
+	actorOneof := actor.Oneofs().ByName("actor")
+	if actorOneof == nil {
+		t.Fatal("review actor oneof is missing")
+	}
+	userField, teamField := actorOneof.Fields().ByName("user"), actorOneof.Fields().ByName("team")
+	if actorOneof.Fields().Len() != 2 || userField == nil || userField.Number() != 1 || userField.Kind() != protoreflect.MessageKind || userField.Message().FullName() != "repowolf.v1.GiteaReviewUser" || teamField == nil || teamField.Number() != 2 || teamField.Kind() != protoreflect.MessageKind || teamField.Message().FullName() != "repowolf.v1.GiteaReviewTeam" {
+		t.Fatalf("invalid review actor oneof: %v", actorOneof)
+	}
+	for _, name := range []protoreflect.Name{"mergeable", "allow_maintainer_edit"} {
+		field := pull.Fields().ByName(name)
+		if field == nil || field.Kind() != protoreflect.BoolKind || !field.HasPresence() {
+			t.Errorf("%s must be an optional bool", name)
+		}
+	}
+	milestone := pull.Fields().ByName("milestone")
+	if milestone == nil || milestone.Kind() != protoreflect.StringKind || !milestone.HasPresence() {
+		t.Error("pull milestone must be an optional string")
+	}
+	for _, field := range []protoreflect.FieldDescriptor{
+		pull.Fields().ByName("created"), pull.Fields().ByName("updated"), pull.Fields().ByName("deadline"), review.Fields().ByName("submitted"),
+	} {
+		if field == nil || field.Kind() != protoreflect.MessageKind || field.Message().FullName() != "google.protobuf.Timestamp" {
+			t.Errorf("field %v must be google.protobuf.Timestamp", field)
+		}
+	}
+	for _, field := range []protoreflect.FieldDescriptor{
+		(&repowolfv1.GiteaPullListRequest{}).ProtoReflect().Descriptor().Fields().ByName("fields"),
+		(&repowolfv1.GiteaPullListResult{}).ProtoReflect().Descriptor().Fields().ByName("pulls"),
+		pull.Fields().ByName("assignees"), pull.Fields().ByName("labels"), pull.Fields().ByName("comments"),
+		pull.Fields().ByName("requested_reviewers"), pull.Fields().ByName("reviews"),
+	} {
+		if field == nil || field.Cardinality() != protoreflect.Repeated || field.IsMap() {
+			t.Errorf("field %v must be an ordered repeated field", field)
+		}
+	}
+	messages := []protoreflect.MessageDescriptor{
+		(&repowolfv1.GiteaPullListRequest{}).ProtoReflect().Descriptor(), (&repowolfv1.GiteaPullViewRequest{}).ProtoReflect().Descriptor(),
+		(&repowolfv1.GiteaReviewUser{}).ProtoReflect().Descriptor(), (&repowolfv1.GiteaReviewTeam{}).ProtoReflect().Descriptor(), actor,
+		review, pull, (&repowolfv1.GiteaPullListResult{}).ProtoReflect().Descriptor(), (&repowolfv1.GiteaPullViewResult{}).ProtoReflect().Descriptor(),
+	}
+	for _, message := range messages {
+		for i := 0; i < message.Fields().Len(); i++ {
+			field := message.Fields().Get(i)
+			name := strings.ToLower(string(field.Name()))
+			if field.IsMap() || strings.Contains(name, "raw") || strings.Contains(name, "json") || strings.Contains(name, "endpoint") || strings.Contains(name, "token") || strings.Contains(name, "query") || strings.Contains(name, "provider") {
+				t.Errorf("closed pull protocol exposes forbidden field %s.%s", message.FullName(), field.Name())
+			}
+		}
+	}
+}
+
+func TestGiteaPullProtocolMarshalPreservesOptionalBooleansAndActorExclusivity(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		value *bool
+	}{
+		{name: "unset"},
+		{name: "false", value: proto.Bool(false)},
+		{name: "true", value: proto.Bool(true)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := &repowolfv1.GiteaPullRecord{Mergeable: test.value, AllowMaintainerEdit: test.value}
+			data, err := proto.Marshal(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			output := new(repowolfv1.GiteaPullRecord)
+			if err := proto.Unmarshal(data, output); err != nil {
+				t.Fatal(err)
+			}
+			if test.value == nil {
+				if output.Mergeable != nil || output.AllowMaintainerEdit != nil {
+					t.Fatalf("unset optional booleans became present: %#v", output)
+				}
+			} else if output.Mergeable == nil || output.AllowMaintainerEdit == nil || *output.Mergeable != *test.value || *output.AllowMaintainerEdit != *test.value {
+				t.Fatalf("optional boolean presence/value lost: %#v", output)
+			}
+		})
+	}
+	milestoneInput := &repowolfv1.GiteaPullRecord{Milestone: proto.String("")}
+	milestoneData, err := proto.Marshal(milestoneInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	milestoneOutput := new(repowolfv1.GiteaPullRecord)
+	if err := proto.Unmarshal(milestoneData, milestoneOutput); err != nil {
+		t.Fatal(err)
+	}
+	if milestoneOutput.Milestone == nil || *milestoneOutput.Milestone != "" {
+		t.Fatalf("optional empty milestone presence lost: %#v", milestoneOutput)
+	}
+	for _, input := range []*repowolfv1.GiteaReviewActor{
+		{Actor: &repowolfv1.GiteaReviewActor_User{User: &repowolfv1.GiteaReviewUser{Id: 7, Login: "alice"}}},
+		{Actor: &repowolfv1.GiteaReviewActor_Team{Team: &repowolfv1.GiteaReviewTeam{Id: 9, Name: "reviewers"}}},
+	} {
+		data, err := proto.Marshal(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		output := new(repowolfv1.GiteaReviewActor)
+		if err := proto.Unmarshal(data, output); err != nil {
+			t.Fatal(err)
+		}
+		if (input.GetUser() != nil && (output.GetUser() == nil || output.GetTeam() != nil)) || (input.GetTeam() != nil && (output.GetTeam() == nil || output.GetUser() != nil)) {
+			t.Fatalf("actor oneof exclusivity lost: input=%#v output=%#v", input, output)
+		}
+	}
+}
+
+func assertFieldLayout(t *testing.T, message protoreflect.MessageDescriptor, names []string) {
+	t.Helper()
+	if message.Fields().Len() != len(names) {
+		t.Fatalf("%s has %d fields, want %d", message.FullName(), message.Fields().Len(), len(names))
+	}
+	for index, name := range names {
+		field := message.Fields().Get(index)
+		if string(field.Name()) != name || field.Number() != protoreflect.FieldNumber(index+1) {
+			t.Errorf("%s field %d = %s/%d, want %s/%d", message.FullName(), index, field.Name(), field.Number(), name, index+1)
+		}
+	}
+}
+
 func assertBranches(t *testing.T, message protoreflect.MessageDescriptor, branches map[protoreflect.Name]protoreflect.FieldNumber, requireOneof bool) {
 	t.Helper()
 	for name, number := range branches {

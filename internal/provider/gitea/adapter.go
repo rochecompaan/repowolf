@@ -243,7 +243,7 @@ func (a *RepositoryAdapter) pullView(ctx context.Context, repository policy.Reso
 		}
 		return nil, classifyProviderError(ctx, err)
 	}
-	if issue == nil {
+	if issue == nil || issue.Index != request.Index {
 		return nil, rpcstatus.ErrProviderFailure
 	}
 	if issue.PullRequest == nil {
