@@ -223,9 +223,53 @@ func (a *RepositoryAdapter) Execute(ctx context.Context, repo policy.ResolvedRep
 		return a.issueState(ctx, repo, request.GetIssueReopen().Index, issueStateReopen)
 	case request.GetIssueEdit() != nil:
 		return a.issueEdit(ctx, repo, request.GetIssueEdit())
+	case request.GetPullList() != nil:
+		return a.pullList(ctx, repo, request.GetPullList())
+	case request.GetPullView() != nil:
+		return a.pullView(ctx, repo, request.GetPullView())
 	}
 	return nil, ErrInvalidRequest
 }
+func (a *RepositoryAdapter) pullView(context.Context, policy.ResolvedRepository, *repowolfv1.GiteaPullViewRequest) (*repowolfv1.GiteaResponse, error) {
+	return nil, rpcstatus.ErrServiceUnavailable
+}
+
+func (a *RepositoryAdapter) pullList(ctx context.Context, repository policy.ResolvedRepository, request *repowolfv1.GiteaPullListRequest) (*repowolfv1.GiteaResponse, error) {
+	if a.pulls == nil {
+		return nil, rpcstatus.ErrServiceUnavailable
+	}
+	states := map[repowolfv1.GiteaPullState]sdk.StateType{repowolfv1.GiteaPullState_GITEA_PULL_STATE_OPEN: sdk.StateOpen, repowolfv1.GiteaPullState_GITEA_PULL_STATE_CLOSED: sdk.StateClosed, repowolfv1.GiteaPullState_GITEA_PULL_STATE_ALL: sdk.StateAll}
+	owner, name := repository.Repository.Owner, repository.Repository.Name
+	values, presence, err := a.pulls.ListRepoPullRequests(ctx, owner, name, sdk.ListPullRequestsOptions{ListOptions: sdk.ListOptions{Page: int(request.Page), PageSize: int(request.Limit)}, State: states[request.State]})
+	if err != nil {
+		return nil, classifyProviderError(ctx, err)
+	}
+	if len(values) > int(request.Limit) || len(values) != len(presence) {
+		return nil, rpcstatus.ErrProviderFailure
+	}
+	normalized := make([]*normalizedPull, len(values))
+	seen := map[int64]bool{}
+	for i, value := range values {
+		if value == nil || seen[value.Index] {
+			return nil, rpcstatus.ErrProviderFailure
+		}
+		seen[value.Index] = true
+		raw, ok := presence[value.Index]
+		if !ok {
+			return nil, rpcstatus.ErrProviderFailure
+		}
+		normalized[i], err = normalizePull(value, raw, owner, name)
+		if err != nil {
+			return nil, rpcstatus.ErrProviderFailure
+		}
+	}
+	records := make([]*repowolfv1.GiteaPullRecord, len(normalized))
+	for i, value := range normalized {
+		records[i] = projectPull(value, request.Fields)
+	}
+	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_PullList{PullList: &repowolfv1.GiteaPullListResult{Pulls: records}}}, nil
+}
+
 func (a *RepositoryAdapter) repository(ctx context.Context, repository policy.ResolvedRepository) (*repowolfv1.GiteaResponse, error) {
 	result, err := a.api.GetRepo(ctx, repository.Repository.Owner, repository.Repository.Name)
 	if err != nil {
