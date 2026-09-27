@@ -3,8 +3,10 @@
 package integration_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -41,6 +43,13 @@ func TestRestrictedTeaPullAgainstGitea(t *testing.T) {
 	}
 	giteaJSON(t, fixture.client, http.MethodPost, fixture.baseURL+"/api/v1/repos/CanonicalOrg/PullRepo/pulls", fixture.token, map[string]any{"base": "main", "head": "pull-read", "title": "pull read", "body": "private pull body"}, &created, "", "")
 	index := strconv.FormatInt(created.Index, 10)
+	giteaJSON(t, fixture.client, http.MethodPost, fixture.baseURL+"/api/v1/repos/CanonicalOrg/PullRepo/branches", fixture.token, map[string]any{"new_branch_name": "closed-read", "old_branch_name": "main"}, nil, "", "")
+	giteaJSON(t, fixture.client, http.MethodPost, fixture.baseURL+"/api/v1/repos/CanonicalOrg/PullRepo/contents/closed.txt", fixture.token, map[string]any{"branch": "closed-read", "message": "seed closed pull", "content": base64.StdEncoding.EncodeToString([]byte("closed\n"))}, nil, "", "")
+	var closed struct {
+		Index int64 `json:"number"`
+	}
+	giteaJSON(t, fixture.client, http.MethodPost, fixture.baseURL+"/api/v1/repos/CanonicalOrg/PullRepo/pulls", fixture.token, map[string]any{"base": "main", "head": "closed-read", "title": "closed pull"}, &closed, "", "")
+	giteaJSON(t, fixture.client, http.MethodPatch, fixture.baseURL+"/api/v1/repos/CanonicalOrg/PullRepo/pulls/"+strconv.FormatInt(closed.Index, 10), fixture.token, map[string]any{"state": "closed"}, nil, "", "")
 	giteaJSON(t, fixture.client, http.MethodPost, fixture.baseURL+"/api/v1/repos/CanonicalOrg/PullRepo/pulls/"+index+"/requested_reviewers", fixture.token, map[string]any{"reviewers": []string{"RequestedUser"}, "team_reviewers": []string{"reviewers"}}, nil, "", "")
 	for i := 1; i <= 51; i++ {
 		giteaJSON(t, fixture.client, http.MethodPost, fixture.baseURL+"/api/v1/repos/CanonicalOrg/PullRepo/issues/"+index+"/comments", fixture.token, map[string]any{"body": "ordinary comment " + strconv.Itoa(i)}, nil, "", "")
@@ -54,18 +63,23 @@ func TestRestrictedTeaPullAgainstGitea(t *testing.T) {
 	if len(firstReviewPage) != 50 || len(secondReviewPage) != 1 {
 		t.Fatalf("review page sizes = %d, %d", len(firstReviewPage), len(secondReviewPage))
 	}
-	service := fixture.startBroker(t)
-	list := runTeaArgs(t, service.binaries.Tea, service.environment, "pulls", "--repo", "CanonicalOrg/PullRepo", "--state", "all", "--page", "1", "--limit", "2", "--fields", "index,title,state,mergeable,base,head,comments", "--output", "json")
-	var rows []struct {
-		Index    int64  `json:"index"`
-		Title    string `json:"title"`
-		State    string `json:"state"`
-		Base     string `json:"base"`
-		Head     string `json:"head"`
-		Comments int64  `json:"comments"`
+	var rawPulls []map[string]json.RawMessage
+	giteaJSON(t, fixture.client, http.MethodGet, fixture.baseURL+"/api/v1/repos/CanonicalOrg/PullRepo/pulls?state=all&page=1&limit=2", fixture.token, nil, &rawPulls, "", "")
+	if len(rawPulls) != 2 {
+		t.Fatalf("raw pull count=%d", len(rawPulls))
 	}
-	if err := json.Unmarshal(list, &rows); err != nil || len(rows) != 1 || rows[0].Index != created.Index || rows[0].Title != "pull read" || rows[0].State != "open" || rows[0].Base != "main" || rows[0].Head != "pull-read" || rows[0].Comments != 51 {
-		t.Fatalf("list=%s err=%v rows=%#v", list, err, rows)
+	// The TLS proxy makes the provider's optional-boolean wire cases deterministic
+	// while preserving the real Gitea request/SDK/adapter path.
+	rawPulls[0]["mergeable"] = json.RawMessage("false")
+	delete(rawPulls[1], "mergeable")
+	expectedList, sawFalse, sawUnset := expectedPullListJSON(t, rawPulls, created.Index, closed.Index)
+	if !sawFalse || !sawUnset {
+		t.Fatalf("fixture did not establish false and unavailable mergeable presence: false=%v unset=%v raw=%s", sawFalse, sawUnset, mustJSON(rawPulls))
+	}
+	service := fixture.startBrokerAt(t, fixture.startPullPresenceProxy(t))
+	list := runTeaArgs(t, service.binaries.Tea, service.environment, "pulls", "--repo", "CanonicalOrg/PullRepo", "--state", "all", "--page", "1", "--limit", "2", "--fields", "index,title,state,mergeable,base,head,comments", "--output", "json")
+	if string(list) != expectedList {
+		t.Fatalf("list=%s want=%s", list, expectedList)
 	}
 	withoutComments := runTeaArgs(t, service.binaries.Tea, service.environment, "pulls", index, "--repo", "CanonicalOrg/PullRepo", "--output", "json")
 	var without map[string]any
@@ -128,13 +142,64 @@ func TestRestrictedTeaPullAgainstGitea(t *testing.T) {
 			t.Fatalf("audit contains secret marker")
 		}
 	}
+	for _, operation := range []string{`"operation":"gitea.pull_list"`, `"operation":"gitea.pull_view"`} {
+		if !strings.Contains(audit, operation) {
+			t.Fatalf("audit missing %s: %s", operation, audit)
+		}
+	}
 	logs := dockerOutput(t, "logs", fixture.container)
 	timelinePath := "/api/v1/repos/CanonicalOrg/PullRepo/issues/" + index + "/timeline"
 	if giteaLogCountBoundedGET(logs, timelinePath, 1, 50) != 1 || giteaLogCountBoundedGET(logs, timelinePath, 2, 50) != 1 {
 		t.Fatalf("unexpected timeline pagination")
 	}
+	reviewPath := "/api/v1/repos/CanonicalOrg/PullRepo/pulls/" + index + "/reviews"
+	if giteaLogCountBoundedGET(logs, reviewPath, 1, 50) != 3 || giteaLogCountBoundedGET(logs, reviewPath, 2, 50) != 3 {
+		t.Fatalf("unexpected review pagination")
+	}
 	if strings.Contains(logs, "/CanonicalOwner/OtherRepo/pulls") {
 		t.Fatalf("denied request reached provider")
 	}
 
+}
+
+func expectedPullListJSON(t *testing.T, rawPulls []map[string]json.RawMessage, openIndex, closedIndex int64) (string, bool, bool) {
+	t.Helper()
+	var output bytes.Buffer
+	output.WriteByte('[')
+	sawFalse, sawUnset := false, false
+	for i, raw := range rawPulls {
+		var index int64
+		if err := json.Unmarshal(raw["number"], &index); err != nil {
+			t.Fatal(err)
+		}
+		title, state, head, comments := "pull read", "open", "pull-read", int64(51)
+		if index == closedIndex {
+			title, state, head, comments = "closed pull", "closed", "closed-read", 0
+		} else if index != openIndex {
+			t.Fatalf("unexpected pull index %d", index)
+		}
+		if i > 0 {
+			output.WriteByte(',')
+		}
+		fmt.Fprintf(&output, `{"index":%d,"title":%q,"state":%q`, index, title, state)
+		mergeable, ok := raw["mergeable"]
+		if !ok || bytes.Equal(bytes.TrimSpace(mergeable), []byte("null")) {
+			sawUnset = true
+		} else {
+			var value bool
+			if err := json.Unmarshal(mergeable, &value); err != nil {
+				t.Fatal(err)
+			}
+			fmt.Fprintf(&output, `,"mergeable":%t`, value)
+			sawFalse = sawFalse || !value
+		}
+		fmt.Fprintf(&output, `,"base":"main","head":%q,"comments":%d}`, head, comments)
+	}
+	output.WriteString("]\n")
+	return output.String(), sawFalse, sawUnset
+}
+
+func mustJSON(value any) string {
+	encoded, _ := json.Marshal(value)
+	return string(encoded)
 }

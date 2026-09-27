@@ -211,12 +211,20 @@ func (r *presenceReadCloser) Read(p []byte) (int, error) {
 	if n > 0 {
 		r.collector.write(p[:n])
 	}
-	return n, err
-}
-func (r *presenceReadCloser) Close() error {
-	err := r.base.Close()
-	if err != nil {
+	if err != nil && err != io.EOF {
 		r.collector.fail()
 	}
-	return err
+	return n, err
+}
+
+func (r *presenceReadCloser) Close() error {
+	_, drainErr := io.Copy(io.Discard, r)
+	closeErr := r.base.Close()
+	if drainErr != nil || closeErr != nil {
+		r.collector.fail()
+	}
+	if drainErr != nil {
+		return drainErr
+	}
+	return closeErr
 }
