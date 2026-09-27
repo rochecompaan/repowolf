@@ -49,6 +49,8 @@ func reportExecutionError(ctx context.Context, parsed command, err error, stderr
 	switch {
 	case rpcstatus.IsIssueKindStatus(err):
 		writeDiagnostic(stderr, "tea: index is a pull request; use tea pulls\n")
+	case rpcstatus.IsPullKindStatus(err):
+		writeDiagnostic(stderr, "tea: index is an issue; use tea issues\n")
 	case parsed.request.GetIssueEdit() != nil && rpcstatus.IsGiteaEditPartial(err):
 		writeDiagnostic(stderr, "tea: issue edit partially applied; inspect issue state before retrying\n")
 	case parsed.mutation && mutationOutcomeUnknown(err):
