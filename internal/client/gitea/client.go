@@ -14,7 +14,7 @@ import (
 )
 
 const operationTimeout = 2 * time.Minute
-const usage = "tea: expected repos OWNER/REPO --repo OWNER/REPO or issues [list|INDEX] --repo OWNER/REPO [approved flags]\n"
+const usage = "tea: expected repos OWNER/REPO --repo OWNER/REPO, issues [list|INDEX] --repo OWNER/REPO, or pulls [list|INDEX] --repo OWNER/REPO [approved flags]\n"
 
 // Run parses, executes, and renders one restricted tea command.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
