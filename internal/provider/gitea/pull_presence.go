@@ -36,6 +36,15 @@ func withPullPresenceCollector(ctx context.Context) (context.Context, *pullPrese
 	return context.WithValue(ctx, pullPresenceContextKey{}, collector), collector
 }
 
+func (c *pullPresenceCollector) fail() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.finished {
+		c.failed = true
+		c.buffer.Reset()
+	}
+}
+
 func (c *pullPresenceCollector) write(value []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -204,4 +213,10 @@ func (r *presenceReadCloser) Read(p []byte) (int, error) {
 	}
 	return n, err
 }
-func (r *presenceReadCloser) Close() error { return r.base.Close() }
+func (r *presenceReadCloser) Close() error {
+	err := r.base.Close()
+	if err != nil {
+		r.collector.fail()
+	}
+	return err
+}

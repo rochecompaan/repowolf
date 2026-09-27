@@ -53,7 +53,7 @@ func loadPullReviews(ctx context.Context, api pullAPI, owner, repo string, index
 }
 
 func normalizePullReview(value *sdk.PullReview) (*repowolfv1.GiteaPullReviewRecord, error) {
-	if value == nil || value.ID <= 0 || value.CodeCommentsCount < 0 || value.HTMLURL == "" || !validProtoTime(value.Submitted) {
+	if value == nil || value.ID <= 0 || value.CodeCommentsCount < 0 || !validProtoTime(value.Submitted) {
 		return nil, fmt.Errorf("invalid review")
 	}
 	for _, text := range []string{value.Body, value.CommitID, value.HTMLURL} {

@@ -406,6 +406,8 @@ func textValue(v any) string {
 	case []json.RawMessage:
 		b, _ := json.Marshal(x)
 		return string(b)
+	case json.RawMessage:
+		return string(x)
 	default:
 		return fmt.Sprint(x)
 	}

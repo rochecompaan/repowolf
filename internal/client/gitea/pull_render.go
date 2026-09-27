@@ -37,7 +37,7 @@ func renderPullList(parsed command, result *repowolfv1.GiteaPullListResult) ([]b
 		if err := validateProjectedPull(pull, fields); err != nil {
 			return nil, err
 		}
-		if len(pull.Comments) != 0 || len(pull.RequestedReviewers) != 0 || len(pull.Reviews) != 0 {
+		if pull.Draft || pull.AllowMaintainerEdit != nil || len(pull.Comments) != 0 || len(pull.RequestedReviewers) != 0 || len(pull.Reviews) != 0 {
 			return nil, fmt.Errorf("hydrated pull list")
 		}
 		row := make([]orderedField, len(fields))
@@ -141,19 +141,25 @@ func renderPullView(parsed command, result *repowolfv1.GiteaPullViewResult) ([]b
 				continue
 			}
 			if v.name == "comments" {
-				writeNested(&b, "comments", pull.Comments, func(value any) ([]orderedField, error) { return commentFields(value.(*repowolfv1.GiteaCommentRecord)) })
+				if err := writeNested(&b, "comments", pull.Comments, func(value any) ([]orderedField, error) { return commentFields(value.(*repowolfv1.GiteaCommentRecord)) }); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if v.name == "requested-reviewers" {
-				writeNested(&b, v.name, pull.RequestedReviewers, func(value any) ([]orderedField, error) {
+				if err := writeNested(&b, v.name, pull.RequestedReviewers, func(value any) ([]orderedField, error) {
 					return reviewActorFields(value.(*repowolfv1.GiteaReviewActor))
-				})
+				}); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if v.name == "reviews" {
-				writeNested(&b, v.name, pull.Reviews, func(value any) ([]orderedField, error) {
+				if err := writeNested(&b, v.name, pull.Reviews, func(value any) ([]orderedField, error) {
 					return pullReviewFields(value.(*repowolfv1.GiteaPullReviewRecord))
-				})
+				}); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			fmt.Fprintf(&b, "%s: %s\n", v.name, textValue(v.value))
@@ -164,27 +170,34 @@ func renderPullView(parsed command, result *repowolfv1.GiteaPullViewResult) ([]b
 	return b.Bytes(), nil
 }
 
-func writeNested[T any](b *bytes.Buffer, name string, values []T, fields func(any) ([]orderedField, error)) {
+func writeNested[T any](b *bytes.Buffer, name string, values []T, fields func(any) ([]orderedField, error)) error {
 	b.WriteString(name + ":\n")
 	for _, value := range values {
 		fs, err := fields(any(value))
 		if err != nil {
-			continue
+			return err
 		}
 		for _, f := range fs {
 			fmt.Fprintf(b, "  %s: %s\n", f.name, textValue(f.value))
 		}
 	}
+	return nil
 }
 
 func validateProjectedPull(pull *repowolfv1.GiteaPullRecord, fields []repowolfv1.GiteaPullField) error {
 	if pull == nil || pull.Index <= 0 || pull.State != repowolfv1.GiteaPullState_GITEA_PULL_STATE_OPEN && pull.State != repowolfv1.GiteaPullState_GITEA_PULL_STATE_CLOSED {
 		return fmt.Errorf("invalid pull identity")
 	}
+	selectedCreated, selectedUpdated := false, false
 	for _, field := range fields {
 		if _, _, err := pullFieldValue(pull, field); err != nil {
 			return err
 		}
+		selectedCreated = selectedCreated || field == repowolfv1.GiteaPullField_GITEA_PULL_FIELD_CREATED
+		selectedUpdated = selectedUpdated || field == repowolfv1.GiteaPullField_GITEA_PULL_FIELD_UPDATED
+	}
+	if selectedCreated && selectedUpdated && pull.Updated.AsTime().Before(pull.Created.AsTime()) {
+		return fmt.Errorf("invalid pull timestamp order")
 	}
 	return nil
 }

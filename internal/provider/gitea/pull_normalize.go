@@ -37,16 +37,16 @@ func normalizePull(value *sdk.PullRequest, presence pullPresence, owner, repo st
 	if presence.mergeable == nil && value.Mergeable || presence.mergeable != nil && *presence.mergeable != value.Mergeable || presence.allowMaintainerEdit == nil && value.AllowMaintainerEdit || presence.allowMaintainerEdit != nil && *presence.allowMaintainerEdit != value.AllowMaintainerEdit {
 		return nil, fmt.Errorf("pull presence mismatch")
 	}
-	strings := []string{value.Poster.UserName, value.HTMLURL, value.Title, value.Body, value.Base.Name, value.Base.Sha, value.Head.Name, value.Base.Repository.Owner.UserName, value.Base.Repository.Name, value.Base.Repository.FullName, value.Head.Repository.Owner.UserName, value.Head.Repository.Name, value.Head.Repository.FullName}
+	strings := []string{value.Poster.UserName, value.HTMLURL, value.Title, value.Body, value.Base.Ref, value.Base.Name, value.Base.Sha, value.Head.Name, value.Base.Repository.Owner.UserName, value.Base.Repository.Name, value.Base.Repository.FullName, value.Head.Repository.Owner.UserName, value.Head.Repository.Name, value.Head.Repository.FullName}
 	for _, text := range strings {
 		if !validProviderString(text) {
 			return nil, fmt.Errorf("invalid pull string")
 		}
 	}
-	if value.Poster.UserName == "" || value.HTMLURL == "" || value.Title == "" || value.Base.Name == "" || value.Base.Sha == "" || value.Head.Name == "" || value.Head.Repository.Owner == nil || value.Head.Repository.Owner.UserName == "" || value.Head.Repository.Name == "" || value.Head.Repository.FullName != "" && value.Head.Repository.FullName != value.Head.Repository.Owner.UserName+"/"+value.Head.Repository.Name || value.Created == nil || value.Updated == nil || !validProtoTime(*value.Created) || !validProtoTime(*value.Updated) || value.Updated.Before(*value.Created) {
+	if value.Poster.UserName == "" || value.HTMLURL == "" || value.Title == "" || value.Base.Ref == "" || value.Base.Name == "" || value.Base.Sha == "" || value.Head.Name == "" || value.Head.Repository.Owner == nil || value.Head.Repository.Owner.UserName == "" || value.Head.Repository.Name == "" || value.Head.Repository.FullName != "" && value.Head.Repository.FullName != value.Head.Repository.Owner.UserName+"/"+value.Head.Repository.Name || value.Created == nil || value.Updated == nil || !validProtoTime(*value.Created) || !validProtoTime(*value.Updated) || value.Updated.Before(*value.Created) {
 		return nil, fmt.Errorf("invalid pull fields")
 	}
-	n := &normalizedPull{index: value.Index, authorID: value.Poster.ID, commentCount: int64(value.Comments), state: state, author: value.Poster.UserName, url: value.HTMLURL, title: value.Title, body: value.Body, draft: value.Draft, mergeable: copyBool(presence.mergeable), allowMaintainerEdit: copyBool(presence.allowMaintainerEdit), base: value.Base.Name, baseCommit: value.Base.Sha, head: value.Head.Name, created: *value.Created, updated: *value.Updated}
+	n := &normalizedPull{index: value.Index, authorID: value.Poster.ID, commentCount: int64(value.Comments), state: state, author: value.Poster.UserName, url: value.HTMLURL, title: value.Title, body: value.Body, draft: value.Draft, mergeable: copyBool(presence.mergeable), allowMaintainerEdit: copyBool(presence.allowMaintainerEdit), base: value.Base.Ref, baseCommit: value.Base.Sha, head: value.Head.Name, created: *value.Created, updated: *value.Updated}
 	if value.Deadline != nil {
 		if !validProtoTime(*value.Deadline) {
 			return nil, fmt.Errorf("invalid deadline")

@@ -94,7 +94,7 @@ func newRestrictedGiteaFixture(t *testing.T, address, subnet string) *restricted
 	}
 	giteaJSON(t, client, http.MethodPost, baseURL+"/api/v1/users/CanonicalOwner/tokens", "", map[string]any{
 		"name":   "repowolf-integration",
-		"scopes": []string{"read:repository", "write:repository", "write:issue", "write:user"},
+		"scopes": []string{"read:repository", "write:repository", "write:issue", "write:user", "write:organization"},
 	}, &tokenResponse, "CanonicalOwner", "correct-horse-battery-staple")
 	if tokenResponse.SHA1 == "" {
 		t.Fatal("Gitea returned empty token")

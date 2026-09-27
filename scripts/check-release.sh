@@ -27,4 +27,4 @@ diagnostic="$("$tmp/tea" login 2>&1)"
 status=$?
 set -e
 test "$status" -eq 2
-test "$diagnostic" = 'tea: expected repos OWNER/REPO --repo OWNER/REPO or issues [list|INDEX] --repo OWNER/REPO [approved flags]'
+test "$diagnostic" = 'tea: expected repos OWNER/REPO --repo OWNER/REPO, issues [list|INDEX] --repo OWNER/REPO, or pulls [list|INDEX] --repo OWNER/REPO [approved flags]'
