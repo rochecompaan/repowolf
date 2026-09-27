@@ -68,6 +68,21 @@ func (*fakeIssueAPI) CreateIssueComment(context.Context, string, string, int64, 
 func (*fakeIssueAPI) EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, error) {
 	panic("unexpected issue edit")
 }
+func (*fakeIssueAPI) GetAssignees(context.Context, string, string) ([]*sdk.User, error) {
+	panic("unexpected assignees")
+}
+func (*fakeIssueAPI) AddIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, error) {
+	panic("unexpected assignee add")
+}
+func (*fakeIssueAPI) DeleteIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, error) {
+	panic("unexpected assignee delete")
+}
+func (*fakeIssueAPI) AddIssueLabels(context.Context, string, string, int64, sdk.IssueLabelsOption) ([]*sdk.Label, error) {
+	panic("unexpected label add")
+}
+func (*fakeIssueAPI) DeleteIssueLabel(context.Context, string, string, int64, int64) error {
+	panic("unexpected label delete")
+}
 func sdkIssue() *sdk.Issue {
 	return &sdk.Issue{Index: 7, Poster: &sdk.User{ID: 2, UserName: "alice"}, HTMLURL: "https://g/o/r/issues/7", Title: "title", State: sdk.StateOpen, Created: time.Unix(1, 0), Updated: time.Unix(2, 0), Repository: &sdk.RepositoryMeta{Owner: "Owner", Name: "Repo", FullName: "Owner/Repo"}}
 }

@@ -78,6 +78,22 @@ message GiteaIssueCommentRequest { int64 index = 1; string body = 2; }
 message GiteaIssueCloseRequest { int64 index = 1; }
 message GiteaIssueReopenRequest { int64 index = 1; }
 
+message GiteaStringList { repeated string values = 1; }
+message GiteaIssueEditRequest {
+  int64 index = 1;
+  optional string title = 2;
+  optional string description = 3;
+  oneof assignee_action {
+    GiteaStringList set_assignees = 4;
+    GiteaStringList add_assignees = 5;
+    GiteaStringList remove_assignees = 6;
+  }
+  oneof label_action {
+    GiteaStringList add_labels = 7;
+    GiteaStringList remove_labels = 8;
+  }
+}
+
 message GiteaRequest {
   RequestContext context = 1;
   oneof operation {
@@ -88,6 +104,7 @@ message GiteaRequest {
     GiteaIssueCommentRequest issue_comment = 14;
     GiteaIssueCloseRequest issue_close = 15;
     GiteaIssueReopenRequest issue_reopen = 16;
+    GiteaIssueEditRequest issue_edit = 17;
   }
 }
 
@@ -151,6 +168,7 @@ message GiteaIssueCreateResult { GiteaIssueRecord issue = 1; }
 message GiteaIssueCommentResult { GiteaCommentRecord comment = 1; }
 message GiteaIssueCloseResult { GiteaIssueRecord issue = 1; }
 message GiteaIssueReopenResult { GiteaIssueRecord issue = 1; }
+message GiteaIssueEditResult { GiteaIssueRecord issue = 1; }
 
 message GiteaResponse {
   ResponseMeta meta = 1;
@@ -162,5 +180,6 @@ message GiteaResponse {
     GiteaIssueCommentResult issue_comment = 14;
     GiteaIssueCloseResult issue_close = 15;
     GiteaIssueReopenResult issue_reopen = 16;
+    GiteaIssueEditResult issue_edit = 17;
   }
 }

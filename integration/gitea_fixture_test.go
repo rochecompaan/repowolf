@@ -3,6 +3,8 @@
 package integration_test
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -16,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/rochecompaan/repowolf/internal/auth"
@@ -114,15 +117,33 @@ func nextIPv4Address(t *testing.T, address string) string {
 
 func (fixture *restrictedGiteaFixture) requestCount(t *testing.T, method, requestPath string) int {
 	t.Helper()
+	return fixture.requestCountPrefix(t, method, requestPath, true)
+}
+
+func (fixture *restrictedGiteaFixture) requestCountPrefix(t *testing.T, method, requestPath string, exact bool) int {
+	t.Helper()
 	logs := dockerOutput(t, "logs", fixture.container)
 	needle := method + " " + requestPath
 	count := 0
 	for _, line := range strings.Split(logs, "\n") {
-		if strings.Contains(line, needle) {
-			count++
+		if !strings.Contains(line, needle) {
+			continue
 		}
+		if exact {
+			suffix := strings.SplitN(line, needle, 2)[1]
+			if suffix != "" && suffix[0] != ' ' && suffix[0] != '?' {
+				continue
+			}
+		}
+		count++
 	}
 	return count
+}
+
+func (fixture *restrictedGiteaFixture) createAssignableUser(t *testing.T, username string) {
+	t.Helper()
+	dockerOutput(t, "exec", "--user", "git", fixture.container, "gitea", "admin", "user", "create", "--username", username, "--password", "correct-horse-battery-staple", "--email", strings.ToLower(username)+"@example.invalid", "--must-change-password=false")
+	giteaJSON(t, fixture.client, http.MethodPut, fixture.baseURL+"/api/v1/repos/CanonicalOwner/CanonicalRepo/collaborators/"+username, fixture.token, map[string]any{"permission": "write"}, nil, "", "")
 }
 
 func (fixture *restrictedGiteaFixture) startBroker(t *testing.T) restrictedGiteaBroker {
@@ -155,6 +176,15 @@ func (fixture *restrictedGiteaFixture) startBrokerAt(t *testing.T, apiHost strin
 }
 
 func (fixture *restrictedGiteaFixture) startCorruptingWriteProxy(t *testing.T) string {
+	return fixture.startGiteaTestProxy(t, "corrupt-create", "", "")
+}
+
+func (fixture *restrictedGiteaFixture) startIssueEditProxy(t *testing.T, mode, index, labelID string) string {
+	t.Helper()
+	return fixture.startGiteaTestProxy(t, mode, index, labelID)
+}
+
+func (fixture *restrictedGiteaFixture) startGiteaTestProxy(t *testing.T, mode, index, labelID string) string {
 	t.Helper()
 	helper := filepath.Join(fixture.work, "gitea-failure-proxy.test")
 	command := exec.Command("go", "test", "-c", "-tags", "gitea_integration", "-o", helper, ".")
@@ -167,6 +197,9 @@ func (fixture *restrictedGiteaFixture) startCorruptingWriteProxy(t *testing.T) s
 		"--volume", helper+":/helper:ro",
 		"--volume", certificateDirectory+":/certs:ro",
 		"--env", "REPOWOLF_GITEA_FAILURE_PROXY=1",
+		"--env", "REPOWOLF_GITEA_PROXY_MODE="+mode,
+		"--env", "REPOWOLF_GITEA_PROXY_ISSUE="+index,
+		"--env", "REPOWOLF_GITEA_PROXY_LABEL="+labelID,
 		"--env", "REPOWOLF_GITEA_FAILURE_PROXY_TARGET="+fixture.baseURL,
 		"--env", "REPOWOLF_GITEA_FAILURE_PROXY_CERT=/certs/"+filepath.Base(fixture.certificate.CertificateFile),
 		"--env", "REPOWOLF_GITEA_FAILURE_PROXY_KEY=/certs/"+filepath.Base(fixture.certificate.KeyFile),
@@ -193,21 +226,67 @@ func TestGiteaFailureProxyProcess(t *testing.T) {
 		t.Fatalf("load proxy CA: %v", err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots}}
+	transport := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots}}
+	proxy.Transport = transport
+	mode := os.Getenv("REPOWOLF_GITEA_PROXY_MODE")
+	issuePath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + os.Getenv("REPOWOLF_GITEA_PROXY_ISSUE")
+	var textWritten, concurrentMutation, textRejected atomic.Bool
 	proxy.ModifyResponse = func(response *http.Response) error {
-		if response.Request.Method != http.MethodPost || response.Request.URL.Path != "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues" {
+		if mode == "corrupt-create" && response.Request.Method == http.MethodPost && response.Request.URL.Path == "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues" {
+			if response.Body != nil {
+				_, _ = io.Copy(io.Discard, response.Body)
+				_ = response.Body.Close()
+			}
+			response.Body = io.NopCloser(strings.NewReader("{"))
+			response.ContentLength = 1
+			response.Header.Set("Content-Length", "1")
 			return nil
 		}
-		if response.Body != nil {
-			_, _ = io.Copy(io.Discard, response.Body)
-			_ = response.Body.Close()
+		if response.Request.Method != http.MethodPatch || response.Request.URL.Path != issuePath {
+			return nil
 		}
-		response.Body = io.NopCloser(strings.NewReader("{"))
-		response.ContentLength = 1
-		response.Header.Set("Content-Length", "1")
+		textWritten.Store(true)
+		if (mode == "concurrent-label" || mode == "concurrent-assignee") && concurrentMutation.CompareAndSwap(false, true) {
+			mutationPath := issuePath + "/labels"
+			body := []byte(`{"labels":[` + os.Getenv("REPOWOLF_GITEA_PROXY_LABEL") + `]}`)
+			if mode == "concurrent-assignee" {
+				mutationPath = issuePath + "/assignees"
+				body = []byte(`{"assignees":["SecondAssignee"]}`)
+			}
+			mutationURL := target.ResolveReference(&url.URL{Path: mutationPath})
+			request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, mutationURL.String(), bytes.NewReader(body))
+			if err != nil {
+				return err
+			}
+			request.Header.Set("Authorization", response.Request.Header.Get("Authorization"))
+			request.Header.Set("Content-Type", "application/json")
+			mutationResponse, err := transport.RoundTrip(request)
+			if err != nil {
+				return err
+			}
+			defer mutationResponse.Body.Close()
+			_, _ = io.Copy(io.Discard, mutationResponse.Body)
+			if mutationResponse.StatusCode < 200 || mutationResponse.StatusCode >= 300 {
+				return fmt.Errorf("concurrent mutation failed")
+			}
+		}
 		return nil
 	}
-	server := &http.Server{Addr: ":443", Handler: proxy, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13}}
+	handler := http.Handler(proxy)
+	if mode == "fail-read-after-text" || mode == "fail-first-text-before-upstream" {
+		handler = http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if mode == "fail-read-after-text" && textWritten.Load() && request.Method == http.MethodGet && request.URL.Path == issuePath {
+				http.Error(writer, "failed", http.StatusInternalServerError)
+				return
+			}
+			if mode == "fail-first-text-before-upstream" && request.Method == http.MethodPatch && request.URL.Path == issuePath && textRejected.CompareAndSwap(false, true) {
+				http.Error(writer, "failed", http.StatusInternalServerError)
+				return
+			}
+			proxy.ServeHTTP(writer, request)
+		})
+	}
+	server := &http.Server{Addr: ":443", Handler: handler, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13}}
 	if err := server.ListenAndServeTLS(os.Getenv("REPOWOLF_GITEA_FAILURE_PROXY_CERT"), os.Getenv("REPOWOLF_GITEA_FAILURE_PROXY_KEY")); err != nil {
 		t.Fatal(fmt.Errorf("serve Gitea failure proxy: %w", err))
 	}

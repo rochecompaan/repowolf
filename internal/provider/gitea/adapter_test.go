@@ -48,6 +48,9 @@ func (client *recordingSDKRepositoryClient) ListIssueTimeline(ctx context.Contex
 func (client *recordingSDKRepositoryClient) ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, *sdk.Response, error) {
 	return nil, nil, nil
 }
+func (client *recordingSDKRepositoryClient) GetAssignees(context.Context, string, string) ([]*sdk.User, *sdk.Response, error) {
+	return nil, nil, nil
+}
 func (client *recordingSDKRepositoryClient) CreateIssue(context.Context, string, string, sdk.CreateIssueOption) (*sdk.Issue, *sdk.Response, error) {
 	return nil, nil, nil
 }
@@ -56,6 +59,18 @@ func (client *recordingSDKRepositoryClient) CreateIssueComment(context.Context, 
 }
 func (client *recordingSDKRepositoryClient) EditIssue(context.Context, string, string, int64, sdk.EditIssueOption) (*sdk.Issue, *sdk.Response, error) {
 	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) AddIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, *sdk.Response, error) {
+	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) DeleteIssueAssignees(context.Context, string, string, int64, sdk.IssueAssigneesOption) (*sdk.Issue, *sdk.Response, error) {
+	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) AddIssueLabels(context.Context, string, string, int64, sdk.IssueLabelsOption) ([]*sdk.Label, *sdk.Response, error) {
+	return nil, nil, nil
+}
+func (client *recordingSDKRepositoryClient) DeleteIssueLabel(context.Context, string, string, int64, int64) (*sdk.Response, error) {
+	return nil, nil
 }
 
 func (f *fakeRepositoryGetter) GetRepo(_ context.Context, owner, name string) (*sdk.Repository, error) {
@@ -138,7 +153,7 @@ func TestSDKTimelineDecodesLabelEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := (&sdkAPI{repositories: client, issues: client}).ListIssueTimeline(context.Background(), "Owner", "Repo", 7, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: 1, PageSize: 50}})
+	page, err := (&sdkAPI{repositories: client.Repositories, issues: client.Issues}).ListIssueTimeline(context.Background(), "Owner", "Repo", 7, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: 1, PageSize: 50}})
 	if err != nil || page.entryCount != 2 || len(page.comments) != 1 || page.comments[0].ID != 2 {
 		t.Fatalf("ListIssueTimeline() = %#v, %v", page, err)
 	}
@@ -166,7 +181,7 @@ func TestSDKAPIObservesConcurrentCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	getter := &sdkAPI{repositories: client, issues: client}
+	getter := &sdkAPI{repositories: client.Repositories, issues: client.Issues}
 	firstDone := make(chan error, 1)
 	go func() {
 		_, err := getter.GetRepo(context.Background(), "Owner", "Repo")

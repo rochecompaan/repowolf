@@ -33,6 +33,30 @@ func TestGiteaIssueProtocolBranchesAndPresence(t *testing.T) {
 	}
 }
 
+func TestGiteaIssueEditProtocol(t *testing.T) {
+	assertBranches(t, (&repowolfv1.GiteaRequest{}).ProtoReflect().Descriptor(), map[protoreflect.Name]protoreflect.FieldNumber{"issue_edit": 17}, true)
+	assertBranches(t, (&repowolfv1.GiteaResponse{}).ProtoReflect().Descriptor(), map[protoreflect.Name]protoreflect.FieldNumber{"issue_edit": 17}, true)
+	descriptor := (&repowolfv1.GiteaIssueEditRequest{}).ProtoReflect().Descriptor()
+	for _, name := range []protoreflect.Name{"title", "description"} {
+		field := descriptor.Fields().ByName(name)
+		if field == nil || field.Kind() != protoreflect.StringKind || !field.HasPresence() {
+			t.Fatalf("%s must be an optional string", name)
+		}
+	}
+	input := &repowolfv1.GiteaIssueEditRequest{Index: 7, AssigneeAction: &repowolfv1.GiteaIssueEditRequest_SetAssignees{SetAssignees: &repowolfv1.GiteaStringList{Values: []string{}}}}
+	data, err := proto.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := new(repowolfv1.GiteaIssueEditRequest)
+	if err := proto.Unmarshal(data, output); err != nil {
+		t.Fatal(err)
+	}
+	if output.GetSetAssignees() == nil || output.AssigneeAction == nil {
+		t.Fatal("empty set-assignees presence lost")
+	}
+}
+
 func TestGiteaIssueProtocolEnums(t *testing.T) {
 	assertEnum(t, repowolfv1.GiteaIssueState(0).Descriptor(), []string{
 		"GITEA_ISSUE_STATE_UNSPECIFIED", "GITEA_ISSUE_STATE_OPEN", "GITEA_ISSUE_STATE_CLOSED", "GITEA_ISSUE_STATE_ALL",

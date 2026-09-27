@@ -47,6 +47,8 @@ func ValidateRequest(request *repowolfv1.GiteaRequest) error {
 			return ErrInvalidRequest
 		}
 		return nil
+	case *repowolfv1.GiteaRequest_IssueEdit:
+		return validateIssueEdit(operation.IssueEdit)
 	default:
 		return ErrInvalidRequest
 	}
@@ -54,6 +56,55 @@ func ValidateRequest(request *repowolfv1.GiteaRequest) error {
 
 func validateIssueCreate(r *repowolfv1.GiteaIssueCreateRequest) error {
 	if r == nil || !validMutationText(r.Title, false, 0, 255) || r.Description != nil && !validMutationText(r.GetDescription(), true, maximumMutationBodyBytes, 0) || !validMutationList(r.Assignees) || !validMutationList(r.Labels) {
+		return ErrInvalidRequest
+	}
+	return nil
+}
+
+func validateIssueEdit(r *repowolfv1.GiteaIssueEditRequest) error {
+	if r == nil || r.Index <= 0 || r.Title == nil && r.Description == nil && r.AssigneeAction == nil && r.LabelAction == nil {
+		return ErrInvalidRequest
+	}
+	if r.Title != nil && !validMutationText(r.GetTitle(), false, 0, 255) || r.Description != nil && !validMutationText(r.GetDescription(), true, maximumMutationBodyBytes, 0) {
+		return ErrInvalidRequest
+	}
+	var assignees *repowolfv1.GiteaStringList
+	allowEmpty := false
+	switch action := r.AssigneeAction.(type) {
+	case nil:
+	case *repowolfv1.GiteaIssueEditRequest_SetAssignees:
+		if action != nil {
+			assignees, allowEmpty = action.SetAssignees, true
+		}
+	case *repowolfv1.GiteaIssueEditRequest_AddAssignees:
+		if action != nil {
+			assignees = action.AddAssignees
+		}
+	case *repowolfv1.GiteaIssueEditRequest_RemoveAssignees:
+		if action != nil {
+			assignees = action.RemoveAssignees
+		}
+	default:
+		return ErrInvalidRequest
+	}
+	if assignees != nil && (!allowEmpty && len(assignees.Values) == 0 || !validMutationList(assignees.Values)) || r.AssigneeAction != nil && assignees == nil {
+		return ErrInvalidRequest
+	}
+	var labels *repowolfv1.GiteaStringList
+	switch action := r.LabelAction.(type) {
+	case nil:
+	case *repowolfv1.GiteaIssueEditRequest_AddLabels:
+		if action != nil {
+			labels = action.AddLabels
+		}
+	case *repowolfv1.GiteaIssueEditRequest_RemoveLabels:
+		if action != nil {
+			labels = action.RemoveLabels
+		}
+	default:
+		return ErrInvalidRequest
+	}
+	if labels != nil && (len(labels.Values) == 0 || !validMutationList(labels.Values)) || r.LabelAction != nil && labels == nil {
 		return ErrInvalidRequest
 	}
 	return nil
@@ -114,7 +165,7 @@ func Capability(request *repowolfv1.GiteaRequest) (config.Capability, error) {
 		return config.RepositoryRead, nil
 	case *repowolfv1.GiteaRequest_IssueList, *repowolfv1.GiteaRequest_IssueView:
 		return config.IssuesRead, nil
-	case *repowolfv1.GiteaRequest_IssueCreate, *repowolfv1.GiteaRequest_IssueComment, *repowolfv1.GiteaRequest_IssueClose, *repowolfv1.GiteaRequest_IssueReopen:
+	case *repowolfv1.GiteaRequest_IssueCreate, *repowolfv1.GiteaRequest_IssueComment, *repowolfv1.GiteaRequest_IssueClose, *repowolfv1.GiteaRequest_IssueReopen, *repowolfv1.GiteaRequest_IssueEdit:
 		return config.IssuesWrite, nil
 	default:
 		return "", ErrInvalidRequest
@@ -140,6 +191,8 @@ func OperationName(request *repowolfv1.GiteaRequest) (string, error) {
 		return "gitea.issue_close", nil
 	case *repowolfv1.GiteaRequest_IssueReopen:
 		return "gitea.issue_reopen", nil
+	case *repowolfv1.GiteaRequest_IssueEdit:
+		return "gitea.issue_edit", nil
 	default:
 		return "", ErrInvalidRequest
 	}

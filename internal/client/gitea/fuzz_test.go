@@ -19,6 +19,7 @@ func FuzzParse(f *testing.F) {
 		"comments\x00add\x007\x00body\x00-r\x00o/r",
 		"issues\x00close\x007\x00-r\x00o/r",
 		"issues\x00reopen\x007\x00-r\x00o/r",
+		"issues\x00edit\x007\x00-r\x00o/r\x00--title\x00new\x00--set-assignees\x00alice\x00-L\x00bug",
 		"login",
 	} {
 		f.Add(seed)
@@ -53,7 +54,7 @@ func FuzzParse(f *testing.F) {
 			if parsed.request.GetIssueView().GetIndex() <= 0 || len(parsed.fields) != 0 {
 				t.Fatalf("invalid successful issue view: %#v", parsed)
 			}
-		case parsed.request.GetIssueCreate() != nil, parsed.request.GetIssueComment() != nil, parsed.request.GetIssueClose() != nil, parsed.request.GetIssueReopen() != nil:
+		case parsed.request.GetIssueCreate() != nil, parsed.request.GetIssueComment() != nil, parsed.request.GetIssueClose() != nil, parsed.request.GetIssueReopen() != nil, parsed.request.GetIssueEdit() != nil:
 			if !parsed.mutation || len(parsed.fields) != 0 {
 				t.Fatalf("invalid successful mutation: %#v", parsed)
 			}

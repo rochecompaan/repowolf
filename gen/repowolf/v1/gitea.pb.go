@@ -634,6 +634,218 @@ func (x *GiteaIssueReopenRequest) GetIndex() int64 {
 	return 0
 }
 
+type GiteaStringList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        []string               `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GiteaStringList) Reset() {
+	*x = GiteaStringList{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaStringList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaStringList) ProtoMessage() {}
+
+func (x *GiteaStringList) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaStringList.ProtoReflect.Descriptor instead.
+func (*GiteaStringList) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GiteaStringList) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type GiteaIssueEditRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Index       int64                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	Title       *string                `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
+	Description *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	// Types that are valid to be assigned to AssigneeAction:
+	//
+	//	*GiteaIssueEditRequest_SetAssignees
+	//	*GiteaIssueEditRequest_AddAssignees
+	//	*GiteaIssueEditRequest_RemoveAssignees
+	AssigneeAction isGiteaIssueEditRequest_AssigneeAction `protobuf_oneof:"assignee_action"`
+	// Types that are valid to be assigned to LabelAction:
+	//
+	//	*GiteaIssueEditRequest_AddLabels
+	//	*GiteaIssueEditRequest_RemoveLabels
+	LabelAction   isGiteaIssueEditRequest_LabelAction `protobuf_oneof:"label_action"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GiteaIssueEditRequest) Reset() {
+	*x = GiteaIssueEditRequest{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaIssueEditRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaIssueEditRequest) ProtoMessage() {}
+
+func (x *GiteaIssueEditRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaIssueEditRequest.ProtoReflect.Descriptor instead.
+func (*GiteaIssueEditRequest) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *GiteaIssueEditRequest) GetIndex() int64 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *GiteaIssueEditRequest) GetTitle() string {
+	if x != nil && x.Title != nil {
+		return *x.Title
+	}
+	return ""
+}
+
+func (x *GiteaIssueEditRequest) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+func (x *GiteaIssueEditRequest) GetAssigneeAction() isGiteaIssueEditRequest_AssigneeAction {
+	if x != nil {
+		return x.AssigneeAction
+	}
+	return nil
+}
+
+func (x *GiteaIssueEditRequest) GetSetAssignees() *GiteaStringList {
+	if x != nil {
+		if x, ok := x.AssigneeAction.(*GiteaIssueEditRequest_SetAssignees); ok {
+			return x.SetAssignees
+		}
+	}
+	return nil
+}
+
+func (x *GiteaIssueEditRequest) GetAddAssignees() *GiteaStringList {
+	if x != nil {
+		if x, ok := x.AssigneeAction.(*GiteaIssueEditRequest_AddAssignees); ok {
+			return x.AddAssignees
+		}
+	}
+	return nil
+}
+
+func (x *GiteaIssueEditRequest) GetRemoveAssignees() *GiteaStringList {
+	if x != nil {
+		if x, ok := x.AssigneeAction.(*GiteaIssueEditRequest_RemoveAssignees); ok {
+			return x.RemoveAssignees
+		}
+	}
+	return nil
+}
+
+func (x *GiteaIssueEditRequest) GetLabelAction() isGiteaIssueEditRequest_LabelAction {
+	if x != nil {
+		return x.LabelAction
+	}
+	return nil
+}
+
+func (x *GiteaIssueEditRequest) GetAddLabels() *GiteaStringList {
+	if x != nil {
+		if x, ok := x.LabelAction.(*GiteaIssueEditRequest_AddLabels); ok {
+			return x.AddLabels
+		}
+	}
+	return nil
+}
+
+func (x *GiteaIssueEditRequest) GetRemoveLabels() *GiteaStringList {
+	if x != nil {
+		if x, ok := x.LabelAction.(*GiteaIssueEditRequest_RemoveLabels); ok {
+			return x.RemoveLabels
+		}
+	}
+	return nil
+}
+
+type isGiteaIssueEditRequest_AssigneeAction interface {
+	isGiteaIssueEditRequest_AssigneeAction()
+}
+
+type GiteaIssueEditRequest_SetAssignees struct {
+	SetAssignees *GiteaStringList `protobuf:"bytes,4,opt,name=set_assignees,json=setAssignees,proto3,oneof"`
+}
+
+type GiteaIssueEditRequest_AddAssignees struct {
+	AddAssignees *GiteaStringList `protobuf:"bytes,5,opt,name=add_assignees,json=addAssignees,proto3,oneof"`
+}
+
+type GiteaIssueEditRequest_RemoveAssignees struct {
+	RemoveAssignees *GiteaStringList `protobuf:"bytes,6,opt,name=remove_assignees,json=removeAssignees,proto3,oneof"`
+}
+
+func (*GiteaIssueEditRequest_SetAssignees) isGiteaIssueEditRequest_AssigneeAction() {}
+
+func (*GiteaIssueEditRequest_AddAssignees) isGiteaIssueEditRequest_AssigneeAction() {}
+
+func (*GiteaIssueEditRequest_RemoveAssignees) isGiteaIssueEditRequest_AssigneeAction() {}
+
+type isGiteaIssueEditRequest_LabelAction interface {
+	isGiteaIssueEditRequest_LabelAction()
+}
+
+type GiteaIssueEditRequest_AddLabels struct {
+	AddLabels *GiteaStringList `protobuf:"bytes,7,opt,name=add_labels,json=addLabels,proto3,oneof"`
+}
+
+type GiteaIssueEditRequest_RemoveLabels struct {
+	RemoveLabels *GiteaStringList `protobuf:"bytes,8,opt,name=remove_labels,json=removeLabels,proto3,oneof"`
+}
+
+func (*GiteaIssueEditRequest_AddLabels) isGiteaIssueEditRequest_LabelAction() {}
+
+func (*GiteaIssueEditRequest_RemoveLabels) isGiteaIssueEditRequest_LabelAction() {}
+
 type GiteaRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Context *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -646,6 +858,7 @@ type GiteaRequest struct {
 	//	*GiteaRequest_IssueComment
 	//	*GiteaRequest_IssueClose
 	//	*GiteaRequest_IssueReopen
+	//	*GiteaRequest_IssueEdit
 	Operation     isGiteaRequest_Operation `protobuf_oneof:"operation"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -653,7 +866,7 @@ type GiteaRequest struct {
 
 func (x *GiteaRequest) Reset() {
 	*x = GiteaRequest{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[7]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -665,7 +878,7 @@ func (x *GiteaRequest) String() string {
 func (*GiteaRequest) ProtoMessage() {}
 
 func (x *GiteaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[7]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,7 +891,7 @@ func (x *GiteaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaRequest.ProtoReflect.Descriptor instead.
 func (*GiteaRequest) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{7}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GiteaRequest) GetContext() *RequestContext {
@@ -758,6 +971,15 @@ func (x *GiteaRequest) GetIssueReopen() *GiteaIssueReopenRequest {
 	return nil
 }
 
+func (x *GiteaRequest) GetIssueEdit() *GiteaIssueEditRequest {
+	if x != nil {
+		if x, ok := x.Operation.(*GiteaRequest_IssueEdit); ok {
+			return x.IssueEdit
+		}
+	}
+	return nil
+}
+
 type isGiteaRequest_Operation interface {
 	isGiteaRequest_Operation()
 }
@@ -790,6 +1012,10 @@ type GiteaRequest_IssueReopen struct {
 	IssueReopen *GiteaIssueReopenRequest `protobuf:"bytes,16,opt,name=issue_reopen,json=issueReopen,proto3,oneof"`
 }
 
+type GiteaRequest_IssueEdit struct {
+	IssueEdit *GiteaIssueEditRequest `protobuf:"bytes,17,opt,name=issue_edit,json=issueEdit,proto3,oneof"`
+}
+
 func (*GiteaRequest_RepositoryView) isGiteaRequest_Operation() {}
 
 func (*GiteaRequest_IssueList) isGiteaRequest_Operation() {}
@@ -803,6 +1029,8 @@ func (*GiteaRequest_IssueComment) isGiteaRequest_Operation() {}
 func (*GiteaRequest_IssueClose) isGiteaRequest_Operation() {}
 
 func (*GiteaRequest_IssueReopen) isGiteaRequest_Operation() {}
+
+func (*GiteaRequest_IssueEdit) isGiteaRequest_Operation() {}
 
 type GiteaRepositoryRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -830,7 +1058,7 @@ type GiteaRepositoryRecord struct {
 
 func (x *GiteaRepositoryRecord) Reset() {
 	*x = GiteaRepositoryRecord{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[8]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -842,7 +1070,7 @@ func (x *GiteaRepositoryRecord) String() string {
 func (*GiteaRepositoryRecord) ProtoMessage() {}
 
 func (x *GiteaRepositoryRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[8]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -855,7 +1083,7 @@ func (x *GiteaRepositoryRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaRepositoryRecord.ProtoReflect.Descriptor instead.
 func (*GiteaRepositoryRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{8}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GiteaRepositoryRecord) GetFullName() string {
@@ -993,7 +1221,7 @@ type GiteaRepositoryViewResult struct {
 
 func (x *GiteaRepositoryViewResult) Reset() {
 	*x = GiteaRepositoryViewResult{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[9]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1005,7 +1233,7 @@ func (x *GiteaRepositoryViewResult) String() string {
 func (*GiteaRepositoryViewResult) ProtoMessage() {}
 
 func (x *GiteaRepositoryViewResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[9]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1018,7 +1246,7 @@ func (x *GiteaRepositoryViewResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaRepositoryViewResult.ProtoReflect.Descriptor instead.
 func (*GiteaRepositoryViewResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{9}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GiteaRepositoryViewResult) GetRepository() *GiteaRepositoryRecord {
@@ -1043,7 +1271,7 @@ type GiteaCommentRecord struct {
 
 func (x *GiteaCommentRecord) Reset() {
 	*x = GiteaCommentRecord{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[10]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1055,7 +1283,7 @@ func (x *GiteaCommentRecord) String() string {
 func (*GiteaCommentRecord) ProtoMessage() {}
 
 func (x *GiteaCommentRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[10]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1068,7 +1296,7 @@ func (x *GiteaCommentRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaCommentRecord.ProtoReflect.Descriptor instead.
 func (*GiteaCommentRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{10}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GiteaCommentRecord) GetId() int64 {
@@ -1146,7 +1374,7 @@ type GiteaIssueRecord struct {
 
 func (x *GiteaIssueRecord) Reset() {
 	*x = GiteaIssueRecord{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[11]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1158,7 +1386,7 @@ func (x *GiteaIssueRecord) String() string {
 func (*GiteaIssueRecord) ProtoMessage() {}
 
 func (x *GiteaIssueRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[11]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1171,7 +1399,7 @@ func (x *GiteaIssueRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaIssueRecord.ProtoReflect.Descriptor instead.
 func (*GiteaIssueRecord) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{11}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GiteaIssueRecord) GetIndex() int64 {
@@ -1309,7 +1537,7 @@ type GiteaIssueListResult struct {
 
 func (x *GiteaIssueListResult) Reset() {
 	*x = GiteaIssueListResult{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[12]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1321,7 +1549,7 @@ func (x *GiteaIssueListResult) String() string {
 func (*GiteaIssueListResult) ProtoMessage() {}
 
 func (x *GiteaIssueListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[12]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1334,7 +1562,7 @@ func (x *GiteaIssueListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaIssueListResult.ProtoReflect.Descriptor instead.
 func (*GiteaIssueListResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{12}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GiteaIssueListResult) GetIssues() []*GiteaIssueRecord {
@@ -1353,7 +1581,7 @@ type GiteaIssueViewResult struct {
 
 func (x *GiteaIssueViewResult) Reset() {
 	*x = GiteaIssueViewResult{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[13]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1365,7 +1593,7 @@ func (x *GiteaIssueViewResult) String() string {
 func (*GiteaIssueViewResult) ProtoMessage() {}
 
 func (x *GiteaIssueViewResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[13]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1378,7 +1606,7 @@ func (x *GiteaIssueViewResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaIssueViewResult.ProtoReflect.Descriptor instead.
 func (*GiteaIssueViewResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{13}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GiteaIssueViewResult) GetIssue() *GiteaIssueRecord {
@@ -1397,7 +1625,7 @@ type GiteaIssueCreateResult struct {
 
 func (x *GiteaIssueCreateResult) Reset() {
 	*x = GiteaIssueCreateResult{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[14]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1409,7 +1637,7 @@ func (x *GiteaIssueCreateResult) String() string {
 func (*GiteaIssueCreateResult) ProtoMessage() {}
 
 func (x *GiteaIssueCreateResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[14]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1422,7 +1650,7 @@ func (x *GiteaIssueCreateResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaIssueCreateResult.ProtoReflect.Descriptor instead.
 func (*GiteaIssueCreateResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{14}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GiteaIssueCreateResult) GetIssue() *GiteaIssueRecord {
@@ -1441,7 +1669,7 @@ type GiteaIssueCommentResult struct {
 
 func (x *GiteaIssueCommentResult) Reset() {
 	*x = GiteaIssueCommentResult{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[15]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1453,7 +1681,7 @@ func (x *GiteaIssueCommentResult) String() string {
 func (*GiteaIssueCommentResult) ProtoMessage() {}
 
 func (x *GiteaIssueCommentResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[15]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1466,7 +1694,7 @@ func (x *GiteaIssueCommentResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaIssueCommentResult.ProtoReflect.Descriptor instead.
 func (*GiteaIssueCommentResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{15}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GiteaIssueCommentResult) GetComment() *GiteaCommentRecord {
@@ -1485,7 +1713,7 @@ type GiteaIssueCloseResult struct {
 
 func (x *GiteaIssueCloseResult) Reset() {
 	*x = GiteaIssueCloseResult{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[16]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +1725,7 @@ func (x *GiteaIssueCloseResult) String() string {
 func (*GiteaIssueCloseResult) ProtoMessage() {}
 
 func (x *GiteaIssueCloseResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[16]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +1738,7 @@ func (x *GiteaIssueCloseResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaIssueCloseResult.ProtoReflect.Descriptor instead.
 func (*GiteaIssueCloseResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{16}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GiteaIssueCloseResult) GetIssue() *GiteaIssueRecord {
@@ -1529,7 +1757,7 @@ type GiteaIssueReopenResult struct {
 
 func (x *GiteaIssueReopenResult) Reset() {
 	*x = GiteaIssueReopenResult{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[17]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1541,7 +1769,7 @@ func (x *GiteaIssueReopenResult) String() string {
 func (*GiteaIssueReopenResult) ProtoMessage() {}
 
 func (x *GiteaIssueReopenResult) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[17]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1554,10 +1782,54 @@ func (x *GiteaIssueReopenResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaIssueReopenResult.ProtoReflect.Descriptor instead.
 func (*GiteaIssueReopenResult) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{17}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GiteaIssueReopenResult) GetIssue() *GiteaIssueRecord {
+	if x != nil {
+		return x.Issue
+	}
+	return nil
+}
+
+type GiteaIssueEditResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issue         *GiteaIssueRecord      `protobuf:"bytes,1,opt,name=issue,proto3" json:"issue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GiteaIssueEditResult) Reset() {
+	*x = GiteaIssueEditResult{}
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GiteaIssueEditResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GiteaIssueEditResult) ProtoMessage() {}
+
+func (x *GiteaIssueEditResult) ProtoReflect() protoreflect.Message {
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GiteaIssueEditResult.ProtoReflect.Descriptor instead.
+func (*GiteaIssueEditResult) Descriptor() ([]byte, []int) {
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GiteaIssueEditResult) GetIssue() *GiteaIssueRecord {
 	if x != nil {
 		return x.Issue
 	}
@@ -1576,6 +1848,7 @@ type GiteaResponse struct {
 	//	*GiteaResponse_IssueComment
 	//	*GiteaResponse_IssueClose
 	//	*GiteaResponse_IssueReopen
+	//	*GiteaResponse_IssueEdit
 	Result        isGiteaResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1583,7 +1856,7 @@ type GiteaResponse struct {
 
 func (x *GiteaResponse) Reset() {
 	*x = GiteaResponse{}
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[18]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1595,7 +1868,7 @@ func (x *GiteaResponse) String() string {
 func (*GiteaResponse) ProtoMessage() {}
 
 func (x *GiteaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_repowolf_v1_gitea_proto_msgTypes[18]
+	mi := &file_repowolf_v1_gitea_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1608,7 +1881,7 @@ func (x *GiteaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GiteaResponse.ProtoReflect.Descriptor instead.
 func (*GiteaResponse) Descriptor() ([]byte, []int) {
-	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{18}
+	return file_repowolf_v1_gitea_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GiteaResponse) GetMeta() *ResponseMeta {
@@ -1688,6 +1961,15 @@ func (x *GiteaResponse) GetIssueReopen() *GiteaIssueReopenResult {
 	return nil
 }
 
+func (x *GiteaResponse) GetIssueEdit() *GiteaIssueEditResult {
+	if x != nil {
+		if x, ok := x.Result.(*GiteaResponse_IssueEdit); ok {
+			return x.IssueEdit
+		}
+	}
+	return nil
+}
+
 type isGiteaResponse_Result interface {
 	isGiteaResponse_Result()
 }
@@ -1720,6 +2002,10 @@ type GiteaResponse_IssueReopen struct {
 	IssueReopen *GiteaIssueReopenResult `protobuf:"bytes,16,opt,name=issue_reopen,json=issueReopen,proto3,oneof"`
 }
 
+type GiteaResponse_IssueEdit struct {
+	IssueEdit *GiteaIssueEditResult `protobuf:"bytes,17,opt,name=issue_edit,json=issueEdit,proto3,oneof"`
+}
+
 func (*GiteaResponse_RepositoryView) isGiteaResponse_Result() {}
 
 func (*GiteaResponse_IssueList) isGiteaResponse_Result() {}
@@ -1733,6 +2019,8 @@ func (*GiteaResponse_IssueComment) isGiteaResponse_Result() {}
 func (*GiteaResponse_IssueClose) isGiteaResponse_Result() {}
 
 func (*GiteaResponse_IssueReopen) isGiteaResponse_Result() {}
+
+func (*GiteaResponse_IssueEdit) isGiteaResponse_Result() {}
 
 var File_repowolf_v1_gitea_proto protoreflect.FileDescriptor
 
@@ -1774,7 +2062,23 @@ const file_repowolf_v1_gitea_proto_rawDesc = "" +
 	"\x16GiteaIssueCloseRequest\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x03R\x05index\"/\n" +
 	"\x17GiteaIssueReopenRequest\x12\x14\n" +
-	"\x05index\x18\x01 \x01(\x03R\x05index\"\xdc\x04\n" +
+	"\x05index\x18\x01 \x01(\x03R\x05index\")\n" +
+	"\x0fGiteaStringList\x12\x16\n" +
+	"\x06values\x18\x01 \x03(\tR\x06values\"\x85\x04\n" +
+	"\x15GiteaIssueEditRequest\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x03R\x05index\x12\x19\n" +
+	"\x05title\x18\x02 \x01(\tH\x02R\x05title\x88\x01\x01\x12%\n" +
+	"\vdescription\x18\x03 \x01(\tH\x03R\vdescription\x88\x01\x01\x12C\n" +
+	"\rset_assignees\x18\x04 \x01(\v2\x1c.repowolf.v1.GiteaStringListH\x00R\fsetAssignees\x12C\n" +
+	"\radd_assignees\x18\x05 \x01(\v2\x1c.repowolf.v1.GiteaStringListH\x00R\faddAssignees\x12I\n" +
+	"\x10remove_assignees\x18\x06 \x01(\v2\x1c.repowolf.v1.GiteaStringListH\x00R\x0fremoveAssignees\x12=\n" +
+	"\n" +
+	"add_labels\x18\a \x01(\v2\x1c.repowolf.v1.GiteaStringListH\x01R\taddLabels\x12C\n" +
+	"\rremove_labels\x18\b \x01(\v2\x1c.repowolf.v1.GiteaStringListH\x01R\fremoveLabelsB\x11\n" +
+	"\x0fassignee_actionB\x0e\n" +
+	"\flabel_actionB\b\n" +
+	"\x06_titleB\x0e\n" +
+	"\f_description\"\xa1\x05\n" +
 	"\fGiteaRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.repowolf.v1.RequestContextR\acontext\x12R\n" +
 	"\x0frepository_view\x18\n" +
@@ -1787,7 +2091,9 @@ const file_repowolf_v1_gitea_proto_rawDesc = "" +
 	"\rissue_comment\x18\x0e \x01(\v2%.repowolf.v1.GiteaIssueCommentRequestH\x00R\fissueComment\x12F\n" +
 	"\vissue_close\x18\x0f \x01(\v2#.repowolf.v1.GiteaIssueCloseRequestH\x00R\n" +
 	"issueClose\x12I\n" +
-	"\fissue_reopen\x18\x10 \x01(\v2$.repowolf.v1.GiteaIssueReopenRequestH\x00R\vissueReopenB\v\n" +
+	"\fissue_reopen\x18\x10 \x01(\v2$.repowolf.v1.GiteaIssueReopenRequestH\x00R\vissueReopen\x12C\n" +
+	"\n" +
+	"issue_edit\x18\x11 \x01(\v2\".repowolf.v1.GiteaIssueEditRequestH\x00R\tissueEditB\v\n" +
 	"\toperation\"\xa2\x04\n" +
 	"\x15GiteaRepositoryRecord\x12\x1b\n" +
 	"\tfull_name\x18\x01 \x01(\tR\bfullName\x12 \n" +
@@ -1855,7 +2161,9 @@ const file_repowolf_v1_gitea_proto_rawDesc = "" +
 	"\x15GiteaIssueCloseResult\x123\n" +
 	"\x05issue\x18\x01 \x01(\v2\x1d.repowolf.v1.GiteaIssueRecordR\x05issue\"M\n" +
 	"\x16GiteaIssueReopenResult\x123\n" +
-	"\x05issue\x18\x01 \x01(\v2\x1d.repowolf.v1.GiteaIssueRecordR\x05issue\"\xcb\x04\n" +
+	"\x05issue\x18\x01 \x01(\v2\x1d.repowolf.v1.GiteaIssueRecordR\x05issue\"K\n" +
+	"\x14GiteaIssueEditResult\x123\n" +
+	"\x05issue\x18\x01 \x01(\v2\x1d.repowolf.v1.GiteaIssueRecordR\x05issue\"\x8f\x05\n" +
 	"\rGiteaResponse\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.repowolf.v1.ResponseMetaR\x04meta\x12Q\n" +
 	"\x0frepository_view\x18\n" +
@@ -1868,7 +2176,9 @@ const file_repowolf_v1_gitea_proto_rawDesc = "" +
 	"\rissue_comment\x18\x0e \x01(\v2$.repowolf.v1.GiteaIssueCommentResultH\x00R\fissueComment\x12E\n" +
 	"\vissue_close\x18\x0f \x01(\v2\".repowolf.v1.GiteaIssueCloseResultH\x00R\n" +
 	"issueClose\x12H\n" +
-	"\fissue_reopen\x18\x10 \x01(\v2#.repowolf.v1.GiteaIssueReopenResultH\x00R\vissueReopenB\b\n" +
+	"\fissue_reopen\x18\x10 \x01(\v2#.repowolf.v1.GiteaIssueReopenResultH\x00R\vissueReopen\x12B\n" +
+	"\n" +
+	"issue_edit\x18\x11 \x01(\v2!.repowolf.v1.GiteaIssueEditResultH\x00R\tissueEditB\b\n" +
 	"\x06result*\x89\x01\n" +
 	"\x0fGiteaIssueState\x12!\n" +
 	"\x1dGITEA_ISSUE_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
@@ -1914,7 +2224,7 @@ func file_repowolf_v1_gitea_proto_rawDescGZIP() []byte {
 }
 
 var file_repowolf_v1_gitea_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_repowolf_v1_gitea_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_repowolf_v1_gitea_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_repowolf_v1_gitea_proto_goTypes = []any{
 	(GiteaIssueState)(0),               // 0: repowolf.v1.GiteaIssueState
 	(GiteaIssueKind)(0),                // 1: repowolf.v1.GiteaIssueKind
@@ -1926,67 +2236,78 @@ var file_repowolf_v1_gitea_proto_goTypes = []any{
 	(*GiteaIssueCommentRequest)(nil),   // 7: repowolf.v1.GiteaIssueCommentRequest
 	(*GiteaIssueCloseRequest)(nil),     // 8: repowolf.v1.GiteaIssueCloseRequest
 	(*GiteaIssueReopenRequest)(nil),    // 9: repowolf.v1.GiteaIssueReopenRequest
-	(*GiteaRequest)(nil),               // 10: repowolf.v1.GiteaRequest
-	(*GiteaRepositoryRecord)(nil),      // 11: repowolf.v1.GiteaRepositoryRecord
-	(*GiteaRepositoryViewResult)(nil),  // 12: repowolf.v1.GiteaRepositoryViewResult
-	(*GiteaCommentRecord)(nil),         // 13: repowolf.v1.GiteaCommentRecord
-	(*GiteaIssueRecord)(nil),           // 14: repowolf.v1.GiteaIssueRecord
-	(*GiteaIssueListResult)(nil),       // 15: repowolf.v1.GiteaIssueListResult
-	(*GiteaIssueViewResult)(nil),       // 16: repowolf.v1.GiteaIssueViewResult
-	(*GiteaIssueCreateResult)(nil),     // 17: repowolf.v1.GiteaIssueCreateResult
-	(*GiteaIssueCommentResult)(nil),    // 18: repowolf.v1.GiteaIssueCommentResult
-	(*GiteaIssueCloseResult)(nil),      // 19: repowolf.v1.GiteaIssueCloseResult
-	(*GiteaIssueReopenResult)(nil),     // 20: repowolf.v1.GiteaIssueReopenResult
-	(*GiteaResponse)(nil),              // 21: repowolf.v1.GiteaResponse
-	(*timestamppb.Timestamp)(nil),      // 22: google.protobuf.Timestamp
-	(*RequestContext)(nil),             // 23: repowolf.v1.RequestContext
-	(*ResponseMeta)(nil),               // 24: repowolf.v1.ResponseMeta
+	(*GiteaStringList)(nil),            // 10: repowolf.v1.GiteaStringList
+	(*GiteaIssueEditRequest)(nil),      // 11: repowolf.v1.GiteaIssueEditRequest
+	(*GiteaRequest)(nil),               // 12: repowolf.v1.GiteaRequest
+	(*GiteaRepositoryRecord)(nil),      // 13: repowolf.v1.GiteaRepositoryRecord
+	(*GiteaRepositoryViewResult)(nil),  // 14: repowolf.v1.GiteaRepositoryViewResult
+	(*GiteaCommentRecord)(nil),         // 15: repowolf.v1.GiteaCommentRecord
+	(*GiteaIssueRecord)(nil),           // 16: repowolf.v1.GiteaIssueRecord
+	(*GiteaIssueListResult)(nil),       // 17: repowolf.v1.GiteaIssueListResult
+	(*GiteaIssueViewResult)(nil),       // 18: repowolf.v1.GiteaIssueViewResult
+	(*GiteaIssueCreateResult)(nil),     // 19: repowolf.v1.GiteaIssueCreateResult
+	(*GiteaIssueCommentResult)(nil),    // 20: repowolf.v1.GiteaIssueCommentResult
+	(*GiteaIssueCloseResult)(nil),      // 21: repowolf.v1.GiteaIssueCloseResult
+	(*GiteaIssueReopenResult)(nil),     // 22: repowolf.v1.GiteaIssueReopenResult
+	(*GiteaIssueEditResult)(nil),       // 23: repowolf.v1.GiteaIssueEditResult
+	(*GiteaResponse)(nil),              // 24: repowolf.v1.GiteaResponse
+	(*timestamppb.Timestamp)(nil),      // 25: google.protobuf.Timestamp
+	(*RequestContext)(nil),             // 26: repowolf.v1.RequestContext
+	(*ResponseMeta)(nil),               // 27: repowolf.v1.ResponseMeta
 }
 var file_repowolf_v1_gitea_proto_depIdxs = []int32{
 	0,  // 0: repowolf.v1.GiteaIssueListRequest.state:type_name -> repowolf.v1.GiteaIssueState
-	22, // 1: repowolf.v1.GiteaIssueListRequest.from:type_name -> google.protobuf.Timestamp
-	22, // 2: repowolf.v1.GiteaIssueListRequest.until:type_name -> google.protobuf.Timestamp
+	25, // 1: repowolf.v1.GiteaIssueListRequest.from:type_name -> google.protobuf.Timestamp
+	25, // 2: repowolf.v1.GiteaIssueListRequest.until:type_name -> google.protobuf.Timestamp
 	2,  // 3: repowolf.v1.GiteaIssueListRequest.fields:type_name -> repowolf.v1.GiteaIssueField
-	23, // 4: repowolf.v1.GiteaRequest.context:type_name -> repowolf.v1.RequestContext
-	3,  // 5: repowolf.v1.GiteaRequest.repository_view:type_name -> repowolf.v1.GiteaRepositoryViewRequest
-	4,  // 6: repowolf.v1.GiteaRequest.issue_list:type_name -> repowolf.v1.GiteaIssueListRequest
-	5,  // 7: repowolf.v1.GiteaRequest.issue_view:type_name -> repowolf.v1.GiteaIssueViewRequest
-	6,  // 8: repowolf.v1.GiteaRequest.issue_create:type_name -> repowolf.v1.GiteaIssueCreateRequest
-	7,  // 9: repowolf.v1.GiteaRequest.issue_comment:type_name -> repowolf.v1.GiteaIssueCommentRequest
-	8,  // 10: repowolf.v1.GiteaRequest.issue_close:type_name -> repowolf.v1.GiteaIssueCloseRequest
-	9,  // 11: repowolf.v1.GiteaRequest.issue_reopen:type_name -> repowolf.v1.GiteaIssueReopenRequest
-	22, // 12: repowolf.v1.GiteaRepositoryRecord.created:type_name -> google.protobuf.Timestamp
-	22, // 13: repowolf.v1.GiteaRepositoryRecord.updated:type_name -> google.protobuf.Timestamp
-	11, // 14: repowolf.v1.GiteaRepositoryViewResult.repository:type_name -> repowolf.v1.GiteaRepositoryRecord
-	22, // 15: repowolf.v1.GiteaCommentRecord.created:type_name -> google.protobuf.Timestamp
-	22, // 16: repowolf.v1.GiteaCommentRecord.updated:type_name -> google.protobuf.Timestamp
-	0,  // 17: repowolf.v1.GiteaIssueRecord.state:type_name -> repowolf.v1.GiteaIssueState
-	1,  // 18: repowolf.v1.GiteaIssueRecord.kind:type_name -> repowolf.v1.GiteaIssueKind
-	22, // 19: repowolf.v1.GiteaIssueRecord.created:type_name -> google.protobuf.Timestamp
-	22, // 20: repowolf.v1.GiteaIssueRecord.updated:type_name -> google.protobuf.Timestamp
-	22, // 21: repowolf.v1.GiteaIssueRecord.deadline:type_name -> google.protobuf.Timestamp
-	13, // 22: repowolf.v1.GiteaIssueRecord.comments:type_name -> repowolf.v1.GiteaCommentRecord
-	14, // 23: repowolf.v1.GiteaIssueListResult.issues:type_name -> repowolf.v1.GiteaIssueRecord
-	14, // 24: repowolf.v1.GiteaIssueViewResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
-	14, // 25: repowolf.v1.GiteaIssueCreateResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
-	13, // 26: repowolf.v1.GiteaIssueCommentResult.comment:type_name -> repowolf.v1.GiteaCommentRecord
-	14, // 27: repowolf.v1.GiteaIssueCloseResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
-	14, // 28: repowolf.v1.GiteaIssueReopenResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
-	24, // 29: repowolf.v1.GiteaResponse.meta:type_name -> repowolf.v1.ResponseMeta
-	12, // 30: repowolf.v1.GiteaResponse.repository_view:type_name -> repowolf.v1.GiteaRepositoryViewResult
-	15, // 31: repowolf.v1.GiteaResponse.issue_list:type_name -> repowolf.v1.GiteaIssueListResult
-	16, // 32: repowolf.v1.GiteaResponse.issue_view:type_name -> repowolf.v1.GiteaIssueViewResult
-	17, // 33: repowolf.v1.GiteaResponse.issue_create:type_name -> repowolf.v1.GiteaIssueCreateResult
-	18, // 34: repowolf.v1.GiteaResponse.issue_comment:type_name -> repowolf.v1.GiteaIssueCommentResult
-	19, // 35: repowolf.v1.GiteaResponse.issue_close:type_name -> repowolf.v1.GiteaIssueCloseResult
-	20, // 36: repowolf.v1.GiteaResponse.issue_reopen:type_name -> repowolf.v1.GiteaIssueReopenResult
-	10, // 37: repowolf.v1.GiteaService.Execute:input_type -> repowolf.v1.GiteaRequest
-	21, // 38: repowolf.v1.GiteaService.Execute:output_type -> repowolf.v1.GiteaResponse
-	38, // [38:39] is the sub-list for method output_type
-	37, // [37:38] is the sub-list for method input_type
-	37, // [37:37] is the sub-list for extension type_name
-	37, // [37:37] is the sub-list for extension extendee
-	0,  // [0:37] is the sub-list for field type_name
+	10, // 4: repowolf.v1.GiteaIssueEditRequest.set_assignees:type_name -> repowolf.v1.GiteaStringList
+	10, // 5: repowolf.v1.GiteaIssueEditRequest.add_assignees:type_name -> repowolf.v1.GiteaStringList
+	10, // 6: repowolf.v1.GiteaIssueEditRequest.remove_assignees:type_name -> repowolf.v1.GiteaStringList
+	10, // 7: repowolf.v1.GiteaIssueEditRequest.add_labels:type_name -> repowolf.v1.GiteaStringList
+	10, // 8: repowolf.v1.GiteaIssueEditRequest.remove_labels:type_name -> repowolf.v1.GiteaStringList
+	26, // 9: repowolf.v1.GiteaRequest.context:type_name -> repowolf.v1.RequestContext
+	3,  // 10: repowolf.v1.GiteaRequest.repository_view:type_name -> repowolf.v1.GiteaRepositoryViewRequest
+	4,  // 11: repowolf.v1.GiteaRequest.issue_list:type_name -> repowolf.v1.GiteaIssueListRequest
+	5,  // 12: repowolf.v1.GiteaRequest.issue_view:type_name -> repowolf.v1.GiteaIssueViewRequest
+	6,  // 13: repowolf.v1.GiteaRequest.issue_create:type_name -> repowolf.v1.GiteaIssueCreateRequest
+	7,  // 14: repowolf.v1.GiteaRequest.issue_comment:type_name -> repowolf.v1.GiteaIssueCommentRequest
+	8,  // 15: repowolf.v1.GiteaRequest.issue_close:type_name -> repowolf.v1.GiteaIssueCloseRequest
+	9,  // 16: repowolf.v1.GiteaRequest.issue_reopen:type_name -> repowolf.v1.GiteaIssueReopenRequest
+	11, // 17: repowolf.v1.GiteaRequest.issue_edit:type_name -> repowolf.v1.GiteaIssueEditRequest
+	25, // 18: repowolf.v1.GiteaRepositoryRecord.created:type_name -> google.protobuf.Timestamp
+	25, // 19: repowolf.v1.GiteaRepositoryRecord.updated:type_name -> google.protobuf.Timestamp
+	13, // 20: repowolf.v1.GiteaRepositoryViewResult.repository:type_name -> repowolf.v1.GiteaRepositoryRecord
+	25, // 21: repowolf.v1.GiteaCommentRecord.created:type_name -> google.protobuf.Timestamp
+	25, // 22: repowolf.v1.GiteaCommentRecord.updated:type_name -> google.protobuf.Timestamp
+	0,  // 23: repowolf.v1.GiteaIssueRecord.state:type_name -> repowolf.v1.GiteaIssueState
+	1,  // 24: repowolf.v1.GiteaIssueRecord.kind:type_name -> repowolf.v1.GiteaIssueKind
+	25, // 25: repowolf.v1.GiteaIssueRecord.created:type_name -> google.protobuf.Timestamp
+	25, // 26: repowolf.v1.GiteaIssueRecord.updated:type_name -> google.protobuf.Timestamp
+	25, // 27: repowolf.v1.GiteaIssueRecord.deadline:type_name -> google.protobuf.Timestamp
+	15, // 28: repowolf.v1.GiteaIssueRecord.comments:type_name -> repowolf.v1.GiteaCommentRecord
+	16, // 29: repowolf.v1.GiteaIssueListResult.issues:type_name -> repowolf.v1.GiteaIssueRecord
+	16, // 30: repowolf.v1.GiteaIssueViewResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
+	16, // 31: repowolf.v1.GiteaIssueCreateResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
+	15, // 32: repowolf.v1.GiteaIssueCommentResult.comment:type_name -> repowolf.v1.GiteaCommentRecord
+	16, // 33: repowolf.v1.GiteaIssueCloseResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
+	16, // 34: repowolf.v1.GiteaIssueReopenResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
+	16, // 35: repowolf.v1.GiteaIssueEditResult.issue:type_name -> repowolf.v1.GiteaIssueRecord
+	27, // 36: repowolf.v1.GiteaResponse.meta:type_name -> repowolf.v1.ResponseMeta
+	14, // 37: repowolf.v1.GiteaResponse.repository_view:type_name -> repowolf.v1.GiteaRepositoryViewResult
+	17, // 38: repowolf.v1.GiteaResponse.issue_list:type_name -> repowolf.v1.GiteaIssueListResult
+	18, // 39: repowolf.v1.GiteaResponse.issue_view:type_name -> repowolf.v1.GiteaIssueViewResult
+	19, // 40: repowolf.v1.GiteaResponse.issue_create:type_name -> repowolf.v1.GiteaIssueCreateResult
+	20, // 41: repowolf.v1.GiteaResponse.issue_comment:type_name -> repowolf.v1.GiteaIssueCommentResult
+	21, // 42: repowolf.v1.GiteaResponse.issue_close:type_name -> repowolf.v1.GiteaIssueCloseResult
+	22, // 43: repowolf.v1.GiteaResponse.issue_reopen:type_name -> repowolf.v1.GiteaIssueReopenResult
+	23, // 44: repowolf.v1.GiteaResponse.issue_edit:type_name -> repowolf.v1.GiteaIssueEditResult
+	12, // 45: repowolf.v1.GiteaService.Execute:input_type -> repowolf.v1.GiteaRequest
+	24, // 46: repowolf.v1.GiteaService.Execute:output_type -> repowolf.v1.GiteaResponse
+	46, // [46:47] is the sub-list for method output_type
+	45, // [45:46] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_repowolf_v1_gitea_proto_init() }
@@ -1998,7 +2319,14 @@ func file_repowolf_v1_gitea_proto_init() {
 	file_repowolf_v1_meta_proto_init()
 	file_repowolf_v1_gitea_proto_msgTypes[1].OneofWrappers = []any{}
 	file_repowolf_v1_gitea_proto_msgTypes[3].OneofWrappers = []any{}
-	file_repowolf_v1_gitea_proto_msgTypes[7].OneofWrappers = []any{
+	file_repowolf_v1_gitea_proto_msgTypes[8].OneofWrappers = []any{
+		(*GiteaIssueEditRequest_SetAssignees)(nil),
+		(*GiteaIssueEditRequest_AddAssignees)(nil),
+		(*GiteaIssueEditRequest_RemoveAssignees)(nil),
+		(*GiteaIssueEditRequest_AddLabels)(nil),
+		(*GiteaIssueEditRequest_RemoveLabels)(nil),
+	}
+	file_repowolf_v1_gitea_proto_msgTypes[9].OneofWrappers = []any{
 		(*GiteaRequest_RepositoryView)(nil),
 		(*GiteaRequest_IssueList)(nil),
 		(*GiteaRequest_IssueView)(nil),
@@ -2006,9 +2334,10 @@ func file_repowolf_v1_gitea_proto_init() {
 		(*GiteaRequest_IssueComment)(nil),
 		(*GiteaRequest_IssueClose)(nil),
 		(*GiteaRequest_IssueReopen)(nil),
+		(*GiteaRequest_IssueEdit)(nil),
 	}
-	file_repowolf_v1_gitea_proto_msgTypes[11].OneofWrappers = []any{}
-	file_repowolf_v1_gitea_proto_msgTypes[18].OneofWrappers = []any{
+	file_repowolf_v1_gitea_proto_msgTypes[13].OneofWrappers = []any{}
+	file_repowolf_v1_gitea_proto_msgTypes[21].OneofWrappers = []any{
 		(*GiteaResponse_RepositoryView)(nil),
 		(*GiteaResponse_IssueList)(nil),
 		(*GiteaResponse_IssueView)(nil),
@@ -2016,6 +2345,7 @@ func file_repowolf_v1_gitea_proto_init() {
 		(*GiteaResponse_IssueComment)(nil),
 		(*GiteaResponse_IssueClose)(nil),
 		(*GiteaResponse_IssueReopen)(nil),
+		(*GiteaResponse_IssueEdit)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2023,7 +2353,7 @@ func file_repowolf_v1_gitea_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_repowolf_v1_gitea_proto_rawDesc), len(file_repowolf_v1_gitea_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   19,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -139,6 +139,11 @@ func parseIssues(args []string, allowMutations bool) (command, error) {
 				return command{}, fmt.Errorf("unsupported issue command")
 			}
 			return parseIssueCreate(args[2:])
+		case "edit", "e":
+			if !allowMutations {
+				return command{}, fmt.Errorf("unsupported issue command")
+			}
+			return parseIssueEdit(args[2:])
 		case "close":
 			if !allowMutations {
 				return command{}, fmt.Errorf("unsupported issue command")

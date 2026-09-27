@@ -7,6 +7,15 @@ import (
 	sdk "gitea.dev/sdk"
 )
 
+func TestNormalizeIssueRetainsLabelIDs(t *testing.T) {
+	issue := sdkIssue()
+	issue.Labels = []*sdk.Label{{ID: 9, Name: "bug"}, {ID: 10, Name: "urgent"}}
+	normalized, err := normalizeIssue(issue, "Owner", "Repo")
+	if err != nil || normalized.labelIDs["bug"] != 9 || normalized.labelIDs["urgent"] != 10 {
+		t.Fatalf("normalized=%#v err=%v", normalized, err)
+	}
+}
+
 func TestNormalizeIssueRejectsProtobufInvalidTimestamps(t *testing.T) {
 	beforeProtobufRange := time.Date(0, time.January, 1, 0, 0, 0, 0, time.UTC)
 	afterProtobufRange := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
