@@ -28,6 +28,29 @@ func TestNormalizePullPresenceAndProjection(t *testing.T) {
 		t.Fatalf("unexpected record %#v", record)
 	}
 }
+func TestProjectPullDetailIncludesEveryDetailField(t *testing.T) {
+	mergeable, allow := false, true
+	deadline := time.Now().UTC().Add(24 * time.Hour)
+	value := validSDKPull()
+	value.Body = "body"
+	value.Draft = true
+	value.AllowMaintainerEdit = allow
+	value.Deadline = &deadline
+	value.Assignees = []*sdk.User{{ID: 4, UserName: "assignee"}}
+	value.Milestone = &sdk.Milestone{Title: "milestone"}
+	value.Labels = []*sdk.Label{{ID: 5, Name: "label"}}
+	value.Comments = 6
+	value.RequestedReviewers = []*sdk.User{{ID: 7, UserName: "reviewer"}}
+	normalized, err := normalizePull(value, pullPresence{mergeable: &mergeable, allowMaintainerEdit: &allow}, "Owner", "Repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := projectPullDetail(normalized)
+	if record.Index != value.Index || record.State != repowolfv1.GiteaPullState_GITEA_PULL_STATE_OPEN || record.AuthorId != value.Poster.ID || record.Author != value.Poster.UserName || record.Url != value.HTMLURL || record.Title != value.Title || record.Body != value.Body || !record.Draft || record.Mergeable == nil || *record.Mergeable || record.AllowMaintainerEdit == nil || !*record.AllowMaintainerEdit || record.Base != value.Base.Ref || record.BaseCommit != value.Base.Sha || record.Head != value.Head.Name || !record.Created.AsTime().Equal(*value.Created) || !record.Updated.AsTime().Equal(*value.Updated) || record.Deadline == nil || !record.Deadline.AsTime().Equal(deadline) || len(record.Assignees) != 1 || record.Assignees[0] != "assignee" || record.Milestone == nil || *record.Milestone != "milestone" || len(record.Labels) != 1 || record.Labels[0] != "label" || record.CommentCount != 6 || len(record.RequestedReviewers) != 1 || record.RequestedReviewers[0].GetUser().GetLogin() != "reviewer" || record.Comments == nil || record.Reviews == nil {
+		t.Fatalf("incomplete detail projection: %#v", record)
+	}
+}
+
 func TestNormalizePullRejectsPresenceMismatch(t *testing.T) {
 	value := validSDKPull()
 	value.Mergeable = true

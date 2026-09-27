@@ -29,7 +29,6 @@ var pullFieldDescriptors = []pullFieldDescriptor{
 }
 
 var pullFieldByName, pullFieldNameByValue = buildPullFieldLookups()
-var pullDetailOrder = buildPullDetailOrder()
 var defaultPullFields = []repowolfv1.GiteaPullField{
 	repowolfv1.GiteaPullField_GITEA_PULL_FIELD_INDEX,
 	repowolfv1.GiteaPullField_GITEA_PULL_FIELD_TITLE,
@@ -47,12 +46,4 @@ func buildPullFieldLookups() (map[string]repowolfv1.GiteaPullField, map[repowolf
 		byName[descriptor.name], byValue[descriptor.field] = descriptor.field, descriptor.name
 	}
 	return byName, byValue
-}
-
-func buildPullDetailOrder() []repowolfv1.GiteaPullField {
-	fields := make([]repowolfv1.GiteaPullField, len(pullFieldDescriptors))
-	for i, descriptor := range pullFieldDescriptors {
-		fields[i] = descriptor.field
-	}
-	return fields
 }

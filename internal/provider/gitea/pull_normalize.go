@@ -183,15 +183,35 @@ func projectPull(n *normalizedPull, fields []repowolfv1.GiteaPullField) *repowol
 	return record
 }
 func projectPullDetail(n *normalizedPull) *repowolfv1.GiteaPullRecord {
-	fields := make([]repowolfv1.GiteaPullField, 0, 18)
-	for field := 1; field <= 18; field++ {
-		fields = append(fields, repowolfv1.GiteaPullField(field))
+	record := &repowolfv1.GiteaPullRecord{
+		Index:               n.index,
+		State:               n.state,
+		AuthorId:            n.authorID,
+		Author:              n.author,
+		Url:                 n.url,
+		Title:               n.title,
+		Body:                n.body,
+		Draft:               n.draft,
+		Mergeable:           copyBool(n.mergeable),
+		AllowMaintainerEdit: copyBool(n.allowMaintainerEdit),
+		Base:                n.base,
+		BaseCommit:          n.baseCommit,
+		Head:                n.head,
+		Created:             timestamppb.New(n.created),
+		Updated:             timestamppb.New(n.updated),
+		Assignees:           append([]string{}, n.assignees...),
+		Labels:              append([]string{}, n.labels...),
+		CommentCount:        n.commentCount,
+		Comments:            []*repowolfv1.GiteaCommentRecord{},
+		RequestedReviewers:  append([]*repowolfv1.GiteaReviewActor{}, n.requestedReviewers...),
+		Reviews:             []*repowolfv1.GiteaPullReviewRecord{},
 	}
-	record := projectPull(n, fields)
-	record.Draft = n.draft
-	record.AllowMaintainerEdit = copyBool(n.allowMaintainerEdit)
-	record.RequestedReviewers = append([]*repowolfv1.GiteaReviewActor{}, n.requestedReviewers...)
-	record.Reviews = []*repowolfv1.GiteaPullReviewRecord{}
-	record.Comments = []*repowolfv1.GiteaCommentRecord{}
+	if n.deadline != nil {
+		record.Deadline = timestamppb.New(*n.deadline)
+	}
+	if n.milestone != nil {
+		milestone := *n.milestone
+		record.Milestone = &milestone
+	}
 	return record
 }

@@ -93,6 +93,31 @@ func renderPullView(parsed command, result *repowolfv1.GiteaPullViewResult) ([]b
 	if err := validatePullRecord(pull, includeComments); err != nil {
 		return nil, err
 	}
+	scalarFields := []orderedField{
+		{"index", pull.Index, true}, {"state", pullStateName(pull.State), true}, {"draft", pull.Draft, true},
+		{"author", pull.Author, true}, {"author-id", pull.AuthorId, true}, {"url", pull.Url, true}, {"title", pull.Title, true},
+		{"mergeable", pull.GetMergeable(), pull.Mergeable != nil}, {"allow-maintainer-edit", pull.GetAllowMaintainerEdit(), pull.AllowMaintainerEdit != nil},
+		{"base", pull.Base, true}, {"base-commit", pull.BaseCommit, true}, {"head", pull.Head, true},
+		{"created", pull.Created.AsTime().UTC().Format(time.RFC3339), true}, {"updated", pull.Updated.AsTime().UTC().Format(time.RFC3339), true},
+		{"deadline", timeValue(pull.Deadline), pull.Deadline != nil}, {"assignees", nonnil(pull.Assignees), true}, {"milestone", pull.GetMilestone(), pull.Milestone != nil}, {"labels", nonnil(pull.Labels), true},
+	}
+	if parsed.format == outputSimple {
+		var b bytes.Buffer
+		writeSimpleFields(&b, scalarFields)
+		if includeComments {
+			if err := writeSimpleComments(&b, pull.Comments); err != nil {
+				return nil, err
+			}
+		}
+		if err := writeSimpleReviewActors(&b, pull.RequestedReviewers); err != nil {
+			return nil, err
+		}
+		if err := writeSimpleReviews(&b, pull.Reviews); err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(&b, "body: %s\n", textValue(pull.Body))
+		return b.Bytes(), nil
+	}
 	comments, err := renderedComments(pull.Comments)
 	if err != nil {
 		return nil, err
@@ -105,15 +130,14 @@ func renderPullView(parsed command, result *repowolfv1.GiteaPullViewResult) ([]b
 	if err != nil {
 		return nil, err
 	}
-	values := []orderedField{
-		{"index", pull.Index, true}, {"state", pullStateName(pull.State), true}, {"draft", pull.Draft, true},
-		{"author", pull.Author, true}, {"author-id", pull.AuthorId, true}, {"url", pull.Url, true}, {"title", pull.Title, true},
-		{"mergeable", pull.GetMergeable(), pull.Mergeable != nil}, {"allow-maintainer-edit", pull.GetAllowMaintainerEdit(), pull.AllowMaintainerEdit != nil},
-		{"base", pull.Base, true}, {"base-commit", pull.BaseCommit, true}, {"head", pull.Head, true},
-		{"created", pull.Created.AsTime().UTC().Format(time.RFC3339), true}, {"updated", pull.Updated.AsTime().UTC().Format(time.RFC3339), true},
-		{"deadline", timeValue(pull.Deadline), pull.Deadline != nil}, {"assignees", nonnil(pull.Assignees), true}, {"milestone", pull.GetMilestone(), pull.Milestone != nil}, {"labels", nonnil(pull.Labels), true},
-		{"comments", comments, includeComments}, {"requested-reviewers", actors, true}, {"reviews", reviews, true}, {"body", pull.Body, true},
-	}
+	values := make([]orderedField, 0, len(scalarFields)+4)
+	values = append(values, scalarFields...)
+	values = append(values,
+		orderedField{"comments", comments, includeComments},
+		orderedField{"requested-reviewers", actors, true},
+		orderedField{"reviews", reviews, true},
+		orderedField{"body", pull.Body, true},
+	)
 	var b bytes.Buffer
 	switch parsed.format {
 	case outputJSON:
@@ -136,53 +160,60 @@ func renderPullView(parsed command, result *repowolfv1.GiteaPullViewResult) ([]b
 		b.WriteByte('\n')
 		b.WriteString(joinText(present, "\t"))
 		b.WriteByte('\n')
-	case outputSimple:
-		for _, v := range values {
-			if !v.present {
-				continue
-			}
-			if v.name == "comments" {
-				if err := writeNested(&b, "comments", pull.Comments, func(value any) ([]orderedField, error) { return commentFields(value.(*repowolfv1.GiteaCommentRecord)) }); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			if v.name == "requested-reviewers" {
-				if err := writeNested(&b, v.name, pull.RequestedReviewers, func(value any) ([]orderedField, error) {
-					return reviewActorFields(value.(*repowolfv1.GiteaReviewActor))
-				}); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			if v.name == "reviews" {
-				if err := writeNested(&b, v.name, pull.Reviews, func(value any) ([]orderedField, error) {
-					return pullReviewFields(value.(*repowolfv1.GiteaPullReviewRecord))
-				}); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			fmt.Fprintf(&b, "%s: %s\n", v.name, textValue(v.value))
-		}
 	default:
 		return nil, fmt.Errorf("invalid output")
 	}
 	return b.Bytes(), nil
 }
 
-func writeNested[T any](b *bytes.Buffer, name string, values []T, fields func(any) ([]orderedField, error)) error {
-	b.WriteString(name + ":\n")
-	for _, value := range values {
-		fs, err := fields(any(value))
+func writeSimpleFields(b *bytes.Buffer, fields []orderedField) {
+	for _, field := range fields {
+		if field.present {
+			fmt.Fprintf(b, "%s: %s\n", field.name, textValue(field.value))
+		}
+	}
+}
+
+func writeSimpleComments(b *bytes.Buffer, comments []*repowolfv1.GiteaCommentRecord) error {
+	b.WriteString("comments:\n")
+	for _, comment := range comments {
+		fields, err := commentFields(comment)
 		if err != nil {
 			return err
 		}
-		for _, f := range fs {
-			fmt.Fprintf(b, "  %s: %s\n", f.name, textValue(f.value))
-		}
+		writeSimpleNestedFields(b, fields)
 	}
 	return nil
+}
+
+func writeSimpleReviewActors(b *bytes.Buffer, actors []*repowolfv1.GiteaReviewActor) error {
+	b.WriteString("requested-reviewers:\n")
+	for _, actor := range actors {
+		fields, err := reviewActorFields(actor)
+		if err != nil {
+			return err
+		}
+		writeSimpleNestedFields(b, fields)
+	}
+	return nil
+}
+
+func writeSimpleReviews(b *bytes.Buffer, reviews []*repowolfv1.GiteaPullReviewRecord) error {
+	b.WriteString("reviews:\n")
+	for _, review := range reviews {
+		fields, err := pullReviewFields(review)
+		if err != nil {
+			return err
+		}
+		writeSimpleNestedFields(b, fields)
+	}
+	return nil
+}
+
+func writeSimpleNestedFields(b *bytes.Buffer, fields []orderedField) {
+	for _, field := range fields {
+		fmt.Fprintf(b, "  %s: %s\n", field.name, textValue(field.value))
+	}
 }
 
 func validateProjectedPull(pull *repowolfv1.GiteaPullRecord, fields []repowolfv1.GiteaPullField) error {

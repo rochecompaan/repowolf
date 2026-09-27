@@ -62,6 +62,61 @@ func TestRenderPullViewProducesExactTypedNestedJSON(t *testing.T) {
 	}
 }
 
+func TestRenderPullViewSimpleNestedSectionsExact(t *testing.T) {
+	pull := validProjectedPullRecord()
+	pull.Body = "pull body"
+	pull.CommentCount = 1
+	pull.Comments = []*repowolfv1.GiteaCommentRecord{{Id: 3, AuthorId: 4, Author: "bob", Url: "https://g/comment/3", Body: "comment body", Created: pull.Created, Updated: pull.Updated}}
+	actor := &repowolfv1.GiteaReviewActor{Actor: &repowolfv1.GiteaReviewActor_User{User: &repowolfv1.GiteaReviewUser{Id: 7, Login: "alice"}}}
+	pull.RequestedReviewers = []*repowolfv1.GiteaReviewActor{actor}
+	pull.Reviews = []*repowolfv1.GiteaPullReviewRecord{{Id: 11, Actor: actor, State: repowolfv1.GiteaPullReviewState_GITEA_PULL_REVIEW_STATE_APPROVED, Body: "review body", Submitted: pull.Created, Url: "https://g/review/11"}}
+	request := &repowolfv1.GiteaPullViewRequest{Index: 1, IncludeComments: true}
+	got, err := renderPullView(command{request: &repowolfv1.GiteaRequest{Operation: &repowolfv1.GiteaRequest_PullView{PullView: request}}, format: outputSimple}, &repowolfv1.GiteaPullViewResult{Pull: pull})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "index: 1\n" +
+		"state: open\n" +
+		"draft: false\n" +
+		"author: alice\n" +
+		"author-id: 2\n" +
+		"url: https://g/p/1\n" +
+		"title: title\n" +
+		"base: main\n" +
+		"base-commit: abc\n" +
+		"head: alice:topic\n" +
+		"created: 1970-01-01T00:00:01Z\n" +
+		"updated: 1970-01-01T00:00:01Z\n" +
+		"assignees: \n" +
+		"labels: \n" +
+		"comments:\n" +
+		"  id: 3\n" +
+		"  author: bob\n" +
+		"  author-id: 4\n" +
+		"  url: https://g/comment/3\n" +
+		"  created: 1970-01-01T00:00:01Z\n" +
+		"  updated: 1970-01-01T00:00:01Z\n" +
+		"  body: comment body\n" +
+		"requested-reviewers:\n" +
+		"  user: {\"id\":7,\"login\":\"alice\"}\n" +
+		"reviews:\n" +
+		"  id: 11\n" +
+		"  actor: {\"user\":{\"id\":7,\"login\":\"alice\"}}\n" +
+		"  state: approved\n" +
+		"  commit-id: \n" +
+		"  stale: false\n" +
+		"  official: false\n" +
+		"  dismissed: false\n" +
+		"  code-comment-count: 0\n" +
+		"  submitted: 1970-01-01T00:00:01Z\n" +
+		"  url: https://g/review/11\n" +
+		"  body: review body\n" +
+		"body: pull body\n"
+	if string(got) != want {
+		t.Fatalf("simple output = %q, want %q", got, want)
+	}
+}
+
 func TestRenderPullViewRejectsMismatchedRequestIndexAtomically(t *testing.T) {
 	pull := validProjectedPullRecord()
 	request := &repowolfv1.GiteaPullViewRequest{Index: pull.Index + 1}
