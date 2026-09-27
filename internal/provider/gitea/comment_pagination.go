@@ -16,7 +16,16 @@ const (
 )
 
 func loadIssueComments(ctx context.Context, api giteaAPI, owner, repo string, index int64, issue *repowolfv1.GiteaIssueRecord) ([]*repowolfv1.GiteaCommentRecord, error) {
-	if issue == nil || issue.CommentCount < 0 {
+	if issue == nil {
+		return nil, rpcstatus.ErrProviderFailure
+	}
+	return loadOrdinaryComments(ctx, api, owner, repo, index, issue.CommentCount)
+}
+func loadPullComments(ctx context.Context, api giteaAPI, owner, repo string, index, expected int64) ([]*repowolfv1.GiteaCommentRecord, error) {
+	return loadOrdinaryComments(ctx, api, owner, repo, index, expected)
+}
+func loadOrdinaryComments(ctx context.Context, api giteaAPI, owner, repo string, index, expected int64) ([]*repowolfv1.GiteaCommentRecord, error) {
+	if expected < 0 {
 		return nil, rpcstatus.ErrProviderFailure
 	}
 	comments := make([]*repowolfv1.GiteaCommentRecord, 0)
@@ -25,9 +34,7 @@ func loadIssueComments(ctx context.Context, api giteaAPI, owner, repo string, in
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		values, err := api.ListIssueTimeline(ctx, owner, repo, index, sdk.ListIssueCommentOptions{
-			ListOptions: sdk.ListOptions{Page: page, PageSize: commentPageSize},
-		})
+		values, err := api.ListIssueTimeline(ctx, owner, repo, index, sdk.ListIssueCommentOptions{ListOptions: sdk.ListOptions{Page: page, PageSize: commentPageSize}})
 		if err != nil {
 			return nil, classifyProviderError(ctx, err)
 		}
@@ -35,7 +42,7 @@ func loadIssueComments(ctx context.Context, api giteaAPI, owner, repo string, in
 			if values.entryCount != 0 {
 				return nil, runner.ErrOutputLimit
 			}
-			return completeIssueComments(issue, comments)
+			return completeOrdinaryComments(expected, comments)
 		}
 		if values.entryCount > commentPageSize || len(values.comments) > values.entryCount {
 			return nil, rpcstatus.ErrProviderFailure
@@ -47,12 +54,11 @@ func loadIssueComments(ctx context.Context, api giteaAPI, owner, repo string, in
 		comments = append(comments, normalized...)
 		last = next
 		if values.entryCount < commentPageSize {
-			return completeIssueComments(issue, comments)
+			return completeOrdinaryComments(expected, comments)
 		}
 	}
 	return nil, runner.ErrOutputLimit
 }
-
 func normalizeCommentPage(values []*sdk.Comment, last int64) ([]*repowolfv1.GiteaCommentRecord, int64, error) {
 	normalized := make([]*repowolfv1.GiteaCommentRecord, len(values))
 	next := last
@@ -66,9 +72,8 @@ func normalizeCommentPage(values []*sdk.Comment, last int64) ([]*repowolfv1.Gite
 	}
 	return normalized, next, nil
 }
-
-func completeIssueComments(issue *repowolfv1.GiteaIssueRecord, comments []*repowolfv1.GiteaCommentRecord) ([]*repowolfv1.GiteaCommentRecord, error) {
-	if int64(len(comments)) != issue.CommentCount {
+func completeOrdinaryComments(expected int64, comments []*repowolfv1.GiteaCommentRecord) ([]*repowolfv1.GiteaCommentRecord, error) {
+	if int64(len(comments)) != expected {
 		return nil, rpcstatus.ErrProviderFailure
 	}
 	return comments, nil

@@ -14,6 +14,7 @@ import (
 
 const (
 	issueKindReason                = "GITEA_ISSUE_KIND_PULL_REQUEST"
+	pullKindReason                 = "GITEA_PULL_KIND_ISSUE"
 	issueKindDomain                = "repowolf.dev/gitea"
 	giteaWriteOutcomeUnknownReason = "GITEA_WRITE_OUTCOME_UNKNOWN"
 	giteaWriteOutcomeUnknownDomain = "repowolf.dev/gitea"
@@ -29,6 +30,7 @@ var (
 	ErrProviderFailure       = errors.New("provider failure")
 	ErrNotFound              = errors.New("not found")
 	ErrIssueKind             = errors.New("issue kind mismatch")
+	ErrPullKind              = errors.New("pull kind mismatch")
 	ErrFailedPrecondition    = errors.New("operation precondition failed")
 	ErrWriteOutcomeUnknown   = errors.New("write outcome unknown")
 	ErrEditPartial           = errors.New("issue edit partially applied")
@@ -66,6 +68,8 @@ func mapDomainError(err error) error {
 		return status.Error(codes.NotFound, "not found")
 	case errors.Is(err, ErrIssueKind):
 		return issueKindError()
+	case errors.Is(err, ErrPullKind):
+		return pullKindError()
 	case errors.Is(err, ErrFailedPrecondition):
 		return status.Error(codes.FailedPrecondition, "operation precondition failed")
 	case errors.Is(err, ErrWriteOutcomeUnknown):
@@ -94,6 +98,14 @@ func issueKindError() error {
 		Reason: issueKindReason,
 		Domain: issueKindDomain,
 	})
+	if err != nil {
+		return status.Error(codes.Internal, "internal failure")
+	}
+	return value.Err()
+}
+
+func pullKindError() error {
+	value, err := status.New(codes.FailedPrecondition, "index is an issue; use tea issues").WithDetails(&errdetails.ErrorInfo{Reason: pullKindReason, Domain: issueKindDomain})
 	if err != nil {
 		return status.Error(codes.Internal, "internal failure")
 	}
@@ -146,6 +158,16 @@ func IsGiteaWriteOutcomeUnknown(err error) bool {
 	}
 	info, ok := value.Details()[0].(*errdetails.ErrorInfo)
 	return ok && info.Reason == giteaWriteOutcomeUnknownReason && info.Domain == giteaWriteOutcomeUnknownDomain
+}
+
+// IsPullKindStatus recognizes only the exact safe inverse-kind tuple.
+func IsPullKindStatus(err error) bool {
+	value, ok := status.FromError(err)
+	if !ok || value.Code() != codes.FailedPrecondition || value.Message() != "index is an issue; use tea issues" || len(value.Details()) != 1 {
+		return false
+	}
+	info, ok := value.Details()[0].(*errdetails.ErrorInfo)
+	return ok && info.Reason == pullKindReason && info.Domain == issueKindDomain
 }
 
 // IsIssueKindStatus recognizes only the trusted structured issue-kind status.

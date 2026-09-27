@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	sdk "gitea.dev/sdk"
@@ -230,8 +231,56 @@ func (a *RepositoryAdapter) Execute(ctx context.Context, repo policy.ResolvedRep
 	}
 	return nil, ErrInvalidRequest
 }
-func (a *RepositoryAdapter) pullView(context.Context, policy.ResolvedRepository, *repowolfv1.GiteaPullViewRequest) (*repowolfv1.GiteaResponse, error) {
-	return nil, rpcstatus.ErrServiceUnavailable
+func (a *RepositoryAdapter) pullView(ctx context.Context, repository policy.ResolvedRepository, request *repowolfv1.GiteaPullViewRequest) (*repowolfv1.GiteaResponse, error) {
+	if a.pulls == nil {
+		return nil, rpcstatus.ErrServiceUnavailable
+	}
+	owner, name := repository.Repository.Owner, repository.Repository.Name
+	issue, statusCode, err := a.api.GetIssue(ctx, owner, name, request.Index)
+	if err != nil {
+		if statusCode == http.StatusNotFound {
+			return nil, rpcstatus.ErrNotFound
+		}
+		return nil, classifyProviderError(ctx, err)
+	}
+	if issue == nil {
+		return nil, rpcstatus.ErrProviderFailure
+	}
+	if issue.PullRequest == nil {
+		return nil, rpcstatus.ErrPullKind
+	}
+	value, presence, err := a.pulls.GetPullRequest(ctx, owner, name, request.Index)
+	if err != nil {
+		return nil, classifyProviderError(ctx, err)
+	}
+	if value == nil || value.Index != request.Index || len(presence) != 1 {
+		return nil, rpcstatus.ErrProviderFailure
+	}
+	raw, ok := presence[value.Index]
+	if !ok {
+		return nil, rpcstatus.ErrProviderFailure
+	}
+	normalized, err := normalizePull(value, raw, owner, name)
+	if err != nil {
+		return nil, rpcstatus.ErrProviderFailure
+	}
+	record := projectPullDetail(normalized)
+	reviews, err := loadPullReviews(ctx, a.pulls, owner, name, request.Index)
+	if err != nil {
+		return nil, err
+	}
+	var comments []*repowolfv1.GiteaCommentRecord
+	if request.IncludeComments {
+		comments, err = loadPullComments(ctx, a.api, owner, name, request.Index, record.CommentCount)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		comments = []*repowolfv1.GiteaCommentRecord{}
+	}
+	record.Reviews = reviews
+	record.Comments = comments
+	return &repowolfv1.GiteaResponse{Result: &repowolfv1.GiteaResponse_PullView{PullView: &repowolfv1.GiteaPullViewResult{Pull: record}}}, nil
 }
 
 func (a *RepositoryAdapter) pullList(ctx context.Context, repository policy.ResolvedRepository, request *repowolfv1.GiteaPullListRequest) (*repowolfv1.GiteaResponse, error) {

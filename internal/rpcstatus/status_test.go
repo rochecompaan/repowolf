@@ -28,6 +28,7 @@ func TestErrorMapsDomainFailuresToStableStatuses(t *testing.T) {
 		{"repository", rpcstatus.ErrRepositoryUnavailable, codes.Unavailable, "repository unavailable"},
 		{"not found", rpcstatus.ErrNotFound, codes.NotFound, "not found"},
 		{"issue kind", rpcstatus.ErrIssueKind, codes.FailedPrecondition, "index is a pull request; use tea pulls"},
+		{"pull kind", rpcstatus.ErrPullKind, codes.FailedPrecondition, "index is an issue; use tea issues"},
 		{"provider", runner.ErrCommandFailed, codes.Unavailable, "provider failure"},
 		{"provider sentinel", rpcstatus.ErrProviderFailure, codes.Unavailable, "provider failure"},
 		{"deadline", context.DeadlineExceeded, codes.DeadlineExceeded, "deadline exceeded"},
@@ -67,6 +68,16 @@ func TestIssueKindStatusUsesStableStructuredIdentifier(t *testing.T) {
 	}
 	if sanitized := rpcstatus.Error(spoofed.Err()); rpcstatus.IsIssueKindStatus(sanitized) || status.Convert(sanitized).Message() != "operation precondition failed" {
 		t.Fatalf("untrusted structured status was not sanitized: %v", sanitized)
+	}
+}
+
+func TestPullKindStatusUsesStableStructuredIdentifier(t *testing.T) {
+	trusted := rpcstatus.Error(rpcstatus.ErrPullKind)
+	if !rpcstatus.IsPullKindStatus(trusted) {
+		t.Fatalf("trusted pull-kind status not recognized: %v", trusted)
+	}
+	if rpcstatus.IsPullKindStatus(status.Error(codes.FailedPrecondition, "index is an issue; use tea issues")) {
+		t.Fatal("message-only status recognized")
 	}
 }
 
