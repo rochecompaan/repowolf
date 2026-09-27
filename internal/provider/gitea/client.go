@@ -42,7 +42,7 @@ func newClient(baseURL string, options providerhttp.Options) (*sdk.Client, error
 	if err != nil {
 		return nil, fmt.Errorf("construct Gitea HTTP client: %w", err)
 	}
-	httpClient.Transport = &errorResponseRedactingTransport{base: httpClient.Transport}
+	httpClient.Transport = &pullPresenceTransport{base: &errorResponseRedactingTransport{base: httpClient.Transport}}
 	client, err := sdk.NewClient("https://"+parsed.Host+"/", sdk.SetHTTPClient(httpClient), sdk.SetGiteaVersion(""))
 	if err != nil {
 		return nil, fmt.Errorf("construct Gitea SDK client: %w", err)

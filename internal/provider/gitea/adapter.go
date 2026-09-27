@@ -34,6 +34,12 @@ type giteaAPI interface {
 	DeleteIssueLabel(context.Context, string, string, int64, int64) error
 }
 
+type pullAPI interface {
+	ListRepoPullRequests(context.Context, string, string, sdk.ListPullRequestsOptions) ([]*sdk.PullRequest, map[int64]pullPresence, error)
+	GetPullRequest(context.Context, string, string, int64) (*sdk.PullRequest, map[int64]pullPresence, error)
+	ListPullReviews(context.Context, string, string, int64, sdk.ListPullReviewsOptions) ([]*sdk.PullReview, error)
+}
+
 type repositorySDKClient interface {
 	GetRepo(context.Context, string, string) (*sdk.Repository, *sdk.Response, error)
 	ListRepoLabels(context.Context, string, string, sdk.ListLabelsOptions) ([]*sdk.Label, *sdk.Response, error)
@@ -53,9 +59,41 @@ type issueSDKClient interface {
 	DeleteIssueLabel(context.Context, string, string, int64, int64) (*sdk.Response, error)
 }
 
+type pullRequestSDKClient interface {
+	ListRepoPullRequests(context.Context, string, string, sdk.ListPullRequestsOptions) ([]*sdk.PullRequest, *sdk.Response, error)
+	GetPullRequest(context.Context, string, string, int64) (*sdk.PullRequest, *sdk.Response, error)
+	ListPullReviews(context.Context, string, string, int64, sdk.ListPullReviewsOptions) ([]*sdk.PullReview, *sdk.Response, error)
+}
+
 type sdkAPI struct {
 	repositories repositorySDKClient
 	issues       issueSDKClient
+	pulls        pullRequestSDKClient
+}
+
+func (a *sdkAPI) ListRepoPullRequests(ctx context.Context, owner, repo string, options sdk.ListPullRequestsOptions) ([]*sdk.PullRequest, map[int64]pullPresence, error) {
+	callCtx, collector := withPullPresenceCollector(ctx)
+	values, _, err := a.pulls.ListRepoPullRequests(callCtx, owner, repo, options)
+	if err != nil {
+		_, _ = collector.finish(pullPresenceArray)
+		return nil, nil, err
+	}
+	presence, parseErr := collector.finish(pullPresenceArray)
+	return values, presence, parseErr
+}
+func (a *sdkAPI) GetPullRequest(ctx context.Context, owner, repo string, index int64) (*sdk.PullRequest, map[int64]pullPresence, error) {
+	callCtx, collector := withPullPresenceCollector(ctx)
+	value, _, err := a.pulls.GetPullRequest(callCtx, owner, repo, index)
+	if err != nil {
+		_, _ = collector.finish(pullPresenceObject)
+		return nil, nil, err
+	}
+	presence, parseErr := collector.finish(pullPresenceObject)
+	return value, presence, parseErr
+}
+func (a *sdkAPI) ListPullReviews(ctx context.Context, owner, repo string, index int64, options sdk.ListPullReviewsOptions) ([]*sdk.PullReview, error) {
+	values, _, err := a.pulls.ListPullReviews(ctx, owner, repo, index, options)
+	return values, err
 }
 
 func (a *sdkAPI) GetRepo(ctx context.Context, owner, repo string) (*sdk.Repository, error) {
@@ -136,20 +174,26 @@ func (a *sdkAPI) ListIssueTimeline(ctx context.Context, owner, repo string, inde
 }
 
 type RepositoryAdapter struct {
-	api giteaAPI
+	api   giteaAPI
+	pulls pullAPI
 }
 
 func NewRepositoryAdapter(client *sdk.Client) (*RepositoryAdapter, error) {
 	if client == nil {
 		return nil, fmt.Errorf("construct Gitea repository adapter: nil client")
 	}
-	return &RepositoryAdapter{api: &sdkAPI{repositories: client.Repositories, issues: client.Issues}}, nil
+	api := &sdkAPI{repositories: client.Repositories, issues: client.Issues, pulls: client.PullRequests}
+	return &RepositoryAdapter{api: api, pulls: api}, nil
 }
 func newRepositoryAdapter(api giteaAPI) (*RepositoryAdapter, error) {
 	if api == nil {
 		return nil, fmt.Errorf("construct Gitea repository adapter: nil api")
 	}
-	return &RepositoryAdapter{api: api}, nil
+	adapter := &RepositoryAdapter{api: api}
+	if pulls, ok := api.(pullAPI); ok {
+		adapter.pulls = pulls
+	}
+	return adapter, nil
 }
 func newIssueAdapter(api giteaAPI) (*RepositoryAdapter, error) {
 	return newRepositoryAdapter(api)
