@@ -49,6 +49,13 @@ func ValidateRequest(request *repowolfv1.GiteaRequest) error {
 		return nil
 	case *repowolfv1.GiteaRequest_IssueEdit:
 		return validateIssueEdit(operation.IssueEdit)
+	case *repowolfv1.GiteaRequest_PullList:
+		return validatePullList(operation.PullList)
+	case *repowolfv1.GiteaRequest_PullView:
+		if operation.PullView == nil || operation.PullView.Index <= 0 {
+			return ErrInvalidRequest
+		}
+		return nil
 	default:
 		return ErrInvalidRequest
 	}
@@ -156,6 +163,20 @@ func validateIssueList(r *repowolfv1.GiteaIssueListRequest) error {
 	return nil
 }
 
+func validatePullList(r *repowolfv1.GiteaPullListRequest) error {
+	if r == nil || r.State < 1 || r.State > 3 || r.Page <= 0 || r.Limit <= 0 || r.Limit > 50 || len(r.Fields) == 0 {
+		return ErrInvalidRequest
+	}
+	seen := map[repowolfv1.GiteaPullField]bool{}
+	for _, field := range r.Fields {
+		if field < 1 || field > 18 || seen[field] {
+			return ErrInvalidRequest
+		}
+		seen[field] = true
+	}
+	return nil
+}
+
 func Capability(request *repowolfv1.GiteaRequest) (config.Capability, error) {
 	if err := ValidateRequest(request); err != nil {
 		return "", err
@@ -167,6 +188,8 @@ func Capability(request *repowolfv1.GiteaRequest) (config.Capability, error) {
 		return config.IssuesRead, nil
 	case *repowolfv1.GiteaRequest_IssueCreate, *repowolfv1.GiteaRequest_IssueComment, *repowolfv1.GiteaRequest_IssueClose, *repowolfv1.GiteaRequest_IssueReopen, *repowolfv1.GiteaRequest_IssueEdit:
 		return config.IssuesWrite, nil
+	case *repowolfv1.GiteaRequest_PullList, *repowolfv1.GiteaRequest_PullView:
+		return config.PullRequestsRead, nil
 	default:
 		return "", ErrInvalidRequest
 	}
@@ -193,6 +216,10 @@ func OperationName(request *repowolfv1.GiteaRequest) (string, error) {
 		return "gitea.issue_reopen", nil
 	case *repowolfv1.GiteaRequest_IssueEdit:
 		return "gitea.issue_edit", nil
+	case *repowolfv1.GiteaRequest_PullList:
+		return "gitea.pull_list", nil
+	case *repowolfv1.GiteaRequest_PullView:
+		return "gitea.pull_view", nil
 	default:
 		return "", ErrInvalidRequest
 	}

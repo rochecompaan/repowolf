@@ -68,6 +68,47 @@ message GiteaIssueViewRequest {
   bool include_comments = 2;
 }
 
+enum GiteaPullState {
+  GITEA_PULL_STATE_UNSPECIFIED = 0;
+  GITEA_PULL_STATE_OPEN = 1;
+  GITEA_PULL_STATE_CLOSED = 2;
+  GITEA_PULL_STATE_ALL = 3;
+}
+
+enum GiteaPullField {
+  GITEA_PULL_FIELD_UNSPECIFIED = 0;
+  GITEA_PULL_FIELD_INDEX = 1;
+  GITEA_PULL_FIELD_STATE = 2;
+  GITEA_PULL_FIELD_AUTHOR = 3;
+  GITEA_PULL_FIELD_AUTHOR_ID = 4;
+  GITEA_PULL_FIELD_URL = 5;
+  GITEA_PULL_FIELD_TITLE = 6;
+  GITEA_PULL_FIELD_BODY = 7;
+  GITEA_PULL_FIELD_MERGEABLE = 8;
+  GITEA_PULL_FIELD_BASE = 9;
+  GITEA_PULL_FIELD_BASE_COMMIT = 10;
+  GITEA_PULL_FIELD_HEAD = 11;
+  GITEA_PULL_FIELD_CREATED = 12;
+  GITEA_PULL_FIELD_UPDATED = 13;
+  GITEA_PULL_FIELD_DEADLINE = 14;
+  GITEA_PULL_FIELD_ASSIGNEES = 15;
+  GITEA_PULL_FIELD_MILESTONE = 16;
+  GITEA_PULL_FIELD_LABELS = 17;
+  GITEA_PULL_FIELD_COMMENTS = 18;
+}
+
+message GiteaPullListRequest {
+  GiteaPullState state = 1;
+  int32 page = 2;
+  int32 limit = 3;
+  repeated GiteaPullField fields = 4;
+}
+
+message GiteaPullViewRequest {
+  int64 index = 1;
+  bool include_comments = 2;
+}
+
 message GiteaIssueCreateRequest {
   string title = 1;
   optional string description = 2;
@@ -105,6 +146,8 @@ message GiteaRequest {
     GiteaIssueCloseRequest issue_close = 15;
     GiteaIssueReopenRequest issue_reopen = 16;
     GiteaIssueEditRequest issue_edit = 17;
+    GiteaPullListRequest pull_list = 18;
+    GiteaPullViewRequest pull_view = 19;
   }
 }
 
@@ -170,6 +213,75 @@ message GiteaIssueCloseResult { GiteaIssueRecord issue = 1; }
 message GiteaIssueReopenResult { GiteaIssueRecord issue = 1; }
 message GiteaIssueEditResult { GiteaIssueRecord issue = 1; }
 
+message GiteaReviewUser {
+  int64 id = 1;
+  string login = 2;
+}
+
+message GiteaReviewTeam {
+  int64 id = 1;
+  string name = 2;
+}
+
+message GiteaReviewActor {
+  oneof actor {
+    GiteaReviewUser user = 1;
+    GiteaReviewTeam team = 2;
+  }
+}
+
+enum GiteaPullReviewState {
+  GITEA_PULL_REVIEW_STATE_UNSPECIFIED = 0;
+  GITEA_PULL_REVIEW_STATE_APPROVED = 1;
+  GITEA_PULL_REVIEW_STATE_PENDING = 2;
+  GITEA_PULL_REVIEW_STATE_COMMENT = 3;
+  GITEA_PULL_REVIEW_STATE_REQUEST_CHANGES = 4;
+  GITEA_PULL_REVIEW_STATE_REQUEST_REVIEW = 5;
+}
+
+message GiteaPullReviewRecord {
+  int64 id = 1;
+  GiteaReviewActor actor = 2;
+  GiteaPullReviewState state = 3;
+  string body = 4;
+  string commit_id = 5;
+  bool stale = 6;
+  bool official = 7;
+  bool dismissed = 8;
+  int64 code_comment_count = 9;
+  google.protobuf.Timestamp submitted = 10;
+  string url = 11;
+}
+
+message GiteaPullRecord {
+  int64 index = 1;
+  GiteaPullState state = 2;
+  int64 author_id = 3;
+  string author = 4;
+  string url = 5;
+  string title = 6;
+  string body = 7;
+  bool draft = 8;
+  optional bool mergeable = 9;
+  optional bool allow_maintainer_edit = 10;
+  string base = 11;
+  string base_commit = 12;
+  string head = 13;
+  google.protobuf.Timestamp created = 14;
+  google.protobuf.Timestamp updated = 15;
+  google.protobuf.Timestamp deadline = 16;
+  repeated string assignees = 17;
+  optional string milestone = 18;
+  repeated string labels = 19;
+  int64 comment_count = 20;
+  repeated GiteaCommentRecord comments = 21;
+  repeated GiteaReviewActor requested_reviewers = 22;
+  repeated GiteaPullReviewRecord reviews = 23;
+}
+
+message GiteaPullListResult { repeated GiteaPullRecord pulls = 1; }
+message GiteaPullViewResult { GiteaPullRecord pull = 1; }
+
 message GiteaResponse {
   ResponseMeta meta = 1;
   oneof result {
@@ -181,5 +293,7 @@ message GiteaResponse {
     GiteaIssueCloseResult issue_close = 15;
     GiteaIssueReopenResult issue_reopen = 16;
     GiteaIssueEditResult issue_edit = 17;
+    GiteaPullListResult pull_list = 18;
+    GiteaPullViewResult pull_view = 19;
   }
 }
