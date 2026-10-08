@@ -38,10 +38,11 @@ var defaultIssueFields = []repowolfv1.GiteaIssueField{
 }
 
 type command struct {
-	request  *repowolfv1.GiteaRequest
-	format   outputFormat
-	fields   []repowolfv1.GiteaIssueField
-	mutation bool
+	request    *repowolfv1.GiteaRequest
+	format     outputFormat
+	fields     []repowolfv1.GiteaIssueField
+	pullFields []repowolfv1.GiteaPullField
+	mutation   bool
 }
 
 // Parse converts one bounded supported native tea argv into a typed request.
@@ -58,6 +59,8 @@ func Parse(args []string) (command, error) {
 		return parseIssues(args, false)
 	case "comments", "comment", "c":
 		return parseIssueComment(args)
+	case "pulls", "pull", "pr":
+		return parsePulls(args)
 	default:
 		return command{}, fmt.Errorf("unsupported command")
 	}

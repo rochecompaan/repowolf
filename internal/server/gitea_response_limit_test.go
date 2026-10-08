@@ -93,6 +93,48 @@ func TestGiteaIssueServiceEnforcesFinalProtobufLimit(t *testing.T) {
 	}
 }
 
+func TestGiteaPullServiceEnforcesFinalProtobufLimit(t *testing.T) {
+	const requestID = "request-id"
+	ctx := auth.WithRequestID(auth.WithPrincipal(context.Background(), "agent"), requestID)
+	for _, operation := range []struct {
+		name    string
+		request func() *repowolfv1.GiteaRequest
+	}{
+		{name: "list", request: giteaPullListRequest},
+		{name: "view", request: giteaPullViewRequest},
+	} {
+		for _, size := range []int{responseLimitBytes, responseLimitBytes + 1} {
+			t.Run(operation.name+map[bool]string{false: "/exact", true: "/over"}[size > responseLimitBytes], func(t *testing.T) {
+				providerResponse := giteaPullResponseWithFinalSize(t, size, requestID, operation.name)
+				executor := &fakeGiteaExecutor{response: providerResponse}
+				service := newGiteaService(giteaPolicy(t, config.PullRequestsRead, config.ProviderGitea), executor, &eventSink{})
+				response, err := service.Execute(ctx, operation.request())
+				if size > responseLimitBytes {
+					if response != nil || !errors.Is(err, runner.ErrOutputLimit) {
+						t.Fatalf("response=%#v err=%v", response, err)
+					}
+				} else if err != nil || proto.Size(response) != size {
+					t.Fatalf("size=%d err=%v", proto.Size(response), err)
+				}
+			})
+		}
+	}
+}
+
+func giteaPullResponseWithFinalSize(t *testing.T, target int, requestID, operation string) *repowolfv1.GiteaResponse {
+	t.Helper()
+	record := &repowolfv1.GiteaPullRecord{}
+	response := &repowolfv1.GiteaResponse{Meta: &repowolfv1.ResponseMeta{RequestId: requestID}}
+	if operation == "list" {
+		response.Result = &repowolfv1.GiteaResponse_PullList{PullList: &repowolfv1.GiteaPullListResult{Pulls: []*repowolfv1.GiteaPullRecord{record}}}
+	} else {
+		record.Comments = []*repowolfv1.GiteaCommentRecord{{Body: "comment"}}
+		record.Reviews = []*repowolfv1.GiteaPullReviewRecord{{Body: "review"}}
+		response.Result = &repowolfv1.GiteaResponse_PullView{PullView: &repowolfv1.GiteaPullViewResult{Pull: record}}
+	}
+	return fillGiteaResponse(t, response, target, &record.Body)
+}
+
 func giteaResponseWithFinalSize(t *testing.T, target int, requestID string) *repowolfv1.GiteaResponse {
 	t.Helper()
 	repository := &repowolfv1.GiteaRepositoryRecord{}

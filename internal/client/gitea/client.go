@@ -14,7 +14,7 @@ import (
 )
 
 const operationTimeout = 2 * time.Minute
-const usage = "tea: expected repos OWNER/REPO --repo OWNER/REPO or issues [list|INDEX] --repo OWNER/REPO [approved flags]\n"
+const usage = "tea: expected repos OWNER/REPO --repo OWNER/REPO, issues [list|INDEX] --repo OWNER/REPO, or pulls [list|INDEX] --repo OWNER/REPO [approved flags]\n"
 
 // Run parses, executes, and renders one restricted tea command.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -49,6 +49,8 @@ func reportExecutionError(ctx context.Context, parsed command, err error, stderr
 	switch {
 	case rpcstatus.IsIssueKindStatus(err):
 		writeDiagnostic(stderr, "tea: index is a pull request; use tea pulls\n")
+	case rpcstatus.IsPullKindStatus(err):
+		writeDiagnostic(stderr, "tea: index is an issue; use tea issues\n")
 	case parsed.request.GetIssueEdit() != nil && rpcstatus.IsGiteaEditPartial(err):
 		writeDiagnostic(stderr, "tea: issue edit partially applied; inspect issue state before retrying\n")
 	case parsed.mutation && mutationOutcomeUnknown(err):

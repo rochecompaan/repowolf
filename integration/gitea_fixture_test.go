@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -94,7 +95,7 @@ func newRestrictedGiteaFixture(t *testing.T, address, subnet string) *restricted
 	}
 	giteaJSON(t, client, http.MethodPost, baseURL+"/api/v1/users/CanonicalOwner/tokens", "", map[string]any{
 		"name":   "repowolf-integration",
-		"scopes": []string{"read:repository", "write:repository", "write:issue", "write:user"},
+		"scopes": []string{"read:repository", "write:repository", "write:issue", "write:user", "write:organization"},
 	}, &tokenResponse, "CanonicalOwner", "correct-horse-battery-staple")
 	if tokenResponse.SHA1 == "" {
 		t.Fatal("Gitea returned empty token")
@@ -179,6 +180,10 @@ func (fixture *restrictedGiteaFixture) startCorruptingWriteProxy(t *testing.T) s
 	return fixture.startGiteaTestProxy(t, "corrupt-create", "", "")
 }
 
+func (fixture *restrictedGiteaFixture) startPullPresenceProxy(t *testing.T) string {
+	return fixture.startGiteaTestProxy(t, "pull-presence", "", "")
+}
+
 func (fixture *restrictedGiteaFixture) startIssueEditProxy(t *testing.T, mode, index, labelID string) string {
 	t.Helper()
 	return fixture.startGiteaTestProxy(t, mode, index, labelID)
@@ -232,6 +237,29 @@ func TestGiteaFailureProxyProcess(t *testing.T) {
 	issuePath := "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues/" + os.Getenv("REPOWOLF_GITEA_PROXY_ISSUE")
 	var textWritten, concurrentMutation, textRejected atomic.Bool
 	proxy.ModifyResponse = func(response *http.Response) error {
+		if mode == "pull-presence" && response.Request.Method == http.MethodGet && response.Request.URL.Path == "/api/v1/repos/CanonicalOrg/PullRepo/pulls" {
+			var pulls []map[string]json.RawMessage
+			if err := json.NewDecoder(response.Body).Decode(&pulls); err != nil {
+				return err
+			}
+			if err := response.Body.Close(); err != nil {
+				return err
+			}
+			if len(pulls) >= 1 {
+				pulls[0]["mergeable"] = json.RawMessage("false")
+			}
+			if len(pulls) >= 2 {
+				delete(pulls[1], "mergeable")
+			}
+			body, err := json.Marshal(pulls)
+			if err != nil {
+				return err
+			}
+			response.Body = io.NopCloser(bytes.NewReader(body))
+			response.ContentLength = int64(len(body))
+			response.Header.Set("Content-Length", fmt.Sprint(len(body)))
+			return nil
+		}
 		if mode == "corrupt-create" && response.Request.Method == http.MethodPost && response.Request.URL.Path == "/api/v1/repos/CanonicalOwner/CanonicalRepo/issues" {
 			if response.Body != nil {
 				_, _ = io.Copy(io.Discard, response.Body)
